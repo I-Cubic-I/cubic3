@@ -134,8 +134,9 @@ function startGame(S){
   let cand=S.seats.map((_,i)=>i);
   while(cand.length>1){const rolls=cand.map(()=>d6());const m=Math.max(...rolls);cand=cand.filter((_,k)=>rolls[k]===m)}
   S.first=cand[0]; S.round=1; S.ot=false; S.goal=3; S.die=null; S.winners=null;
-  S.phase='roll'; S.pending=null; S.mg=null; S.reward=null; S.turn=null;
+  S.pending=null; S.mg=null; S.reward=null; S.turn=null;
   S.log=[]; log(S,`게임 시작. 주사위로 정한 첫 선: 자리 ${S.first+1}.`);
+  startMain(S);
 }
 
 function rollBoard(S){S.die=d6();S.phase='clubs';S.deadline=Date.now()+CLUB_MS;log(S,`${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[S.board[S.die-1]].name}`)}
@@ -244,7 +245,7 @@ function afterMain(S){
       while(c.length>1){const sums=c.map(i=>S.seats[i].tokens.slice(0,4).reduce(a=>a+d6(),0));detail.push(c.map((i,k)=>`자리 ${i+1}=${sums[k]}`).join(', '));const m=Math.max(...sums);c=c.filter((_,k)=>sums[k]===m)}
       S.winners=c;S.phase='ended';log(S,`큐빅 롤: ${detail.join(' / ')} → 자리 ${c[0]+1} 우승!`);return}
   }
-  startMinigame(S);
+  S.phase='roll';S.die=null;log(S,'메인 턴이 모두 끝났다. 선 플레이어가 미니게임 주사위를 굴린다.');
 }
 
 /* ---- 미니게임 공통 ---- */
@@ -290,7 +291,7 @@ function endMinigame(S,groups){
 function rewardPick(S,i,c){const R_=S.reward;R_.disp.splice(R_.disp.indexOf(c),1);S.seats[i].hand.push(c);R_.pi++;
   log(S,`자리 ${i+1}: 보상 ${cname(c)}`);if(R_.pi>=R_.order.length||!R_.disp.length)finishReward(S)}
 function finishReward(S){S.reward.disp.forEach(c=>S.row.push(c));S.reward=null;
-  S.first=(S.first+1)%N(S);S.round++;S.die=null;S.phase='roll';log(S,`${S.round}라운드. 선: 자리 ${S.first+1}.`)}
+  S.first=(S.first+1)%N(S);S.round++;S.die=null;log(S,`${S.round}라운드. 선: 자리 ${S.first+1}.`);startMain(S)}
 
 /* ---- 버티기 ---- */
 function holdRoll(S,i,item){
@@ -352,7 +353,7 @@ function auctionEnd(S){const m=S.mg;const sc={};Object.keys(m.won).forEach(k=>sc
 /* 시간 지난 단계 넘기기 (아무 기기나, 잠금 안에서) */
 function advanceTimers(S){
   const now=Date.now();
-  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){startMain(S);log(S,`메인 턴 시작. 자리 ${S.turn.seat+1}부터.`);return true}
+  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){S.deadline=null;startMinigame(S);return true}
   if(S.phase==='defense'&&S.pending&&now>=S.pending.deadline){resolveAttack(S);return true}
   return false;
 }
@@ -487,11 +488,11 @@ function renderMe(){
   const i=ctl,p=S.seats[i];const t=S.turn;
   let body='';
   const myTurn=S.phase==='main'&&t&&t.seat===i;
-  if(S.phase==='roll'){body=S.first===i?`<button class="primary" data-a="roll">미니게임 주사위 굴리기</button>`:`<p class="muted">선 플레이어가 미니게임 주사위를 굴리길 기다리는 중.</p>`}
+  if(S.phase==='roll'){body=S.first===i?`<button class="primary" data-a="roll">미니게임 주사위 굴리기</button>`:`<p class="muted">메인 턴이 끝났습니다. 선 플레이어가 미니게임 주사위를 굴리길 기다리는 중.</p>`}
   else if(S.phase==='clubs'){const left=Math.max(0,Math.ceil((S.deadline-Date.now())/1000));
     const clubs=p.hand.filter(c=>U(c)==='C'&&isItem(c));
     body=`<p>♣ 선언 시간 <span class="timer">${left}초</span> · 이번 미니게임: <strong>${esc(MG[S.board[S.die-1]].name)}</strong></p>
-    ${clubs.length?`<div class="row">${clubs.map(c=>R(c)===11?`<button data-a="club" data-c="${c}">♣J 다시 굴리기</button>`:R(c)===12?`<button data-a="club" data-c="${c}" data-x="1">♣Q 눈 +1</button><button data-a="club" data-c="${c}" data-x="-1">♣Q 눈 -1</button>`:`<button data-a="clubK" data-c="${c}">♣K 칸 직접 고르기</button>`).join('')}</div>${ui.mode==='clubK'?'<p class="small">위 미니게임 판에서 칸을 누르세요.</p>':''}`:'<p class="small muted">쓸 수 있는 ♣ 아이템이 없습니다. 시간이 지나면 메인 턴이 시작됩니다.</p>'}`}
+    ${clubs.length?`<div class="row">${clubs.map(c=>R(c)===11?`<button data-a="club" data-c="${c}">♣J 다시 굴리기</button>`:R(c)===12?`<button data-a="club" data-c="${c}" data-x="1">♣Q 눈 +1</button><button data-a="club" data-c="${c}" data-x="-1">♣Q 눈 -1</button>`:`<button data-a="clubK" data-c="${c}">♣K 칸 직접 고르기</button>`).join('')}</div>${ui.mode==='clubK'?'<p class="small">위 미니게임 판에서 칸을 누르세요.</p>':''}`:'<p class="small muted">쓸 수 있는 ♣ 아이템이 없습니다. 시간이 지나면 미니게임이 시작됩니다.</p>'}`}
   else if(S.phase==='defense'){const P=S.pending;const left=Math.max(0,Math.ceil((P.deadline-Date.now())/1000));
     const hs=P.target===i?p.hand.filter(c=>U(c)==='H'&&(R(c)===11||R(c)===13)):[];
     body=`<p>${esc(seatName(P.attacker))}의 ${cname(P.card)} 공격 → ${esc(seatName(P.target))} · <span class="timer">${left}초</span></p>
