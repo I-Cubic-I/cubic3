@@ -43,7 +43,7 @@ class Game:
     def __init__(self, n, teams=False, abilities=ALL_ABILITIES, costs=(3, 4, 5), ot_cost=3,
                  start=2, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
                  skmode="steal", picks=None, team_token_once=False,
-                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=None):
+                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=None, smart_dq=True):
         self.n, self.teams = n, teams
         self.abil = set(abilities)
         self.costs, self.ot_cost, self.cap = costs, ot_cost, cap
@@ -78,6 +78,7 @@ class Game:
         self.row, self.front = [], []
         self.supply = {s: (min(supply, self.U) if supply else self.U) for s in SUITS}
         self.dqmode = dqmode
+        self.smart_dq = smart_dq
         self.tokens = [[] for _ in range(self.U)]
         self.hands = [[self.draw() for _ in range(start)] for _ in range(n)]
         self.skill = [random.gauss(0, 1) for _ in range(n)]
@@ -128,9 +129,19 @@ class Game:
         if c is None: return -9
         if not is_num(c):
             nm = cname(c)
+            if nm == "♦Q" and nm in self.abil and self.dqmode == "color" and self.smart_dq:
+                # 막힌 문양 카드가 모여 있을수록 ♦Q를 더 아낀다
+                u = self.unit_of[i]
+                blocked = max((self.cnt(i, s) for s in SUITS if not self.usable(u, s)), default=0)
+                return 1.6 + 0.6 * blocked
             return ITEM_KEEP_VALUE[nm] if nm in self.abil else 0.5
         u = self.unit_of[i]
-        if not self.usable(u, c[0]): return -1
+        if not self.usable(u, c[0]):
+            # ♦Q(원하는 색)를 들고 있고 만들 수 있는 색이 남아 있으면, 막힌 문양 카드도 모아 둘 가치가 있다
+            if self.smart_dq and self.dqmode == "color" and self.has_ab(i, "♦Q") \
+                    and any(self.usable(u, t) for t in SUITS):
+                return self.cnt(i, c[0]) - 0.5 + random.random() * self.noise
+            return -1
         v = self.cnt(i, c[0])
         for m in self.mates(i): v += 0.5 * self.cnt(m, c[0])
         return v + random.random() * self.noise
