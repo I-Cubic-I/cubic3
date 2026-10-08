@@ -98,7 +98,7 @@ const MG={
   hold:{name:'버티기',min:2,max:5,icon:'🎲',
     text:'차례대로 주사위를 원하는 만큼 굴려, 나온 눈만큼 점수를 쌓는다.\n1️⃣이 나오면 이번 판 점수를 모두 잃는다. 한 번 더 굴리려면 이 기준이 1 오른다. 멈추면 점수 확정.\n모두 한 번씩 하면 1판. 3판 합계로 순위.\n아이템: 굴리기 전에 낸다. 이번엔 2번 굴려 높은 쪽을 쓴다.'},
   bomb:{name:'폭탄 버튼',min:2,max:5,icon:'🂠 1+1×👥',
-    text:'재료 묶음을 섞어 남은 인원 + 1장을 뒷면으로 깐다.\n선부터 차례로 1장을 골라 내 앞에 뒤집는다. 모두 뒤집으면 가장 높은 카드를 뒤집은 사람이 탈락(같으면 모두 탈락).\n묶음 전체를 다시 섞어 새로 깐다. 1명이 남을 때까지. 먼저 탈락한 사람이 낮은 순위.\n아이템: 뒤집기 전에 낸다. 내 카드는 3을 뺀 숫자로 친다.'},
+    text:'재료 묶음을 섞어 남은 인원 + 1장을 뒷면으로 깐다.\n선부터 차례로 1장을 골라 내 앞에 뒤집는다. 모두 뒤집으면 가장 높은 카드를 뒤집은 사람이 탈락(같으면 모두 탈락).\n묶음 전체를 다시 섞어 새로 깐다. 1명이 남을 때까지. 단, 2명만 남으면 폭탄을 2번 먼저 맞은 사람이 탈락. 먼저 탈락한 사람이 낮은 순위.\n아이템: 뒤집기 전에 낸다. 내 카드는 3을 뺀 숫자로 친다.'},
   auction:{name:'눈치 경매',min:2,max:4,icon:'🂠 5+5×👥',
     text:'각자 5장을 손패로 쥔다. 상품 5장을 한 줄로 깔고 앞의 3장만 앞면.\n왼쪽 상품부터 경매(뒷면이면 먼저 뒤집는다). 모두 손패 1장을 뒷면으로 내고 동시에 연다.\n같은 숫자는 서로 지워진다. 남은 사람 중 가장 높은 사람이 상품을 가져간다. 아무도 없으면 상품은 다음 경매에 얹힌다.\n낸 카드는 버린다. 5번 뒤 가져간 상품 숫자의 합으로 순위.\n아이템: 경매 전에 낸다. 1장마다 다음 상품이 하나씩 이번 경매에 함께 걸린다.'}
 };
@@ -316,8 +316,12 @@ function bombArm(S,i,item){const p=S.seats[i];p.hand.splice(p.hand.indexOf(item)
 function bombFlip(S,i,k){const m=S.mg;const c=m.lay[k];if(!c)return;m.lay[k]=null;
   const v=R(c)-(m.arm[i]?3:0);m.flip[i]={c,v};log(S,`폭탄 버튼: 자리 ${i+1} → ${cname(c)}${m.arm[i]?` (-3 → ${v})`:''}`);m.ci++;
   if(m.ci>=m.alive.length){const mx=Math.max(...m.alive.map(j=>m.flip[j].v));const out=m.alive.filter(j=>m.flip[j].v===mx);
-    m.out.push(out);m.alive=m.alive.filter(j=>!out.includes(j));log(S,`폭탄! 탈락: ${out.map(j=>'자리 '+(j+1)).join('·')}`);
     m.lay=m.lay.filter(Boolean);
+    if(m.alive.length===2){m.hits=m.hits||{};out.forEach(j=>m.hits[j]=(m.hits[j]||0)+1);
+      log(S,`폭탄! ${out.map(j=>'자리 '+(j+1)).join('·')} (결승 폭탄 ${m.alive.map(j=>'자리 '+(j+1)+' '+(m.hits[j]||0)+'개').join(', ')})`);
+      const dead=m.alive.filter(j=>(m.hits[j]||0)>=2);if(!dead.length){bombLay(S);return}
+      m.out.push(dead);m.alive=m.alive.filter(j=>!dead.includes(j));log(S,`탈락: ${dead.map(j=>'자리 '+(j+1)).join('·')}`)}
+    else{m.out.push(out);m.alive=m.alive.filter(j=>!out.includes(j));log(S,`폭탄! 탈락: ${out.map(j=>'자리 '+(j+1)).join('·')}`)}
     if(m.alive.length<=1){const groups=[];if(m.alive.length)groups.push(m.alive.slice());for(let k=m.out.length-1;k>=0;k--)groups.push(m.out[k]);
       endMinigame(S,groups);return}
     bombLay(S)}}
@@ -545,7 +549,7 @@ function renderMG(){
     <table class="score"><tr><th>자리</th><th>합계</th></tr>${m.ord.map(k=>`<tr><td>${esc(seatName(k))}</td><td>${m.tot[k]}</td></tr>`).join('')}</table>
     ${who===i?`<div class="row"><button class="primary" data-a="hroll">굴리기</button><button data-a="hroll2" ${selItem?'':'disabled'}>아이템 내고 굴리기${selItem?' ('+cname(selItem)+')':''}</button><button data-a="hstop" ${m.k?'':'disabled'}>멈추기</button></div><p class="small muted">아이템을 쓰려면 아래 손패에서 J·Q·K 1장을 고르세요.</p>`:''}`}
   if(m.id==='bomb'){const who=m.alive[m.ci];
-    body=`<p>남은 사람: ${m.alive.map(k=>esc(seatName(k))).join(', ')} · ${esc(seatName(who))} 차례</p>
+    body=`<p>남은 사람: ${m.alive.map(k=>esc(seatName(k))+(m.alive.length===2?` (폭탄 ${(m.hits&&m.hits[k])||0}/2)`:'')).join(', ')} · ${esc(seatName(who))} 차례</p>
     <div class="cards">${m.lay.map((c,k)=>c?cardHTML(null,{back:true,click:who===i,attr:`data-a="bflip" data-k="${k}"`}):'').join('')}</div>
     <div class="row">${Object.keys(m.flip).map(k=>`<span class="small">${esc(seatName(+k))}:</span>${cardHTML(m.flip[k].c,{tag:m.arm[k]?'-3':''})}`).join('')}</div>
     ${who===i?`<div class="row">${m.arm[i]?'<span class="chip on">-3 걸림</span>':`<button data-a="barm" ${selItem?'':'disabled'}>아이템 내기 (-3)${selItem?' '+cname(selItem):''}</button>`}<span class="small muted">뒤집을 카드를 누르세요.</span></div>`:''}`}
