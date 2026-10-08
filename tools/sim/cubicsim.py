@@ -1,7 +1,7 @@
 """cubic-party 능력 포함 시뮬레이터 (2026-10-09 확정 규칙 기준, 재작성본).
 
 규칙 요약
-- 트럼프 52장(6·8인 팀전은 2벌). A~10 숫자 카드(토큰 재료), J·Q·K 아이템 카드(문양별 능력).
+- 트럼프 52장(개인전 1벌, 팀전 2벌). A~10 숫자 카드(토큰 재료), J·Q·K 아이템 카드(문양별 능력).
 - 시작 손패 2장, 손패 상한 6장.
 - 라운드: (아이템 투입 확인) → 선 플레이어부터 메인 턴 → 승리 판정 → 미니게임 → 보상 진열 → 상한 정리 → 선 이동.
 - 메인 턴: 아이템 1장까지 + 줍기(덱 맨 위 또는 버림 줄 끝) 후 1장 버리기 + 토큰 만들기 1회.
@@ -43,7 +43,7 @@ class Game:
     def __init__(self, n, teams=False, abilities=ALL_ABILITIES, costs=(3, 4, 5), ot_cost=3,
                  start=2, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
                  skmode="steal", picks=None, team_token_once=False,
-                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True):
+                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True, item_check="after_main"):
         self.n, self.teams = n, teams
         self.abil = set(abilities)
         self.costs, self.ot_cost, self.cap = costs, ot_cost, cap
@@ -54,7 +54,7 @@ class Game:
         self.picks = picks if picks else (1 if teams else 2)  # 팀전은 인원과 관계없이 1인 1장 (2026-10-09)
         self.team_token_once = team_token_once
         self.made_this_round = set()
-        self.decks = decks if decks else (2 if n > 5 else 1)
+        self.decks = decks if decks else (2 if teams else 1)  # 개인전 1벌, 팀전 2벌 (2026-10-09)
         self.deck = [(s, r) for s in SUITS for r in range(1, 14)] * self.decks
         random.shuffle(self.deck)
         # 아이템 투입
@@ -79,6 +79,7 @@ class Game:
         self.supply = {s: (min(supply, self.U) if supply else self.U) for s in SUITS}
         self.dqmode = dqmode
         self.smart_dq = smart_dq
+        self.item_check = item_check
         self.tokens = [[] for _ in range(self.U)]
         self.hands = [[self.draw() for _ in range(start)] for _ in range(n)]
         self.skill = [random.gauss(0, 1) for _ in range(n)]
@@ -429,13 +430,14 @@ class Game:
 
     def play(self, max_rounds=40):
         for rnd in range(1, max_rounds + 1):
-            self.check_items(rnd)
+            if self.item_check == "round_start": self.check_items(rnd)
             seq = self.order(rnd)
             self.made_this_round = set()
             for k, i in enumerate(seq):
                 self.main_turn(i, seq[k + 1] if k + 1 < len(seq) else None)
             done = [u for u in range(self.U) if len(self.tokens[u]) >= self.goal()]
             self.history.append([len(t) for t in self.tokens])
+            if self.item_check == "after_main": self.check_items(rnd)  # 승리 판정 때 함께 Q·K 투입 확인
             if len(done) == 1:
                 return dict(rounds=rnd, winner=done[0], ot=self.ot, roll=False)
             if len(done) >= 2:
