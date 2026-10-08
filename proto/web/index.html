@@ -524,11 +524,16 @@ function renderTurn(i){
     else if(su==='H'&&r===12)itemBtn=`<button data-a="item">♥Q 사용</button>`;
     else if(su==='D'&&r===11)itemBtn=`<button data-a="item">♦J 사용</button>`;
     else itemBtn=`<span class="small muted">${cname(one)}: ${su==='H'?'남의 공격을 막을 때 씁니다.':su==='C'?'미니게임 주사위를 굴린 직후 씁니다.':'토큰 만들기 카드와 함께 고르세요.'}</span>`}
+  let quick='';
+  if(!t.token){const cost=costFor(S,i);
+    for(const su of SUITS){const nums=p.hand.filter(c=>U(c)===su&&!isItem(c)).sort((a,b)=>R(a)-R(b));
+      if(nums.length>=cost&&!canMakeToken(S,i,nums.slice(0,cost)))quick+=`<button class="primary" data-a="qtoken" data-s="${su}">${tokHTML(su)} ${SNAME[su]} 토큰 만들기 (${cost}장)</button>`}}
   return `<p class="small muted">줍기 ${t.picked?'완료':'필요'} · 아이템 ${t.item?'사용함':'1장 가능'} · 토큰 ${t.token?'만듦':'1회 가능'} · 다음 토큰 비용 ${costFor(S,i)}장</p>
    <div class="row">${!t.picked?`<button class="primary" data-a="pdeck">덱에서 줍기</button><button data-a="prow" ${S.row.length?'':'disabled'}>버림 줄 끝 줍기${S.row.length?' ('+cname(S.row[S.row.length-1])+')':''}</button>`:''}
-   <button data-a="token" ${tokErr?'disabled':''} title="${esc(tokErr||'')}">토큰 만들기</button>${itemBtn}
+   ${quick}<button data-a="token" ${tokErr?'disabled':''} title="${esc(tokErr||'')}">고른 카드로 토큰 만들기</button>${itemBtn}
    <button data-a="end" ${t.picked?'':'disabled'}>턴 끝내기</button></div>
-   ${s.length&&tokErr&&!one?`<p class="small muted">토큰: ${esc(tokErr)}</p>`:''}`;
+   ${s.length&&tokErr&&!one?`<p class="small muted">토큰: ${esc(tokErr)}</p>`:''}
+   <p class="small muted">손패의 카드를 눌러 고를 수 있습니다. 토큰은 만들 수 있으면 위에 바로 버튼이 뜹니다. ♦Q·♦K를 함께 쓸 때나 아이템을 쓸 때만 카드를 고르세요.</p>`;
 }
 function renderMG(){
   const m=S.mg,def=MG[m.id];const i=ctl;let body='';
@@ -592,6 +597,8 @@ app.addEventListener('click',e=>{
     case 'pdisc':act(st=>{if(!guard(st,'main')||st.turn.seat!==i||!st.turn.mustDiscard||!st.seats[i].hand.includes(s[0]))return false;pickupDiscard(st,i,s[0])});break;
     case 'token':{const it=s.find(isItem);if(it&&R(it)===12){ui={mode:'DQ',cards:s};render();break}
       act(st=>{if(!guard(st,'main')||st.turn.seat!==i||canMakeToken(st,i,s))return false;makeToken(st,i,s)})}break;
+    case 'qtoken':{const su=b.dataset.s;act(st=>{if(!guard(st,'main')||st.turn.seat!==i)return false;const cost=costFor(st,i);
+      const nums=st.seats[i].hand.filter(c=>U(c)===su&&!isItem(c)).sort((x,y)=>R(x)-R(y)).slice(0,cost);if(canMakeToken(st,i,nums))return false;makeToken(st,i,nums)})}break;
     case 'dqcol':{const cards=ui.cards,col=b.dataset.s;ui={};act(st=>{if(!guard(st,'main')||st.turn.seat!==i||canMakeToken(st,i,cards))return false;makeToken(st,i,cards,col)})}break;
     case 'item':{const c=s[0];const su=U(c),r=R(c);
       if(su==='S'){ui={mode:'target',card:c};render()}
