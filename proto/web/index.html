@@ -284,7 +284,7 @@ function endMinigame(S,groups){
   const order=[];groups.forEach(g=>order.push(...shuffle(g.slice())));
   S.lastRank=groups;
   log(S,'미니게임 순위: '+groups.map((g,k)=>`${k+1}위 ${g.map(i=>'자리 '+(i+1)).join('·')}`).join(' / '));
-  const disp=[];for(let k=0;k<2*N(S)+1;k++){const x=draw(S);if(x)disp.push(x)}
+  const disp=S.rewardDisp||[];S.rewardDisp=null;
   S.mg=null;S.phase='reward';S.reward={disp,order:order.concat(order),pi:0};
   if(!disp.length)finishReward(S);
 }
@@ -357,7 +357,9 @@ function auctionEnd(S){const m=S.mg;const sc={};Object.keys(m.won).forEach(k=>sc
 /* 시간 지난 단계 넘기기 (아무 기기나, 잠금 안에서) */
 function advanceTimers(S){
   const now=Date.now();
-  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){S.deadline=null;startMinigame(S);return true}
+  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){S.deadline=null;
+    const disp=[];for(let k=0;k<2*N(S)+1;k++){const x=draw(S);if(x)disp.push(x)}S.rewardDisp=disp;log(S,'보상 진열: '+disp.map(cname).join(' '));
+    startMinigame(S);return true}
   if(S.phase==='defense'&&S.pending&&now>=S.pending.deadline){resolveAttack(S);return true}
   return false;
 }
@@ -566,7 +568,8 @@ function renderMG(){
       <p class="small">${m.step==='pre'?'경매 전: 아이템을 쓸 사람은 지금':'입찰 중: '+Object.keys(m.bids).length+'/'+S.seats.length+'명 냄'}</p>
       ${m.lastBids?`<p class="small muted">지난 입찰: ${Object.keys(m.lastBids).map(k=>esc(seatName(+k))+' '+cname(m.lastBids[k])).join(', ')}</p>`:''}
       <p class="small">점수: ${sc}</p>${me_}`}
-  return `<div class="panel"><h2>미니게임 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2><details><summary class="small">카드 뒷면 규칙</summary><div class="rules">${esc(def.text)}</div></details>${body}</div>`;
+  const rd=S.rewardDisp&&S.rewardDisp.length?`<div class="row small"><span class="muted">이번 보상(순위대로 두 바퀴):</span></div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:'';
+  return `<div class="panel"><h2>미니게임 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2>${rd}<details><summary class="small">카드 뒷면 규칙</summary><div class="rules">${esc(def.text)}</div></details>${body}</div>`;
 }
 function renderReward(){const Rw=S.reward;const who=Rw.order[Rw.pi];
   return `<div class="panel"><h2>보상 고르기</h2><p class="small muted">미니게임 순위 순서대로 두 바퀴. 지금: <strong>${esc(seatName(who))}</strong></p>
