@@ -13,6 +13,7 @@
 
 | 위치 | 내용 |
 |---|---|
+| `docs/RULES.md` | 규칙 요약서 1차안 (확정 항목을 규칙서 형태로 정리, 빈 곳 점검) |
 | `docs/GAME_NOTES.md` | 기획 메모 (확정된 방향과 조건, 시뮬레이션 결과) |
 | `docs/OPEN_QUESTIONS.md` | 결정 목록과 상태 |
 | `tools/sim/` | 메인 게임 규칙 시뮬레이터 (사용법은 `tools/sim/README.md`) |
