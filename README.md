@@ -18,3 +18,4 @@
 | `docs/GAME_NOTES.md` | 기획 메모 (확정된 방향과 조건, 시뮬레이션 결과) |
 | `docs/OPEN_QUESTIONS.md` | 결정 목록과 상태 |
 | `tools/sim/` | 메인 게임 규칙 시뮬레이터 (사용법은 `tools/sim/README.md`) |
+| `proto/` | 규칙 시험용 멀티플레이 웹 시험판 (`proto/README.md`) |
