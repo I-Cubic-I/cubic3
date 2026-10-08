@@ -2,7 +2,7 @@
 
 규칙 요약
 - 트럼프 52장(6·8인 팀전은 2벌). A~10 숫자 카드(토큰 재료), J·Q·K 아이템 카드(문양별 능력).
-- 시작 손패 3장, 손패 상한 6장.
+- 시작 손패 2장, 손패 상한 6장.
 - 라운드: (아이템 투입 확인) → 선 플레이어부터 메인 턴 → 승리 판정 → 미니게임 → 보상 진열 → 상한 정리 → 선 이동.
 - 메인 턴: 아이템 1장까지 + 줍기(덱 맨 위 또는 버림 줄 끝) 후 1장 버리기 + 토큰 만들기 1회.
 - 토큰: 같은 문양 숫자 카드 3/4/5장 → 그 색 토큰. 서로 다른 색 3개면 승리. 문양별 토큰 수 = 경주 단위 수.
@@ -41,7 +41,7 @@ ITEM_KEEP_VALUE = {
 
 class Game:
     def __init__(self, n, teams=False, abilities=ALL_ABILITIES, costs=(3, 4, 5), ot_cost=3,
-                 start=3, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
+                 start=2, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
                  skmode="steal", picks=None, team_token_once=False,
                  item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None):
         self.n, self.teams = n, teams
