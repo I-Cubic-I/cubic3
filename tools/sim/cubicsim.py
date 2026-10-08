@@ -43,7 +43,7 @@ class Game:
     def __init__(self, n, teams=False, abilities=ALL_ABILITIES, costs=(3, 4, 5), ot_cost=3,
                  start=2, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
                  skmode="steal", picks=None, team_token_once=False,
-                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True, item_check="after_main", trim_mode="turn_end", row_pick=1):
+                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True, item_check="after_main", trim_mode="turn_end", row_pick=1, seed_row=0):
         self.n, self.teams = n, teams
         self.abil = set(abilities)
         self.costs, self.ot_cost, self.cap = costs, ot_cost, cap
@@ -82,6 +82,7 @@ class Game:
         self.item_check = item_check
         self.trim_mode = trim_mode
         self.row_pick = row_pick  # 버림 줄 끝에서 몇 장 중 고를 수 있나
+        self.seed_row = seed_row  # 라운드 시작 때 덱에서 버림 줄에 펼치는 장수
         self.tokens = [[] for _ in range(self.U)]
         self.hands = [[self.draw() for _ in range(start)] for _ in range(n)]
         self.skill = [random.gauss(0, 1) for _ in range(n)]
@@ -434,6 +435,9 @@ class Game:
     def play(self, max_rounds=40):
         for rnd in range(1, max_rounds + 1):
             if self.item_check == "round_start": self.check_items(rnd)
+            for _ in range(self.seed_row):
+                c = self.draw()
+                if c: self.row.append(c)
             seq = self.order(rnd)
             self.made_this_round = set()
             for k, i in enumerate(seq):
