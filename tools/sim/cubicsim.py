@@ -8,7 +8,7 @@
 - 토큰: 같은 문양 숫자 카드 3/4/5장 → 그 색 토큰. 서로 다른 색 3개면 승리. 문양별 토큰 수 = 경주 단위 수.
 - 같은 라운드에 여럿이 3색 → 4색 연장전(4번째 비용 3장). 또 겹치면 큐빅 롤(무작위).
 - 아이템: 쓰거나 버리면 자기 앞. 카드 미니게임(70%)이 끝나면 버림 줄·자기 앞 카드 모두 덱으로.
-- 보상: 개인전은 인원×2+1장 진열, 1인 2장(같은 방향 두 바퀴). 팀전은 picks 옵션(기본: 4인 2장, 6·8인 1장).
+- 보상: 개인전은 인원×2+1장 진열, 1인 2장(같은 방향 두 바퀴). 팀전은 인원+1장 진열, 1인 1장.
 - 팀전: 2인 1팀, 팀원끼리 나란히, 토큰 팀 공유, 각자 턴마다 토큰 1회, 팀 단위 선 + 라운드마다 팀 내 순서 반전.
 
 능력
@@ -51,7 +51,7 @@ class Game:
         self.skmode = skmode
         self.unit_of = [i // 2 for i in range(n)] if teams else list(range(n))
         self.U = n // 2 if teams else n
-        self.picks = picks if picks else (2 if (not teams or n == 4) else 1)
+        self.picks = picks if picks else (1 if teams else 2)  # 팀전은 인원과 관계없이 1인 1장 (2026-10-09)
         self.team_token_once = team_token_once
         self.made_this_round = set()
         self.decks = decks if decks else (2 if n > 5 else 1)
