@@ -83,7 +83,7 @@ table.score td,table.score th{padding:3px 10px;border-bottom:1px solid var(--lin
 const SUITS=['S','H','D','C'];
 const SYM={S:'♠',H:'♥',D:'♦',C:'♣'};
 const SNAME={S:'스페이드',H:'하트',D:'다이아',C:'클럽'};
-const R=c=>+c.slice(1), U=c=>c[0];
+const R=c=>parseInt(c.slice(1),10), U=c=>c[0];
 const isItem=c=>R(c)>=11;
 const RL=r=>({1:'A',11:'J',12:'Q',13:'K'}[r]||String(r));
 const cname=c=>SYM[U(c)]+RL(R(c));
@@ -92,14 +92,14 @@ let RNG=Math.random;
 const rnd=n=>Math.floor(RNG()*n);
 const d6=()=>1+rnd(6);
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a}
-function fullDeck(){const d=[];for(const s of SUITS)for(let r=1;r<=13;r++)d.push(s+r);return d}
+function fullDeck(decks=1){const d=[];for(let k=0;k<decks;k++)for(const s of SUITS)for(let r=1;r<=13;r++)d.push(s+r+(k?'b':''));return d}
 
 const MG={
   hold:{name:'버티기',min:2,max:5,icon:'🎲',
     text:'차례대로 주사위를 원하는 만큼 굴려, 나온 눈만큼 점수를 쌓는다.\n1️⃣이 나오면 이번 판 점수를 모두 잃는다. 한 번 더 굴리려면 이 기준이 1 오른다. 멈추면 점수 확정.\n모두 한 번씩 하면 1판. 3판 합계로 순위.\n아이템: 굴리기 전에 낸다. 이번엔 2번 굴려 높은 쪽을 쓴다.'},
   bomb:{name:'폭탄 버튼',min:2,max:5,icon:'🂠 1+1×👥',
     text:'재료 묶음을 섞어 남은 인원 + 1장을 뒷면으로 깐다.\n선부터 차례로 1장을 골라 내 앞에 뒤집는다. 모두 뒤집으면 가장 높은 카드를 뒤집은 사람이 탈락(같으면 모두 탈락).\n묶음 전체를 다시 섞어 새로 깐다. 1명이 남을 때까지. 단, 2명만 남으면 폭탄을 2번 먼저 맞은 사람이 탈락. 먼저 탈락한 사람이 낮은 순위.\n아이템: 뒤집기 전에 낸다. 내 카드는 3을 뺀 숫자로 친다.'},
-  auction:{name:'눈치 경매',min:2,max:4,icon:'🂠 5+5×👥',
+  auction:{name:'눈치 경매',min:2,max:5,icon:'🂠 5+5×👥',
     text:'각자 5장을 손패로 쥔다. 상품 5장을 한 줄로 깔고 앞의 3장만 앞면.\n왼쪽 상품부터 경매(뒷면이면 먼저 뒤집는다). 모두 손패 1장을 뒷면으로 내고 동시에 연다.\n같은 숫자는 서로 지워진다. 남은 사람 중 가장 높은 사람이 상품을 가져간다. 아무도 없으면 상품은 다음 경매에 얹힌다.\n낸 카드는 버린다. 5번 뒤 가져간 상품 숫자의 합으로 순위.\n아이템: 경매 전에 낸다. 1장마다 다음 상품이 하나씩 이번 경매에 함께 걸린다.'}
 };
 
@@ -121,7 +121,8 @@ function newLobby(){return {v:1,phase:'lobby',seats:[],log:['테이블이 열렸
 
 function startGame(S){
   const n=N(S);
-  let deck=fullDeck();
+  S.decks=n>=4?2:1;
+  let deck=fullDeck(S.decks);
   S.qPile=deck.filter(c=>R(c)===12); S.kPile=deck.filter(c=>R(c)===13);
   S.deck=shuffle(deck.filter(c=>R(c)<12)); S.row=[]; S.qIn=false; S.kIn=false;
   S.seats.forEach(p=>{p.hand=[];p.tokens=[];p.front=[]});
@@ -449,7 +450,7 @@ function render(){
   const n=S.seats.length;
   const head=`<div class="top"><h1>큐빅 파티 시험판</h1><div class="meta">
     <span class="chip">${S.round}라운드</span><span class="chip">${S.ot?'연장전 · 4색':'목표 3색'}</span>
-    <span class="chip">덱 ${S.deck.length}장</span><span class="chip ${S.qIn?'on':''}">Q ${S.qIn?'투입':'대기'}</span><span class="chip ${S.kIn?'on':''}">K ${S.kIn?'투입':'대기'}</span>
+    <span class="chip">덱 ${S.deck.length}장 (${S.decks||1}벌)</span><span class="chip ${S.qIn?'on':''}">Q ${S.qIn?'투입':'대기'}</span><span class="chip ${S.kIn?'on':''}">K ${S.kIn?'투입':'대기'}</span>
     <span class="chip">공급처 ${SUITS.map(s=>`${SYM[s]}${S.supply[s]}`).join(' ')}</span></div></div>`;
   const board=!S.board?`<p class="muted small">메인 턴이 모두 끝나면 미니게임 6장을 새로 뽑습니다.</p>`:`<div class="board">${S.board.map((id,k)=>`<div class="slot ${S.die===k+1?'hit':''} ${ui.mode==='clubK'?'pickable':''}" data-slot="${k+1}" tabindex="${ui.mode==='clubK'?0:-1}"><b>${k+1}</b>${esc(MG[id].name)}</div>`).join('')}</div>`;
   const rowh=`<div class="cards">${S.row.length?S.row.map((c,k)=>cardHTML(c,{click:ui.mode==='HQ'&&!isItem(c),selectable:true,attr:`data-row="${c}"`})).join(''):'<span class="muted small">비어 있음</span>'}</div>`;
@@ -479,7 +480,7 @@ function renderLobby(){
    <div class="row">${!sitting?`<button class="primary" data-a="sit">자리에 앉기</button>`:''}
    ${sitting&&S.seats.length<5?`<button data-a="sit">내 자리 하나 더 (혼자 시험)</button>`:''}
    <button class="primary" data-a="start" ${S.seats.length>=2&&S.seats.length<=5&&sitting?'':'disabled'}>게임 시작 (${S.seats.length}명)</button></div>
-   <p class="small muted">이번 시험판 미니게임: 버티기 · 폭탄 버튼 · 눈치 경매(2~4인). 라운드마다 메인 턴이 끝나면 미니게임 판 6칸을 이 셋으로 새로 채웁니다. 동점 순위는 무작위 순서로 보상을 고릅니다.</p></div>`;
+   <p class="small muted">개인전 2·3인은 트럼프 1벌, 4·5인은 2벌을 씁니다. 이번 시험판 미니게임: 버티기 · 폭탄 버튼 · 눈치 경매. 라운드마다 메인 턴이 끝나면 미니게임 판 6칸을 이 셋으로 새로 채웁니다. 동점 순위는 무작위 순서로 보상을 고릅니다.</p></div>`;
 }
 function myHand(i,opts={}){
   const p=S.seats[i];
