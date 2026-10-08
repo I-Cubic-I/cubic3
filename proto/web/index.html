@@ -155,11 +155,11 @@ function startMain(S){
 function resetTurn(S){S.turn={seat:S.order[S.ti],picked:false,mustDiscard:false,item:false,token:false,trim:false,peek:null}}
 function cur(S){return S.turn&&S.turn.seat}
 
-function pickup(S,i,fromRow){
+function pickup(S,i,fromRow,want){
   const p=S.seats[i];let c;
-  if(fromRow){c=S.row.pop();if(!c)return 'none'} else {c=draw(S);if(!c)return 'none'}
+  if(fromRow){const k=S.row.lastIndexOf(want);if(k<0||k<S.row.length-3)return 'none';c=S.row.splice(k,1)[0]} else {c=draw(S);if(!c)return 'none'}
   p.hand.push(c);S.turn.picked=true;S.turn.mustDiscard=true;S.turn.justTook=c;
-  log(S,`자리 ${i+1}: ${fromRow?'버림 줄 끝에서 '+cname(c):'덱에서 1장'}을 주웠다.`);
+  log(S,`자리 ${i+1}: ${fromRow?'버림 줄에서 '+cname(c):'덱에서 1장'}을 주웠다.`);
 }
 function pickupDiscard(S,i,c){
   const p=S.seats[i];p.hand.splice(p.hand.indexOf(c),1);discardCard(S,i,c);S.turn.mustDiscard=false;
@@ -453,13 +453,14 @@ function render(){
     <span class="chip">덱 ${S.deck.length}장 (${S.decks||1}벌)</span><span class="chip ${S.qIn?'on':''}">Q ${S.qIn?'투입':'대기'}</span><span class="chip ${S.kIn?'on':''}">K ${S.kIn?'투입':'대기'}</span>
     <span class="chip">공급처 ${SUITS.map(s=>`${SYM[s]}${S.supply[s]}`).join(' ')}</span></div></div>`;
   const board=!S.board?`<p class="muted small">메인 턴이 모두 끝나면 미니게임 6장을 새로 뽑습니다.</p>`:`<div class="board">${S.board.map((id,k)=>`<div class="slot ${S.die===k+1?'hit':''} ${ui.mode==='clubK'?'pickable':''}" data-slot="${k+1}" tabindex="${ui.mode==='clubK'?0:-1}"><b>${k+1}</b>${esc(MG[id].name)}</div>`).join('')}</div>`;
-  const rowh=`<div class="cards">${S.row.length?S.row.map((c,k)=>cardHTML(c,{click:ui.mode==='HQ'&&!isItem(c),selectable:true,attr:`data-row="${c}"`})).join(''):'<span class="muted small">비어 있음</span>'}</div>`;
+  const canRow=S.phase==='main'&&S.turn&&ctl===S.turn.seat&&!S.turn.picked&&!ui.mode;
+  const rowh=`<div class="cards">${S.row.length?S.row.map((c,k)=>{const pk=canRow&&k>=S.row.length-3;return cardHTML(c,{click:(ui.mode==='HQ'&&!isItem(c))||pk,selectable:true,tag:pk?'줍기':'',attr:pk?`data-a="prow" data-c="${c}"`:`data-row="${c}"`})}).join(''):'<span class="muted small">비어 있음</span>'}</div>`;
   const left=`<div class="panel"><h2>미니게임 판</h2>${board}
     <div class="row muted small">선 플레이어: ${esc(seatName(S.first))}${S.die?` · 주사위 <span class="die">${S.die}</span>`:''}</div></div>
     ${S.phase==='mg'?renderMG():''}
     ${S.phase==='reward'?renderReward():''}
     ${S.phase==='ended'?`<div class="panel"><h2>게임 끝</h2><p><strong>${S.winners.map(i=>esc(seatName(i))).join(', ')}</strong> 우승!</p><div class="row"><button class="primary" data-a="restart">같은 자리로 새 게임</button><button data-a="tolobby">로비로</button></div></div>`:''}
-    <div class="panel"><h2>버림 줄 <span class="muted small">(끝 = 오른쪽)</span></h2>${rowh}</div>
+    <div class="panel"><h2>버림 줄 <span class="muted small">(끝 = 오른쪽, 끝 3장 중 1장을 주울 수 있음)</span></h2>${rowh}</div>
     ${ctl!=null?renderMe():`<div class="panel"><p class="muted">관전 중입니다. 자리에 앉은 사람만 조작할 수 있습니다.</p></div>`}`;
   const players=S.seats.map((p,i)=>{const t=whoActs()===i;
     return `<div class="pl ${t?'turn':''}"><div class="nm"><strong>${esc(seatName(i))}${i===S.first?' · 선':''}</strong><span class="muted small">손패 ${p.hand.length}</span></div>
@@ -536,7 +537,7 @@ function renderTurn(i){
     for(const su of SUITS){const nums=p.hand.filter(c=>U(c)===su&&!isItem(c)).sort((a,b)=>R(a)-R(b));
       if(nums.length>=cost&&!canMakeToken(S,i,nums.slice(0,cost)))quick+=`<button class="primary" data-a="qtoken" data-s="${su}">${tokHTML(su)} ${SNAME[su]} 토큰 만들기 (${cost}장)</button>`}}
   return `<p class="small muted">줍기 ${t.picked?'완료':'필요'} · 아이템 ${t.item?'사용함':'1장 가능'} · 토큰 ${t.token?'만듦':'1회 가능'} · 다음 토큰 비용 ${costFor(S,i)}장</p>
-   <div class="row">${!t.picked?`<button class="primary" data-a="pdeck">덱에서 줍기</button><button data-a="prow" ${S.row.length?'':'disabled'}>버림 줄 끝 줍기${S.row.length?' ('+cname(S.row[S.row.length-1])+')':''}</button>`:''}
+   <div class="row">${!t.picked?`<button class="primary" data-a="pdeck">덱에서 줍기</button><span class="small muted">또는 버림 줄 끝 3장 중 1장을 누르세요</span>`:''}
    ${quick}<button data-a="token" ${tokErr?'disabled':''} title="${esc(tokErr||'')}">고른 카드로 토큰 만들기</button>${itemBtn}
    <button data-a="end" ${t.picked?'':'disabled'}>턴 끝내기</button></div>
    ${s.length&&tokErr&&!one?`<p class="small muted">토큰: ${esc(tokErr)}</p>`:''}
@@ -601,7 +602,7 @@ app.addEventListener('click',e=>{
     case 'clubK':ui={mode:'clubK',card:b.dataset.c};render();break;
     case 'defend':{const c=b.dataset.c;act(st=>{if(!guard(st,'defense')||st.pending.target!==i)return false;defend(st,i,c)})}break;
     case 'nodef':act(st=>{if(!guard(st,'defense')||st.pending.target!==i)return false;resolveAttack(st)});break;
-    case 'pdeck':case 'prow':act(st=>{if(!guard(st,'main')||st.turn.seat!==i||st.turn.picked)return false;if(pickup(st,i,a==='prow')==='none')return false});break;
+    case 'pdeck':case 'prow':{const want=b.dataset.c;act(st=>{if(!guard(st,'main')||st.turn.seat!==i||st.turn.picked)return false;if(pickup(st,i,a==='prow',want)==='none')return false})}break;
     case 'pdisc':act(st=>{if(!guard(st,'main')||st.turn.seat!==i||!st.turn.mustDiscard||!st.seats[i].hand.includes(s[0]))return false;pickupDiscard(st,i,s[0])});break;
     case 'token':{const it=s.find(isItem);if(it&&R(it)===12){ui={mode:'DQ',cards:s};render();break}
       act(st=>{if(!guard(st,'main')||st.turn.seat!==i||canMakeToken(st,i,s))return false;makeToken(st,i,s)})}break;

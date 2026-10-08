@@ -43,7 +43,7 @@ class Game:
     def __init__(self, n, teams=False, abilities=ALL_ABILITIES, costs=(3, 4, 5), ot_cost=3,
                  start=2, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
                  skmode="steal", picks=None, team_token_once=False,
-                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True, item_check="after_main", trim_mode="turn_end"):
+                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True, item_check="after_main", trim_mode="turn_end", row_pick=1):
         self.n, self.teams = n, teams
         self.abil = set(abilities)
         self.costs, self.ot_cost, self.cap = costs, ot_cost, cap
@@ -81,6 +81,7 @@ class Game:
         self.smart_dq = smart_dq
         self.item_check = item_check
         self.trim_mode = trim_mode
+        self.row_pick = row_pick  # 버림 줄 끝에서 몇 장 중 고를 수 있나
         self.tokens = [[] for _ in range(self.U)]
         self.hands = [[self.draw() for _ in range(start)] for _ in range(n)]
         self.skill = [random.gauss(0, 1) for _ in range(n)]
@@ -332,9 +333,10 @@ class Game:
         for c in seen: self.discard(i, c)
 
     def pickup(self, i, nxt):
-        top = self.row[-1] if self.row else None
+        cand = self.row[-self.row_pick:] if self.row else []
+        top = max(cand, key=lambda c: self.value(i, c)) if cand else None
         if top is not None and self.value(i, top) >= 1:
-            self.row.pop(); self.hands[i].append(top)
+            self.row.remove(top); self.hands[i].append(top)
         else:
             c = self.draw()
             if c: self.hands[i].append(c)
