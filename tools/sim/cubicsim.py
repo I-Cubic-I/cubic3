@@ -18,7 +18,7 @@
 ♣ 미니게임 판 조작(측정 불가 → 미니게임 아이템으로만 씀)
 미니게임: 아무 아이템 1장 → 성적 +item_boost.
 
-skmode: "steal" 뺏기 / "destroy" 공급처로 되돌리기 / 앞에 "catchup_" = 나보다 토큰이 많은 상대만 / 뒤에 "_pay" = 뺏을 때 손패 2장 버림
+skmode: "steal" 뺏기 / "destroy" 공급처로 되돌리기 / 앞에 "catchup_" = 나보다 토큰이 많은 상대만 / 뒤에 "_pay" = 뺏을 때 손패 2장 버림 / 뒤에 "_dump" = 뺏은 뒤 손패 전부 버림
 item_entry: None(처음부터) 또는 ("round", r) / ("first_token",) / ("two_tokens",) → 아이템 전체를 그때 투입
 item_stages: [(등급 튜플, 조건 또는 None), ...] → 등급별 단계 투입
 """
@@ -191,6 +191,10 @@ class Game:
         if not options: return False
         s = random.choice(options)
         self.tokens[victim_u].remove(s); self.tokens[thief_u].append(s)
+        if "dump" in self.skmode and self._payer is not None:
+            p = self._payer
+            for c in list(self.hands[p]):
+                self.hands[p].remove(c); self.discard(p, c)
         if "pay" in self.skmode and self._payer is not None:
             p = self._payer
             for _ in range(2):
@@ -253,7 +257,12 @@ class Game:
             return None
         if self.has_ab(i, "♠K") and (not "pay" in self.skmode or len(self.hands[i]) >= 3):
             if any(self.sk_target_ok(u, self.unit_of[j]) for j in self.opponents(i)):
-                return "♠K"
+                if "dump" not in self.skmode:
+                    return "♠K"
+                # 손패를 다 버리는 대가: 뺏어서 바로 목표에 닿거나, 손패가 별로일 때만 쓴다
+                best = max((self.cnt(i, s) for s in SUITS if self.usable(u, s)), default=0)
+                if len(self.tokens[u]) + 1 >= self.goal() or best <= 2:
+                    return "♠K"
         if self.has_ab(i, "♦Q"):
             cost = self.cost_for(u)
             for s in self.tokens[u]:
