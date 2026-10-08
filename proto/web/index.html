@@ -127,9 +127,7 @@ function startGame(S){
   S.seats.forEach(p=>{p.hand=[];p.tokens=[];p.front=[]});
   S.seats.forEach(p=>{p.hand.push(draw(S),draw(S))});
   S.supply={S:3,H:3,D:3,C:3};
-  const pool=Object.keys(MG).filter(k=>MG[k].min<=n&&n<=MG[k].max);
-  const b=[];while(b.length<6)b.push(...shuffle(pool.slice()));
-  S.board=b.slice(0,6);
+  S.board=null;
   // 첫 선: 모두 주사위, 같은 최고 눈끼리 다시
   let cand=S.seats.map((_,i)=>i);
   while(cand.length>1){const rolls=cand.map(()=>d6());const m=Math.max(...rolls);cand=cand.filter((_,k)=>rolls[k]===m)}
@@ -245,7 +243,9 @@ function afterMain(S){
       while(c.length>1){const sums=c.map(i=>S.seats[i].tokens.slice(0,4).reduce(a=>a+d6(),0));detail.push(c.map((i,k)=>`자리 ${i+1}=${sums[k]}`).join(', '));const m=Math.max(...sums);c=c.filter((_,k)=>sums[k]===m)}
       S.winners=c;S.phase='ended';log(S,`큐빅 롤: ${detail.join(' / ')} → 자리 ${c[0]+1} 우승!`);return}
   }
-  S.phase='roll';S.die=null;log(S,'메인 턴이 모두 끝났다. 선 플레이어가 미니게임 주사위를 굴린다.');
+  const n=N(S);const pool=Object.keys(MG).filter(k=>MG[k].min<=n&&n<=MG[k].max);
+  const b=[];while(b.length<6)b.push(...shuffle(pool.slice()));S.board=b.slice(0,6);
+  S.phase='roll';S.die=null;log(S,'메인 턴이 모두 끝났다. 미니게임 6장을 새로 뽑았다: '+S.board.map(k=>MG[k].name).join(', ')+'.');
 }
 
 /* ---- 미니게임 공통 ---- */
@@ -291,7 +291,7 @@ function endMinigame(S,groups){
 function rewardPick(S,i,c){const R_=S.reward;R_.disp.splice(R_.disp.indexOf(c),1);S.seats[i].hand.push(c);R_.pi++;
   log(S,`자리 ${i+1}: 보상 ${cname(c)}`);if(R_.pi>=R_.order.length||!R_.disp.length)finishReward(S)}
 function finishReward(S){S.reward.disp.forEach(c=>S.row.push(c));S.reward=null;
-  S.first=(S.first+1)%N(S);S.round++;S.die=null;log(S,`${S.round}라운드. 선: 자리 ${S.first+1}.`);startMain(S)}
+  S.first=(S.first+1)%N(S);S.round++;S.die=null;S.board=null;log(S,`${S.round}라운드. 선: 자리 ${S.first+1}.`);startMain(S)}
 
 /* ---- 버티기 ---- */
 function holdRoll(S,i,item){
@@ -445,7 +445,7 @@ function render(){
     <span class="chip">${S.round}라운드</span><span class="chip">${S.ot?'연장전 · 4색':'목표 3색'}</span>
     <span class="chip">덱 ${S.deck.length}장</span><span class="chip ${S.qIn?'on':''}">Q ${S.qIn?'투입':'대기'}</span><span class="chip ${S.kIn?'on':''}">K ${S.kIn?'투입':'대기'}</span>
     <span class="chip">공급처 ${SUITS.map(s=>`${SYM[s]}${S.supply[s]}`).join(' ')}</span></div></div>`;
-  const board=`<div class="board">${S.board.map((id,k)=>`<div class="slot ${S.die===k+1?'hit':''} ${ui.mode==='clubK'?'pickable':''}" data-slot="${k+1}" tabindex="${ui.mode==='clubK'?0:-1}"><b>${k+1}</b>${esc(MG[id].name)}</div>`).join('')}</div>`;
+  const board=!S.board?`<p class="muted small">메인 턴이 모두 끝나면 미니게임 6장을 새로 뽑습니다.</p>`:`<div class="board">${S.board.map((id,k)=>`<div class="slot ${S.die===k+1?'hit':''} ${ui.mode==='clubK'?'pickable':''}" data-slot="${k+1}" tabindex="${ui.mode==='clubK'?0:-1}"><b>${k+1}</b>${esc(MG[id].name)}</div>`).join('')}</div>`;
   const rowh=`<div class="cards">${S.row.length?S.row.map((c,k)=>cardHTML(c,{click:ui.mode==='HQ'&&!isItem(c),selectable:true,attr:`data-row="${c}"`})).join(''):'<span class="muted small">비어 있음</span>'}</div>`;
   const left=`<div class="panel"><h2>미니게임 판</h2>${board}
     <div class="row muted small">선 플레이어: ${esc(seatName(S.first))}${S.die?` · 주사위 <span class="die">${S.die}</span>`:''}</div></div>
@@ -473,7 +473,7 @@ function renderLobby(){
    <div class="row">${!sitting?`<button class="primary" data-a="sit">자리에 앉기</button>`:''}
    ${sitting&&S.seats.length<5?`<button data-a="sit">내 자리 하나 더 (혼자 시험)</button>`:''}
    <button class="primary" data-a="start" ${S.seats.length>=2&&S.seats.length<=5&&sitting?'':'disabled'}>게임 시작 (${S.seats.length}명)</button></div>
-   <p class="small muted">이번 시험판 미니게임: 버티기 · 폭탄 버튼 · 눈치 경매(2~4인). 미니게임 판 6칸은 이 셋으로 채웁니다. 동점 순위는 무작위 순서로 보상을 고릅니다.</p></div>`;
+   <p class="small muted">이번 시험판 미니게임: 버티기 · 폭탄 버튼 · 눈치 경매(2~4인). 라운드마다 메인 턴이 끝나면 미니게임 판 6칸을 이 셋으로 새로 채웁니다. 동점 순위는 무작위 순서로 보상을 고릅니다.</p></div>`;
 }
 function myHand(i,opts={}){
   const p=S.seats[i];
