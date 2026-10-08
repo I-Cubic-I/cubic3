@@ -3,7 +3,7 @@
 규칙 요약
 - 트럼프 52장(개인전 1벌, 팀전 2벌). A~10 숫자 카드(토큰 재료), J·Q·K 아이템 카드(문양별 능력).
 - 시작 손패 2장, 손패 상한 6장.
-- 라운드: (아이템 투입 확인) → 선 플레이어부터 메인 턴 → 승리 판정 → 미니게임 → 보상 진열 → 상한 정리 → 선 이동.
+- 라운드: 선 플레이어부터 메인 턴(자기 턴 끝에 손패 상한 정리) → 승리 판정·Q·K 투입 확인 → 미니게임 → 보상 진열 → 선 이동.
 - 메인 턴: 아이템 1장까지 + 줍기(덱 맨 위 또는 버림 줄 끝) 후 1장 버리기 + 토큰 만들기 1회.
 - 토큰: 같은 문양 숫자 카드 3/4/5장 → 그 색 토큰. 서로 다른 색 3개면 승리. 문양별 토큰 3개(경주 단위가 더 적으면 그 수).
 - 같은 라운드에 여럿이 3색 → 4색 연장전(4번째 비용 3장). 또 겹치면 큐빅 롤(무작위).
@@ -43,7 +43,7 @@ class Game:
     def __init__(self, n, teams=False, abilities=ALL_ABILITIES, costs=(3, 4, 5), ot_cost=3,
                  start=2, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
                  skmode="steal", picks=None, team_token_once=False,
-                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True, item_check="after_main"):
+                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=3, smart_dq=True, item_check="after_main", trim_mode="turn_end"):
         self.n, self.teams = n, teams
         self.abil = set(abilities)
         self.costs, self.ot_cost, self.cap = costs, ot_cost, cap
@@ -80,6 +80,7 @@ class Game:
         self.dqmode = dqmode
         self.smart_dq = smart_dq
         self.item_check = item_check
+        self.trim_mode = trim_mode
         self.tokens = [[] for _ in range(self.U)]
         self.hands = [[self.draw() for _ in range(start)] for _ in range(n)]
         self.skill = [random.gauss(0, 1) for _ in range(n)]
@@ -422,8 +423,8 @@ class Game:
                 disp.remove(c); self.hands[i].append(c)
         for c in disp: self.discard(None, c)
 
-    def trim(self):
-        for i in range(self.n):
+    def trim(self, only=None):
+        for i in (range(self.n) if only is None else [only]):
             while len(self.hands[i]) > self.cap:
                 w = min(self.hands[i], key=lambda c: self.value(i, c))
                 self.hands[i].remove(w); self.discard(i, w)
@@ -435,6 +436,7 @@ class Game:
             self.made_this_round = set()
             for k, i in enumerate(seq):
                 self.main_turn(i, seq[k + 1] if k + 1 < len(seq) else None)
+                if self.trim_mode == "turn_end": self.trim(i)  # 자기 턴이 끝날 때 상한까지 버림
             done = [u for u in range(self.U) if len(self.tokens[u]) >= self.goal()]
             self.history.append([len(t) for t in self.tokens])
             if self.item_check == "after_main": self.check_items(rnd)  # 승리 판정 때 함께 Q·K 투입 확인
@@ -444,6 +446,6 @@ class Game:
                 if not self.ot: self.ot = True
                 else: return dict(rounds=rnd, winner=random.choice(done), ot=True, roll=True)
             self.reward(self.minigame())
-            self.trim()
+            if self.trim_mode == "round_end": self.trim()
             self.marker = (self.marker + 1) % (self.U if self.teams else self.n)
         return dict(rounds=max_rounds, winner=None, ot=self.ot, roll=False)
