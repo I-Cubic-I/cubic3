@@ -14,7 +14,7 @@
 능력
 ♠J 남의 손패 무작위 1장 뺏기 / ♠Q 문양 지목, 있으면 숫자 카드 1장 받기 / ♠K 토큰(skmode로 변형)
 ♥J ♠ 공격 1회 무효(남의 턴) / ♥Q 버림 줄에서 숫자 카드 2장 회수 / ♥K ♠ 공격 무효 + 되돌림(되돌린 공격은 못 막음)
-♦J 덱 위 3장 보고 1장, 나머지는 뽑힌 순서대로 버림 / ♦Q 내 토큰 1개를 내게 없는 색으로 / ♦K 이번 토큰 비용 3장
+♦J 덱 위 3장 보고 1장, 나머지는 뽑힌 순서대로 버림 / ♦Q 지금 비용만큼의 같은 문양 숫자 카드로 원하는 색 토큰 (dqmode="recolor"면 옛 효과: 내 토큰 1개를 없는 색으로) / ♦K 이번 토큰 비용 3장
 ♣ 미니게임 판 조작(측정 불가 → 미니게임 아이템으로만 씀)
 미니게임: 아무 아이템 1장 → 성적 +item_boost.
 
@@ -43,7 +43,7 @@ class Game:
     def __init__(self, n, teams=False, abilities=ALL_ABILITIES, costs=(3, 4, 5), ot_cost=3,
                  start=2, cap=6, item_boost=1.0, card_minigame=0.7, noise=0.2, decks=None,
                  skmode="steal", picks=None, team_token_once=False,
-                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None):
+                 item_entry=None, item_method="shuffle", items_per_round=2, item_stages=None, dqmode="color", supply=None):
         self.n, self.teams = n, teams
         self.abil = set(abilities)
         self.costs, self.ot_cost, self.cap = costs, ot_cost, cap
@@ -76,7 +76,8 @@ class Game:
                 self.stages.append(dict(trig=trig, pile=[c for c in self.deck if c[1] in ranks], done=False, round=None))
             self.deck = [c for c in self.deck if c[1] not in later]
         self.row, self.front = [], []
-        self.supply = {s: self.U for s in SUITS}
+        self.supply = {s: (min(supply, self.U) if supply else self.U) for s in SUITS}
+        self.dqmode = dqmode
         self.tokens = [[] for _ in range(self.U)]
         self.hands = [[self.draw() for _ in range(start)] for _ in range(n)]
         self.skill = [random.gauss(0, 1) for _ in range(n)]
@@ -158,6 +159,17 @@ class Game:
         s = self.best_suit(i, cost)
         if s:
             self.make_token(i, s, cost); return True, False
+        if item_free and self.dqmode == "color" and self.has_ab(i, "♦Q"):
+            colors = [t for t in SUITS if self.usable(u, t)]
+            src = max(SUITS, key=lambda t: self.cnt(i, t))
+            if colors and self.cnt(i, src) >= cost:
+                t = max(colors, key=lambda t: self.cnt(i, t))
+                self.front.append(self.take_item(i, "♦Q")); self.used[i]["♦Q"] += 1
+                used = sorted([c for c in self.hands[i] if is_num(c) and c[0] == src], key=lambda c: c[1])[:cost]
+                for c in used: self.hands[i].remove(c); self.row.append(c)
+                self.tokens[u].append(t); self.supply[t] -= 1
+                self.made_this_round.add(u)
+                return True, True
         if item_free and cost > 3 and self.has_ab(i, "♦K"):
             s = self.best_suit(i, 3)
             if s:
@@ -263,7 +275,7 @@ class Game:
                 best = max((self.cnt(i, s) for s in SUITS if self.usable(u, s)), default=0)
                 if len(self.tokens[u]) + 1 >= self.goal() or best <= 2:
                     return "♠K"
-        if self.has_ab(i, "♦Q"):
+        if self.dqmode == "recolor" and self.has_ab(i, "♦Q"):
             cost = self.cost_for(u)
             for s in self.tokens[u]:
                 if self.cnt(i, s) >= cost and any(self.supply[t] > 0 and t not in self.tokens[u] for t in SUITS):
