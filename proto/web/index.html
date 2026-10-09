@@ -149,6 +149,8 @@ function useClub(S,i,c,arg){
 }
 function startMain(S){
   S.phase='main'; S.deadline=null;
+  const add=[];while(S.row.length<3){const x=draw(S);if(!x)break;S.row.push(x);add.push(x)}
+  if(add.length)log(S,`버림 줄 채우기: ${add.map(cname).join(' ')}`);
   S.order=[];for(let k=0;k<N(S);k++)S.order.push((S.first+k)%N(S));
   S.ti=0; resetTurn(S);
 }
@@ -260,7 +262,8 @@ function startMinigame(S){
   const id=S.board[S.die-1];const n=N(S);
   const ord=[];for(let k=0;k<n;k++)ord.push((S.first+k)%n);
   S.phase='mg';
-  if(id==='hold'){S.mg={id,pan:1,ord,ci:0,k:0,s:0,tot:Array(n).fill(0),last:null}}
+  if(id==='hold'){S.deck.push(...S.row.splice(0));S.seats.forEach(p=>S.deck.push(...p.front.splice(0)));shuffle(S.deck);
+    S.mg={id,pan:1,ord,ci:0,k:0,s:0,tot:Array(n).fill(0),last:null}}
   if(id==='bomb'){const bundle=buildBundle(S,1+n);S.mg={id,bundle,alive:ord.slice(),ci:0,lay:[],flip:{},arm:{},out:[]};bombLay(S)}
   if(id==='auction'){const bundle=buildBundle(S,5+5*n);const hands={};ord.forEach(i=>hands[i]=bundle.splice(0,5));
     const prizes=bundle.splice(0,5).map((c,k)=>({c,up:k<3}));
