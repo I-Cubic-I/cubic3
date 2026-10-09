@@ -246,7 +246,8 @@ function afterMain(S){
   }
   const n=N(S);const pool=Object.keys(MG).filter(k=>MG[k].min<=n&&n<=MG[k].max);
   const b=[];while(b.length<6)b.push(...shuffle(pool.slice()));S.board=b.slice(0,6);
-  S.phase='roll';S.die=null;log(S,'메인 턴이 모두 끝났다. 미니게임 6장을 새로 뽑았다: '+S.board.map(k=>MG[k].name).join(', ')+'.');
+  const disp=[];for(let k=0;k<2*N(S)+1;k++){const x=draw(S);if(x)disp.push(x)}S.rewardDisp=disp;
+  S.phase='roll';S.die=null;log(S,'메인 턴이 모두 끝났다. 미니게임 6장: '+S.board.map(k=>MG[k].name).join(', ')+' / 보상 진열: '+disp.map(cname).join(' '));
 }
 
 /* ---- 미니게임 공통 ---- */
@@ -356,8 +357,7 @@ function auctionEnd(S){const m=S.mg;const sc={};Object.keys(m.won).forEach(k=>sc
 /* 시간 지난 단계 넘기기 (아무 기기나, 잠금 안에서) */
 function advanceTimers(S){
   const now=Date.now();
-  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){S.deadline=null;reclaim(S);
-    const disp=[];for(let k=0;k<2*N(S)+1;k++){const x=draw(S);if(x)disp.push(x)}S.rewardDisp=disp;log(S,'보상 진열: '+disp.map(cname).join(' '));
+  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){S.deadline=null;reclaim(S);log(S,'버림 줄과 앞의 아이템을 거둬 덱에 섞었다.');
     startMinigame(S);return true}
   if(S.phase==='defense'&&S.pending&&now>=S.pending.deadline){resolveAttack(S);return true}
   return false;
@@ -454,7 +454,8 @@ function render(){
   const canRow=S.phase==='main'&&S.turn&&ctl===S.turn.seat&&!S.turn.picked&&!ui.mode;
   const rowh=`<div class="cards">${S.row.length?S.row.map((c,k)=>{const pk=canRow;return cardHTML(c,{click:(ui.mode==='HQ'&&!isItem(c))||pk,selectable:true,tag:pk?'줍기':'',attr:pk?`data-a="prow" data-c="${c}"`:`data-row="${c}"`})}).join(''):'<span class="muted small">비어 있음</span>'}</div>`;
   const left=`<div class="panel"><h2>미니게임 판</h2>${board}
-    <div class="row muted small">선 플레이어: ${esc(seatName(S.first))}${S.die?` · 주사위 <span class="die">${S.die}</span>`:''}</div></div>
+    <div class="row muted small">선 플레이어: ${esc(seatName(S.first))}${S.die?` · 주사위 <span class="die">${S.die}</span>`:''}</div>
+    ${(S.phase==='roll'||S.phase==='clubs')&&S.rewardDisp?`<div class="row small muted">이번 보상:</div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:''}</div>
     ${S.phase==='mg'?renderMG():''}
     ${S.phase==='reward'?renderReward():''}
     ${S.phase==='ended'?`<div class="panel"><h2>게임 끝</h2><p><strong>${S.winners.map(i=>esc(seatName(i))).join(', ')}</strong> 우승!</p><div class="row"><button class="primary" data-a="restart">같은 자리로 새 게임</button><button data-a="tolobby">로비로</button></div></div>`:''}
