@@ -98,7 +98,7 @@ const MG={
   hold:{name:'버티기',min:2,max:5,icon:'🎲',
     text:'차례대로 주사위를 원하는 만큼 굴려, 나온 눈만큼 점수를 쌓는다.\n1️⃣이 나오면 이번 판 점수를 모두 잃는다. 한 번 더 굴리려면 이 기준이 1 오른다. 멈추면 점수 확정.\n모두 한 번씩 하면 1판. 3판 합계로 순위.\n아이템: 굴리기 전에 낸다. 이번엔 2번 굴려 높은 쪽을 쓴다.'},
   bomb:{name:'폭탄 버튼',min:2,max:5,icon:'🂠 1+1×👥',
-    text:'재료 묶음을 섞어 남은 인원 + 1장을 뒷면으로 깐다.\n선부터 차례로 1장을 골라 내 앞에 뒤집는다. 모두 뒤집으면 가장 높은 카드를 뒤집은 사람이 탈락(같으면 모두 탈락).\n묶음 전체를 다시 섞어 새로 깐다. 1명이 남을 때까지. 단, 2명만 남으면 폭탄을 2번 먼저 맞은 사람이 탈락. 먼저 탈락한 사람이 낮은 순위.\n아이템: 뒤집기 전에 낸다. 내 카드는 3을 뺀 숫자로 친다.'},
+    text:'덱에서 남은 인원 + 1장을 뒷면으로 깐다.\n선부터 차례로 1장을 골라 내 앞에 뒤집는다. 모두 뒤집으면 가장 높은 카드를 뒤집은 사람이 탈락(같으면 모두 탈락).\n깐 카드를 덱에 섞고 새로 깐다. 1명이 남을 때까지. 단, 2명만 남으면 폭탄을 2번 먼저 맞은 사람이 탈락. 먼저 탈락한 사람이 낮은 순위.\n아이템: 뒤집기 전에 낸다. 내 카드는 3을 뺀 숫자로 친다.'},
   auction:{name:'눈치 경매',min:2,max:5,icon:'🂠 5+5×👥',
     text:'각자 5장을 손패로 쥔다. 상품 5장을 한 줄로 깔고 앞의 3장만 앞면.\n왼쪽 상품부터 경매(뒷면이면 먼저 뒤집는다). 모두 손패 1장을 뒷면으로 내고 동시에 연다.\n같은 숫자는 서로 지워진다. 남은 사람 중 가장 높은 사람이 상품을 가져간다. 아무도 없으면 상품은 다음 경매에 얹힌다.\n낸 카드는 버린다. 5번 뒤 가져간 상품 숫자의 합으로 순위.\n아이템: 경매 전에 낸다. 1장마다 다음 상품이 하나씩 이번 경매에 함께 걸린다.'}
 };
@@ -252,19 +252,16 @@ function afterMain(S){
 }
 
 /* ---- 미니게임 공통 ---- */
-function buildBundle(S,need){
-  const b=S.row.splice(0);S.seats.forEach(p=>b.push(...p.front.splice(0)));
-  while(b.length<need){const x=S.deck.pop();if(!x)break;b.push(x)}
-  for(let k=0;k<3;k++){const x=S.deck.pop();if(x)b.push(x)}
-  return shuffle(b);
+function reclaim(S){S.deck.push(...S.row.splice(0));S.seats.forEach(p=>S.deck.push(...p.front.splice(0)));shuffle(S.deck)}
+function buildBundle(S,need){ // 재료 묶음 폐지: 덱에서 필요한 만큼 뽑는다
+  const b=[];for(let k=0;k<need;k++){const x=draw(S);if(!x)break;b.push(x)}return b;
 }
 function startMinigame(S){
   const id=S.board[S.die-1];const n=N(S);
   const ord=[];for(let k=0;k<n;k++)ord.push((S.first+k)%n);
   S.phase='mg';
-  if(id==='hold'){S.deck.push(...S.row.splice(0));S.seats.forEach(p=>S.deck.push(...p.front.splice(0)));shuffle(S.deck);
-    S.mg={id,pan:1,ord,ci:0,k:0,s:0,tot:Array(n).fill(0),last:null}}
-  if(id==='bomb'){const bundle=buildBundle(S,1+n);S.mg={id,bundle,alive:ord.slice(),ci:0,lay:[],flip:{},arm:{},out:[]};bombLay(S)}
+  if(id==='hold'){S.mg={id,pan:1,ord,ci:0,k:0,s:0,tot:Array(n).fill(0),last:null}}
+  if(id==='bomb'){S.mg={id,bundle:[],alive:ord.slice(),ci:0,lay:[],flip:{},arm:{},out:[]};bombLay(S)}
   if(id==='auction'){const bundle=buildBundle(S,5+5*n);const hands={};ord.forEach(i=>hands[i]=bundle.splice(0,5));
     const prizes=bundle.splice(0,5).map((c,k)=>({c,up:k<3}));
     S.mg={id,bundle,hands,prizes,ai:0,pot:[],step:'pre',ready:{},bids:{},won:{},spent:[]};
@@ -312,9 +309,9 @@ function holdNext(S){const m=S.mg;m.k=0;m.s=0;m.ci++;
 
 /* ---- 폭탄 버튼 ---- */
 function bombLay(S){const m=S.mg;
-  // 묶음 전체를 다시 섞어 남은 인원 + 1장
-  m.bundle.push(...m.lay.filter(Boolean));Object.values(m.flip).forEach(f=>m.bundle.push(f.c));shuffle(m.bundle);
-  m.lay=m.bundle.splice(0,m.alive.length+1);m.flip={};m.arm={};m.ci=0;
+  // 깐 카드를 덱에 섞고 남은 인원 + 1장을 새로 뽑는다
+  S.deck.push(...m.lay.filter(Boolean));Object.values(m.flip).forEach(f=>S.deck.push(f.c));shuffle(S.deck);
+  m.lay=buildBundle(S,m.alive.length+1);m.flip={};m.arm={};m.ci=0;
   const st=m.alive.slice().sort((a,b)=>((a-S.first+N(S))%N(S))-((b-S.first+N(S))%N(S)));m.alive=st;}
 function bombArm(S,i,item){const p=S.seats[i];p.hand.splice(p.hand.indexOf(item),1);p.front.push(item);S.mg.arm[i]=true;log(S,`폭탄 버튼: 자리 ${i+1} 아이템(-3)`)}
 function bombFlip(S,i,k){const m=S.mg;const c=m.lay[k];if(!c)return;m.lay[k]=null;
@@ -361,7 +358,7 @@ function auctionEnd(S){const m=S.mg;const sc={};Object.keys(m.won).forEach(k=>sc
 /* 시간 지난 단계 넘기기 (아무 기기나, 잠금 안에서) */
 function advanceTimers(S){
   const now=Date.now();
-  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){S.deadline=null;
+  if(S.phase==='clubs'&&S.deadline&&now>=S.deadline){S.deadline=null;reclaim(S);
     const disp=[];for(let k=0;k<2*N(S)+1;k++){const x=draw(S);if(x)disp.push(x)}S.rewardDisp=disp;log(S,'보상 진열: '+disp.map(cname).join(' '));
     startMinigame(S);return true}
   if(S.phase==='defense'&&S.pending&&now>=S.pending.deadline){resolveAttack(S);return true}
