@@ -1,0 +1,33 @@
+/* 3D 시험판: 테이블 장면 위에 기존 패널을 겹쳐 띄운다. 어두운 방 한 가지 분위기로 고정(테마 전환 없음). */
+:root,:root[data-theme="light"],:root[data-theme="dark"]{
+  --bg:#0d1014; --surface:rgba(22,27,35,.86); --sunk:rgba(255,255,255,.07); --ink:#eef2f6; --muted:#a7b1bd; --line:rgba(255,255,255,.14);
+  --accent:#8fb0ff; --accent-ink:#0b1020; --warn:#f2c14e; --bad:#ff7a6e; --good:#6fd68a;
+  --s:#86a7ff; --h:#ff7369; --d:#ffd23f; --dt:#f2c318; --c:#5fd07a; color-scheme:dark}
+html,body{height:100%}
+body{padding:0;overflow:hidden;background:var(--bg)}
+#scene3d{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;cursor:grab}
+#scene3d.drag{cursor:grabbing} #scene3d.hot{cursor:pointer}
+#app{position:fixed;inset:0;max-width:none;display:block;pointer-events:none;padding:0}
+#app>*{pointer-events:auto}
+.grid,.grid>.wrap{display:contents}
+.panel{background:var(--surface);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.p-board,.p-row,.p-players{display:none!important}
+.top{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:16px;right:330px;z-index:5;pointer-events:none}
+.top h1{font-size:20px;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.top .chip{background:rgba(0,0,0,.45);color:var(--ink)}
+.p-log{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:16px;width:300px;max-height:32vh;overflow:auto;padding:10px 12px;gap:6px;z-index:5;opacity:.88}
+.p-log h2{font-size:15px} .p-log .log{max-height:none}
+.p-me{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom,0px));width:min(980px,calc(100vw - 32px));max-height:40vh;overflow:auto;z-index:6}
+.p-mg,.p-rules,.p-reward,.p-end{position:fixed;left:16px;top:64px;width:min(470px,calc(100vw - 32px));max-height:calc(58vh - 64px);overflow:auto;z-index:7}
+body.in-mg .p-me .cards>.card:not(.item){display:none}
+body.in-mg .p-me h2::after{content:" · 미니게임 중에는 아이템만 보입니다";font-family:var(--body);font-size:12px;color:var(--muted)}
+.notice{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:20}
+.cam-btns{position:fixed;right:16px;bottom:calc(42vh + 18px);display:flex;flex-direction:column;gap:6px;z-index:8}
+.cam-btns button{background:var(--surface);color:var(--ink);border-color:var(--line);backdrop-filter:blur(6px)}
+.hint3d{position:fixed;right:16px;bottom:calc(42vh + 112px);font-size:12px;color:var(--muted);text-align:right;z-index:8;pointer-events:none;text-shadow:0 1px 3px #000}
+@media (max-width:760px){
+  .top{right:16px} .p-log{display:none}
+  .p-mg,.p-rules,.p-reward,.p-end{top:56px;max-height:calc(52vh - 56px)}
+  .p-me{max-height:38vh}
+  .cam-btns{bottom:calc(38vh + 16px)} .hint3d{display:none}
+}

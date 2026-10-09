@@ -590,6 +590,7 @@ function pumpFx(){if(!S)return;const list=S.fx||[];
 function nextFx(){const f=fxq.shift();if(!f){fxBusy=false;return}fxBusy=true;playFx(f,nextFx)}
 function shake(){app.classList.remove('shake');void app.offsetWidth;app.classList.add('shake')}
 function playFx(f,done){
+  try{window.fx3d&&window.fx3d(f)}catch(e){}
   const el=document.createElement('div');el.className='fx '+(f.tone||'');let dur=1300;
   const who=f.seats&&f.seats.length?`<div class="fx-sub">${f.seats.map(nm).join(' · ')}</div>`:'';
   if(f.t==='dice'){dur=1500;el.innerHTML=`<div class="bigdie rolling">1</div><div class="fx-sub">${f.mg?esc(MG[f.mg].name):''}${f.bust?` · 기준 ${f.th} 이하!`:''}</div>${who}`;
@@ -699,21 +700,21 @@ function render(){
   const board=!S.board?`<p class="muted small">메인 턴이 모두 끝나면 미니게임 6장을 새로 뽑습니다.</p>`:`<div class="board">${S.board.map((id,k)=>`<div class="slot ${S.die===k+1?'hit':''} ${ui.mode==='clubK'?'pickable':''}" data-slot="${k+1}" tabindex="${ui.mode==='clubK'?0:-1}"><b>${k+1}</b>${esc(MG[id].name)}</div>`).join('')}</div>`;
   const canRow=S.phase==='main'&&S.turn&&ctl===S.turn.seat&&!S.turn.picked&&!ui.mode;
   const rowh=`<div class="cards">${S.row.length?S.row.map((c,k)=>{const pk=canRow;return cardHTML(c,{click:(ui.mode==='HQ'&&!isItem(c))||pk,selectable:true,tag:pk?'줍기':'',attr:pk?`data-a="prow" data-c="${c}"`:`data-row="${c}"`})}).join(''):'<span class="muted small">비어 있음</span>'}</div>`;
-  const left=`<div class="panel"><h2>미니게임 판</h2>${board}
+  const left=`<div class="panel p-board"><h2>미니게임 판</h2>${board}
     <div class="row muted small">선 플레이어: ${esc(seatName(S.first))}${S.die?` · 주사위 <span class="die">${S.die}</span>`:''}</div>
     ${S.phase==='roll'&&S.rewardDisp?`<div class="row small muted">이번 보상:</div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:''}</div>
     ${S.phase==='clubs'?renderRules():''}
     ${S.phase==='mg'?renderMG():''}
     ${S.phase==='reward'?renderReward():''}
-    ${S.phase==='ended'?`<div class="panel"><h2>게임 끝</h2><p><strong>${S.winners.map(i=>esc(seatName(i))).join(', ')}</strong> 우승!</p><div class="row"><button class="primary" data-a="restart">같은 자리로 새 게임</button><button data-a="tolobby">로비로</button></div></div>`:''}
-    <div class="panel"><h2>버림 줄 <span class="muted small">(끝 = 오른쪽, 아무 카드나 주울 수 있음)</span></h2>${rowh}</div>
-    ${ctl!=null?renderMe():`<div class="panel"><p class="muted">관전 중입니다. 자리에 앉은 사람만 조작할 수 있습니다.</p></div>`}`;
+    ${S.phase==='ended'?`<div class="panel p-end"><h2>게임 끝</h2><p><strong>${S.winners.map(i=>esc(seatName(i))).join(', ')}</strong> 우승!</p><div class="row"><button class="primary" data-a="restart">같은 자리로 새 게임</button><button data-a="tolobby">로비로</button></div></div>`:''}
+    <div class="panel p-row"><h2>버림 줄 <span class="muted small">(끝 = 오른쪽, 아무 카드나 주울 수 있음)</span></h2>${rowh}</div>
+    ${ctl!=null?renderMe():`<div class="panel p-me"><p class="muted">관전 중입니다. 자리에 앉은 사람만 조작할 수 있습니다.</p></div>`}`;
   const players=S.seats.map((p,i)=>{const t=whoActs()===i;
     return `<div class="pl ${t?'turn':''}" style="animation-delay:-${Date.now()%1600}ms"><div class="nm"><strong>${esc(seatName(i))}${i===S.first?' · 선':''}</strong><span class="muted small">손패 ${p.hand.length}</span></div>
     <div class="row">${p.tokens.length?p.tokens.map(tokHTML).join(''):'<span class="muted small">토큰 없음</span>'}</div>
     ${p.front.length?`<div class="row small muted">앞: ${p.front.map(cname).join(' ')}</div>`:''}</div>`}).join('');
-  const right=`<div class="panel"><h2>플레이어</h2><div class="players">${players}</div></div>
-    <div class="panel"><h2>기록</h2><div class="log">${S.log.map(l=>`<div>${esc(l)}</div>`).join('')}</div>
+  const right=`<div class="panel p-players"><h2>플레이어</h2><div class="players">${players}</div></div>
+    <div class="panel p-log"><h2>기록</h2><div class="log">${S.log.map(l=>`<div>${esc(l)}</div>`).join('')}</div>
     <div class="row"><button class="danger small" data-a="${ui.confirmReset?'reset2':'reset1'}">${ui.confirmReset?'정말 테이블을 비울까요? 한 번 더 누르기':'테이블 비우기'}</button></div></div>`;
   app.innerHTML=head+(flashMsg?`<div class="notice">${esc(flashMsg)}</div>`:'')+`<div class="grid"><div class="wrap" style="max-width:none">${left}</div><div class="wrap" style="max-width:none">${right}</div></div>`;
 }
@@ -754,7 +755,7 @@ function renderMe(){
   else if(myTurn) body=renderTurn(i);
   else if(S.phase==='main'){body=`<p class="muted">${esc(seatName(t.seat))}의 메인 턴입니다.</p>`}
   else if(S.phase==='mg'||S.phase==='reward'||S.phase==='ended'){body=''}
-  return `<div class="panel"><div class="row" style="justify-content:space-between"><h2>${esc(seatName(i))}의 손패</h2>${p.tokens.length?`<div class="row">${p.tokens.map(tokHTML).join('')}</div>`:''}</div>
+  return `<div class="panel p-me"><div class="row" style="justify-content:space-between"><h2>${esc(seatName(i))}의 손패</h2>${p.tokens.length?`<div class="row">${p.tokens.map(tokHTML).join('')}</div>`:''}</div>
    ${seatSwitch()}${myHand(i)}${body?`<div class="act">${body}</div>`:''}</div>`;
 }
 function renderTurn(i){
@@ -866,18 +867,18 @@ function renderMG(){
       ${i!=null&&(i in m.bet)?`<div class="row center small"><span class="muted">아이템으로 갈아타기:</span>${SUITS.filter(su=>su!==m.bet[i]).map(su=>`<button class="suitbtn small ${su}" data-a="rswap" data-s="${su}" ${selItem?'':'disabled'}>${SYM[su]}</button>`).join('')}</div>`:''}`}
     body=`<p class="center small muted">뒤집은 카드 ${m.pile.length} / ${RLIMIT}장 · 3번 구역에서 판 밖으로 나가면 우승</p><div class="race">${lanes}</div>${m.last?`<div class="row center small muted">방금: ${cardHTML(m.last.c,{cls:anim('rc'+m.pile.length,500).cls?'deal':''})} ${SYM[m.last.s]} ${m.last.fw?'앞으로!':'뒤로…'}</div>`:''}${me_}`}
   const rd=S.rewardDisp&&S.rewardDisp.length?`<div class="row small"><span class="muted">이번 보상(순위대로 두 바퀴):</span></div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:'';
-  return `<div class="panel"><h2>미니게임 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2>${rd}<details><summary class="small">카드 뒷면 규칙</summary><div class="rules">${esc(def.text)}</div></details>${body}</div>`;
+  return `<div class="panel p-mg"><h2>미니게임 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2>${rd}<details><summary class="small">카드 뒷면 규칙</summary><div class="rules">${esc(def.text)}</div></details>${body}</div>`;
 }
 function renderRules(){const id=S.board[S.die-1],def=MG[id];const rd=S.ready||{};
   const mineLeft=S.seats.map((_,k)=>k).filter(k=>mine(k)&&!rd[k]);
   const lines=def.text.split('\n').map(l=>{const k=l.indexOf(':');return k>0?`<div class="rline"><b>${esc(l.slice(0,k))}</b><span>${esc(l.slice(k+1).trim())}</span></div>`:`<div>${esc(l)}</div>`}).join('');
-  return `<div class="panel rules-panel ${anim('rules'+S.round+id,500).cls?'deal':''}"><div class="row" style="justify-content:space-between"><h2>규칙 설명 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2></div>
+  return `<div class="panel p-rules rules-panel ${anim('rules'+S.round+id,500).cls?'deal':''}"><div class="row" style="justify-content:space-between"><h2>규칙 설명 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2></div>
    <div class="rcard">${lines}</div>
    ${S.rewardDisp&&S.rewardDisp.length?`<div class="row small muted">이번 보상:</div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:''}
    <div class="row">${S.seats.map((_,k)=>`<span class="chip ${rd[k]?'on':''}">${esc(seatName(k))} ${rd[k]?'준비 완료':'읽는 중'}</span>`).join('')}</div>
    <div class="row">${mineLeft.length?`<button class="primary big" data-a="ready">준비 완료${mineLeft.length>1?` (내 자리 ${mineLeft.length}개)`:''}</button>`:'<span class="muted">다른 사람을 기다리는 중…</span>'}</div></div>`}
 function renderReward(){const Rw=S.reward;const who=Rw.order[Rw.pi];
-  return `<div class="panel"><h2>보상 고르기</h2><p class="small muted">미니게임 순위 순서대로 두 바퀴. 지금: <strong>${esc(seatName(who))}</strong></p>
+  return `<div class="panel p-reward"><h2>보상 고르기</h2><p class="small muted">미니게임 순위 순서대로 두 바퀴. 지금: <strong>${esc(seatName(who))}</strong></p>
   <div class="cards">${Rw.disp.map(c=>cardHTML(c,{click:ctl===who,attr:`data-a="rpick" data-c="${c}"`})).join('')}</div></div>`}
 
 /* ---------- 입력 ---------- */
