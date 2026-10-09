@@ -6,18 +6,18 @@
 :root{
   --bg:#e9edf1; --surface:#ffffff; --sunk:#dde3ea; --ink:#18212b; --muted:#5a6675; --line:#c6cfd9;
   --accent:#2f4fd1; --accent-ink:#ffffff; --warn:#b7791f; --bad:#c92a2a; --good:#2b8a3e;
-  --s:#2b3a8c; --h:#d63939; --d:#e8590c; --c:#2f9e44;
+  --s:#2f5fc8; --h:#d3302f; --d:#a67c00; --dt:#f2c318; --c:#2e9450;
   --display:"Do Hyeon","IBM Plex Sans KR",system-ui,sans-serif;
   --body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#12171d; --surface:#1b222b; --sunk:#232c37; --ink:#e7edf3; --muted:#9aa7b6; --line:#334050;
   --accent:#7b93ff; --accent-ink:#0d1220; --warn:#f0b84a; --bad:#ff7070; --good:#5fd07a;
-  --s:#8d9cff; --h:#ff6b6b; --d:#ff9a4d; --c:#5fd07a; color-scheme:dark}}
+  --s:#7fa3ff; --h:#ff6b6b; --d:#ffd23f; --dt:#ffd23f; --c:#5fd07a; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#12171d; --surface:#1b222b; --sunk:#232c37; --ink:#e7edf3; --muted:#9aa7b6; --line:#334050;
   --accent:#7b93ff; --accent-ink:#0d1220; --warn:#f0b84a; --bad:#ff7070; --good:#5fd07a;
-  --s:#8d9cff; --h:#ff6b6b; --d:#ff9a4d; --c:#5fd07a; color-scheme:dark}
+  --s:#7fa3ff; --h:#ff6b6b; --d:#ffd23f; --dt:#ffd23f; --c:#5fd07a; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:12px 40px}
 h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;text-wrap:balance}
@@ -56,7 +56,75 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .card.dim{opacity:.4}
 .card .tag{position:absolute;bottom:-8px;font-family:var(--body);font-size:10px;background:var(--ink);color:var(--bg);border-radius:4px;padding:0 4px}
 .tok{display:inline-block;width:16px;height:16px;border-radius:4px;vertical-align:-3px}
-.tok.S{background:var(--s)} .tok.H{background:var(--h)} .tok.D{background:var(--d)} .tok.C{background:var(--c)}
+.tok.S{background:var(--s)} .tok.H{background:var(--h)} .tok.D{background:var(--dt)} .tok.C{background:var(--c)}
+.S{color:var(--s)} .H{color:var(--h)} .D{color:var(--d)} .C{color:var(--c)}
+.center{text-align:center;justify-content:center}
+.big{font-family:var(--display);font-size:26px;font-weight:400}
+.chip.out{text-decoration:line-through;opacity:.6} .chip.lead{background:var(--warn);color:#fff} .chip.bad{background:var(--bad);color:#fff}
+/* 움직임 */
+@keyframes pop{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+@keyframes deal{0%{transform:translateY(-24px) rotate(-8deg);opacity:0}100%{transform:none;opacity:1}}
+@keyframes flip{0%{transform:rotateY(90deg)}100%{transform:rotateY(0)}}
+@keyframes hop{0%{transform:translateY(0)}40%{transform:translateY(-14px) scale(1.15)}100%{transform:none}}
+@keyframes inflate{0%{transform:scale(var(--from,1))}70%{transform:scale(1.06)}100%{transform:scale(1)}}
+@keyframes wobble{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 1px var(--accent)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent)}}
+@keyframes shake{0%,100%{transform:none}20%{transform:translateX(-8px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+@keyframes roll{0%{transform:rotate(0) scale(.9)}100%{transform:rotate(360deg) scale(1)}}
+@keyframes land{0%{transform:scale(1.4)}100%{transform:scale(1)}}
+@keyframes fxin{0%{transform:translateY(16px) scale(.85);opacity:0}100%{transform:none;opacity:1}}
+@keyframes fxout{to{transform:translateY(-12px) scale(.95);opacity:0}}
+@keyframes confetti{0%{transform:translateY(-40px) rotate(0);opacity:1}100%{transform:translateY(260px) rotate(540deg);opacity:0}}
+@keyframes toast{0%{transform:translate(-50%,-30px);opacity:0}12%,80%{transform:translate(-50%,0);opacity:1}100%{transform:translate(-50%,-20px);opacity:0}}
+.card.deal{animation:deal .45s ease-out both} .card.flip{animation:flip .35s ease-out both}
+.pl.turn{animation:pulse 1.6s ease-in-out infinite}
+button{transition:transform .08s} button:active:not(:disabled){transform:scale(.96)}
+.shake{animation:shake .45s}
+.fxlayer{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:50}
+.fx{background:var(--surface);color:var(--ink);border:2px solid var(--accent);border-radius:18px;padding:18px 26px;min-width:220px;max-width:min(92vw,560px);text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.28);animation:fxin .28s cubic-bezier(.2,1.4,.4,1) both;display:grid;gap:6px;justify-items:center;position:relative;overflow:hidden}
+.fx.out{animation:fxout .26s ease-in both} .fx.bad{border-color:var(--bad)} .fx.good{border-color:var(--good)} .fx.win{border-color:var(--warn)}
+.fx-big{font-family:var(--display);font-size:40px;line-height:1.1} .fx-kicker{font-size:13px;color:var(--muted);letter-spacing:.1em} .fx-sub{color:var(--muted)}
+.fx.title .fx-big{font-size:46px;animation:pop .5s both}
+.boom{color:var(--bad);font-size:64px!important;animation:pop .35s both}
+.bigdie{width:84px;height:84px;border-radius:16px;border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:40px;background:var(--surface)}
+.bigdie.rolling{animation:roll .2s linear infinite} .bigdie.land{animation:land .3s ease-out;border-color:var(--accent);color:var(--accent);width:auto;min-width:84px;padding:0 10px} .bigdie.bust{border-color:var(--bad);color:var(--bad)}
+.bigtok{width:56px;height:56px;border-radius:12px;animation:pop .45s both} .bigtok.S{background:var(--s)} .bigtok.H{background:var(--h)} .bigtok.D{background:var(--dt)} .bigtok.C{background:var(--c)}
+.rpsrow,.vrow{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.rpsp{display:grid;justify-items:center;gap:2px;animation:pop .4s both} .rpsp .hand{font-size:44px} .rpsp.lead .hand{filter:drop-shadow(0 0 6px var(--warn))} .rpsp.lose{opacity:.45}
+.rpsp:nth-child(2){animation-delay:.08s}.rpsp:nth-child(3){animation-delay:.16s}.rpsp:nth-child(4){animation-delay:.24s}.rpsp:nth-child(5){animation-delay:.32s}
+.vdoor{width:84px;min-height:96px;border-radius:12px;border:2px solid var(--line);display:grid;align-content:start;justify-items:center;padding:6px;background:var(--sunk);animation:pop .4s both}
+.vdoor b{font-family:var(--display);font-size:32px;font-weight:400} .vdoor.hit{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 18%,var(--surface))}
+.rankrow{font-size:17px;animation:deal .35s both} .rankrow.r1{font-size:22px;color:var(--warn)} .rankrow:nth-child(3){animation-delay:.1s}.rankrow:nth-child(4){animation-delay:.2s}.rankrow:nth-child(5){animation-delay:.3s}
+.bidp{display:grid;justify-items:center;gap:2px}
+.fx.win i{position:absolute;top:0;width:8px;height:14px;border-radius:2px;animation:confetti 2.6s ease-in infinite}
+.fx.win i:nth-child(3n){background:var(--s);left:10%}.fx.win i:nth-child(3n+1){background:var(--h);left:45%;animation-delay:.3s}.fx.win i:nth-child(3n+2){background:var(--dt);left:78%;animation-delay:.6s}
+.fx.win i:nth-child(4n){background:var(--c);left:25%;animation-delay:.9s}.fx.win i:nth-child(5n){left:62%;animation-delay:1.2s}
+.toast{position:fixed;top:12px;left:50%;transform:translate(-50%,-40px);background:var(--accent);color:var(--accent-ink);padding:8px 18px;border-radius:999px;font-weight:700;opacity:0;z-index:60;pointer-events:none}
+.toast.show{animation:toast 1.8s ease both}
+.balloon-stage{display:grid;justify-items:center;min-height:250px;align-content:end;padding-top:8px}
+.balloon{border-radius:50% 50% 48% 48%/55% 55% 45% 45%;display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--display);font-size:30px;box-shadow:inset -14px -18px 0 rgba(0,0,0,.12),inset 10px 10px 0 rgba(255,255,255,.25);animation:wobble 2.4s ease-in-out infinite;transition:width .4s,height .4s}
+.balloon.inflate{animation:inflate .6s cubic-bezier(.2,1.5,.4,1) both}
+.string{width:2px;height:34px;background:var(--muted)}
+.hands{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.hand{display:grid;justify-items:center;gap:2px;padding:10px 16px;border-radius:14px;font-size:14px} .hand span{font-size:40px;line-height:1}
+.hand:hover:not(:disabled){transform:translateY(-3px)}
+.doors{display:flex;gap:12px;justify-content:center}
+.door{width:86px;height:110px;border-radius:12px 12px 6px 6px;font-family:var(--display);font-size:40px;background:var(--sunk);border:2px solid var(--line)}
+.door:hover:not(:disabled){transform:translateY(-4px);border-color:var(--accent)} .door.on{background:var(--bad);color:#fff;border-color:var(--bad)}
+.flipzone{display:flex;justify-content:center;min-height:150px;align-items:center;perspective:600px}
+.card.bigc{width:96px;height:134px;font-size:40px;border-radius:12px} .card.bigc small{font-size:34px}
+.bigcard.ready{width:96px;height:134px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:48px;background:var(--sunk);animation:pop .5s both}
+.nums{display:flex;gap:6px;justify-content:center;flex-wrap:wrap} .num{min-width:48px;min-height:48px;font-family:var(--display);font-size:22px}
+.race{display:grid;gap:6px}
+.lane{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,120px);gap:8px;align-items:center}
+.lname{font-size:22px;text-align:center} .riders{overflow-wrap:anywhere}
+.track{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.cell{height:40px;border-radius:8px;background:var(--sunk);display:flex;align-items:center;justify-content:center} .cell.goal{background:color-mix(in srgb,var(--warn) 25%,var(--sunk))}
+.horse{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px} .horse.S{background:var(--s)} .horse.H{background:var(--h)} .horse.D{background:var(--dt);color:#1e2b4a} .horse.C{background:var(--c)}
+.horse.hop{animation:hop .5s ease-out}
+.suitbtn{font-size:22px;min-width:52px;min-height:44px} .suitbtn.small{font-size:16px;min-width:40px;min-height:36px}
+button.big{font-size:17px;padding:10px 22px}
+@media (prefers-reduced-motion:reduce){*,.fx,.balloon{animation:none!important;transition:none!important}}
 .players{display:grid;gap:8px}
 .pl{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:4px}
 .pl.turn{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
@@ -96,11 +164,21 @@ function fullDeck(decks=1){const d=[];for(let k=0;k<decks;k++)for(const s of SUI
 
 const MG={
   hold:{name:'버티기',min:2,max:5,icon:'🎲',
-    text:'차례대로 주사위를 원하는 만큼 굴려, 나온 눈만큼 점수를 쌓는다.\n1️⃣이 나오면 이번 판 점수를 모두 잃는다. 한 번 더 굴리려면 이 기준이 1 오른다. 멈추면 점수 확정.\n모두 한 번씩 하면 1판. 3판 합계로 순위.\n아이템: 굴리기 전에 낸다. 이번엔 2번 굴려 높은 쪽을 쓴다.'},
+    text:'준비: 각자에게 주사위 1개를 준다.\n진행: 차례대로 주사위를 원하는 만큼 굴려, 나온 눈만큼 점수를 쌓는다. 1이 나오면 이번 판 점수를 모두 잃는다. 한 번 더 굴리려면 이 기준이 1 오른다. 멈추면 점수 확정. 모두 한 번씩 하면 1판.\n순위: 3판 합계.\n아이템: 굴리기 전에 낸다. 이번엔 2번 굴려 높은 쪽을 쓴다.'},
   bomb:{name:'폭탄 버튼',min:2,max:5,icon:'🂠 1+1×👥',
-    text:'덱에서 남은 인원 + 1장을 뒷면으로 깐다.\n선부터 차례로 1장을 골라 내 앞에 뒤집는다. 모두 뒤집으면 가장 높은 카드를 뒤집은 사람이 탈락(같으면 모두 탈락).\n깐 카드를 덱에 섞고 새로 깐다. 1명이 남을 때까지. 단, 2명만 남으면 폭탄을 2번 먼저 맞은 사람이 탈락. 먼저 탈락한 사람이 낮은 순위.\n아이템: 뒤집기 전에 낸다. 내 카드는 3을 뺀 숫자로 친다.'},
+    text:'준비: 덱에서 남은 인원 + 1장을 뒷면으로 깐다.\n진행: 선부터 차례로 1장을 골라 내 앞에 뒤집는다. 모두 뒤집으면 가장 높은 카드를 뒤집은 사람이 탈락(같으면 모두 탈락). 깐 카드를 덱에 섞고 새로 깐다. 1명이 남을 때까지. 단, 2명만 남으면 폭탄을 2번 먼저 맞은 사람이 탈락.\n순위: 먼저 탈락한 사람이 낮은 순위.\n아이템: 뒤집기 전에 낸다. 내 카드는 3을 뺀 숫자로 친다.'},
   auction:{name:'눈치 경매',min:2,max:5,icon:'🂠 5+5×👥',
-    text:'각자 5장을 손패로 쥔다. 상품 5장을 한 줄로 깔고 앞의 3장만 앞면.\n왼쪽 상품부터 경매(뒷면이면 먼저 뒤집는다). 모두 손패 1장을 뒷면으로 내고 동시에 연다.\n같은 숫자는 서로 지워진다. 남은 사람 중 가장 높은 사람이 상품을 가져간다. 아무도 없으면 상품은 다음 경매에 얹힌다.\n낸 카드는 버린다. 5번 뒤 가져간 상품 숫자의 합으로 순위.\n아이템: 경매 전에 낸다. 1장마다 다음 상품이 하나씩 이번 경매에 함께 걸린다.'}
+    text:'준비: 각자 5장을 손패로 쥔다. 상품 5장을 한 줄로 깔고 앞의 3장만 앞면.\n진행: 왼쪽 상품부터 공개 후 경매. 모두 손패 1장을 뒷면으로 내고 동시에 연다. 같은 숫자는 서로 지워진다. 남은 사람 중 가장 높은 사람이 상품을 가져간다. 아무도 없으면 상품은 다음 경매에 얹힌다. 낸 카드는 버린다. 5번 반복.\n순위: 가져간 상품 숫자의 합.\n아이템: 경매 전에 낸다. 1장마다 다음 상품이 하나씩 이번 경매에 함께 걸린다.'},
+  balloon:{name:'풍선 불기',min:2,max:5,icon:'🂠 3×👥',
+    text:'준비: 덱에서 각자 3장을 받아 혼자 본다.\n진행: 차례대로 손패 1장을 가운데에 내며 지금까지의 합을 말하고, 덱에서 1장을 보충한다. 합이 50을 넘기게 한 사람이 탈락. 가운데 카드를 덱에 섞고, 남은 사람끼리 손패를 그대로 들고 합 0부터 다시. 1명이 남을 때까지.\n순위: 먼저 탈락한 사람이 낮은 순위.\n아이템: 낼 때 같이 낸다. 이번엔 내 카드를 빼서 합을 줄인다.'},
+  rps:{name:'선 가위바위보',min:2,max:5,icon:'✊',
+    text:'준비: 없음.\n진행: 모두 동시에 가위바위보를 낸다. 각자 선의 손과만 비교해, 선에게 진 사람은 탈락하고 이기거나 비긴 사람은 남는다. 선이 아닌 사람 수 + 1판 동안.\n순위: 모두 탈락시키면 선 1위. 아니면 남은 사람이 공동 1위, 선 꼴찌. 탈락한 사람은 늦게 탈락한 순서.\n아이템(임시): 선이 아닐 때는 졌을 때 낸다. 이번엔 탈락하지 않는다. 선은 내기 전에 낸다. 이번엔 비긴 사람도 탈락한다.'},
+  vault:{name:'금고 털기',min:2,max:5,icon:'1·2·3',
+    text:'준비: 선이 경비원, 나머지는 도둑.\n진행: 경비원이 못 보는 사이 도둑은 1·2·3번 금고 중 하나에 숨는다. 경비원이 금고 하나를 고른다. 그 금고의 도둑은 잡혀서 빠진다. 도둑 수 + 1판 동안.\n순위: 도둑을 모두 잡으면 경비원 1위. 아니면 살아남은 도둑이 공동 1위, 경비원 꼴찌. 잡힌 도둑은 늦게 잡힌 순서.\n아이템: 도둑은 잡혔을 때 낸다. 이번엔 빠지지 않는다. 경비원은 고를 때 낸다. 금고 2곳을 고른다.'},
+  count:{name:'몇 장이었지',min:2,max:5,icon:'🂠 12',
+    text:'준비: 각자에게 주사위 1개를 준다.\n진행: 덱에서 12장을 1초에 1장씩 넘긴다. 모두 문양별 장수를 센다. 다 넘기면 1장을 더 뒤집는다. 그 카드의 문양이 정답 문양. 각자 그 문양의 장수를 골라 함께 연다(7장 이상이면 6). 맞힌 사람 1점. 3판.\n순위: 맞힌 횟수.\n아이템: 열기 전에 낸다. 정답과 1 차이도 맞힌 걸로 친다.'},
+  race:{name:'문양 경주',min:2,max:5,icon:'🂠',
+    text:'준비: 문양 색 말 4개를 출발선에 둔다.\n진행: 선부터 차례로 우승할 문양 하나를 고른다(겹쳐도 된다). 선이 덱에서 한 장씩 뒤집는다. 숫자 카드면 그 문양이 1칸 앞으로, J·Q·K면 1칸 뒤로. 먼저 3칸을 간 문양이 우승.\n순위: 우승 문양을 고른 사람이 모두 1위, 나머지는 고른 문양의 칸 수 순서.\n아이템: 카드를 뒤집기 전에 낸다. 내가 고른 문양을 바꾼다.'}
 };
 
 function log(S,msg){S.log.unshift(msg);if(S.log.length>80)S.log.length=80}
@@ -138,7 +216,7 @@ function startGame(S){
   startMain(S);
 }
 
-function rollBoard(S){S.die=d6();S.phase='clubs';S.deadline=Date.now()+CLUB_MS;log(S,`${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[S.board[S.die-1]].name}`)}
+function rollBoard(S){S.die=d6();S.phase='clubs';S.deadline=Date.now()+CLUB_MS+1600;log(S,`${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[S.board[S.die-1]].name}`);fx(S,{t:'dice',v:S.die,mg:S.board[S.die-1]})}
 function useClub(S,i,c,arg){
   const p=S.seats[i];p.hand.splice(p.hand.indexOf(c),1);p.front.push(c);
   const r=R(c);
@@ -146,6 +224,7 @@ function useClub(S,i,c,arg){
   else if(r===12){S.die=((S.die-1+arg+6)%6)+1;log(S,`자리 ${i+1}: ♣Q로 눈 ${arg>0?'+1':'-1'} → ${S.die}`)}
   else {S.die=arg;log(S,`자리 ${i+1}: ♣K로 칸 ${arg}을 직접 고름`)}
   log(S,`이번 미니게임: ${MG[S.board[S.die-1]].name}`);
+  if(r===11)fx(S,{t:'dice',v:S.die,mg:S.board[S.die-1],seats:[i]});else fx(S,{t:'banner',text:`${cname(c)} → ${S.die}번 ${MG[S.board[S.die-1]].name}`,seats:[i]});
 }
 function startMain(S){
   S.phase='main'; S.deadline=null;
@@ -192,13 +271,13 @@ function makeToken(S,i,cards,color){
   for(const c of cards){p.hand.splice(p.hand.indexOf(c),1)}
   nums.forEach(c=>S.row.push(c)); if(it){p.front.push(it);S.turn.item=true}
   p.tokens.push(col);S.supply[col]--;S.turn.token=true;
-  log(S,`자리 ${i+1}: ${SNAME[col]} 토큰을 만들었다${it?' ('+cname(it)+' 사용)':''}. 토큰 ${p.tokens.length}개.`);
+  log(S,`자리 ${i+1}: ${SNAME[col]} 토큰을 만들었다${it?' ('+cname(it)+' 사용)':''}. 토큰 ${p.tokens.length}개.`);fx(S,{t:'token',col,seats:[i],n:p.tokens.length});
 }
 function startAttack(S,i,c,target,arg){
   const p=S.seats[i];p.hand.splice(p.hand.indexOf(c),1);p.front.push(c);S.turn.item=true;
   S.pending={card:c,attacker:i,target,arg,deadline:Date.now()+DEF_MS};S.phase='defense';
   const what={11:'손패 1장 뺏기',12:`${SNAME[arg]} 숫자 카드 1장 받기`,13:`${SNAME[arg]} 토큰 뺏기`}[R(c)];
-  log(S,`자리 ${i+1} → 자리 ${target+1}: ${cname(c)} 공격 (${what}). 방어 기회 ${DEF_MS/1000}초.`);
+  log(S,`자리 ${i+1} → 자리 ${target+1}: ${cname(c)} 공격 (${what}). 방어 기회 ${DEF_MS/1000}초.`);fx(S,{t:'attack',card:c,seats:[i,target]});
 }
 function applyAttack(S,kind,from,to,arg){
   // from이 to에게서 가져온다
@@ -216,8 +295,8 @@ function applyAttack(S,kind,from,to,arg){
 function defend(S,i,c){
   const P=S.pending;const p=S.seats[i];p.hand.splice(p.hand.indexOf(c),1);p.front.push(c);
   const kind=R(P.card);
-  if(R(c)===11){log(S,`자리 ${i+1}: ♥J로 공격을 막았다.`)}
-  else {log(S,`자리 ${i+1}: ♥K로 공격을 되돌렸다(막을 수 없음).`);applyAttack(S,kind,P.target,P.attacker,null)}
+  if(R(c)===11){log(S,`자리 ${i+1}: ♥J로 공격을 막았다.`);fx(S,{t:'banner',text:'막았다!',seats:[i],tone:'good'})}
+  else {log(S,`자리 ${i+1}: ♥K로 공격을 되돌렸다(막을 수 없음).`);fx(S,{t:'banner',text:'되돌렸다!',seats:[i],tone:'good'});applyAttack(S,kind,P.target,P.attacker,null)}
   S.pending=null;S.phase='main';
 }
 function resolveAttack(S){const P=S.pending;applyAttack(S,R(P.card),P.attacker,P.target,P.arg);S.pending=null;S.phase='main'}
@@ -237,12 +316,12 @@ function afterMain(S){
   if(mx>=1&&!S.qIn){S.deck.push(...S.qPile);S.qPile=[];shuffle(S.deck);S.qIn=true;log(S,'첫 토큰이 나와 Q 묶음을 덱에 섞었다.')}
   if(mx>=2&&!S.kIn){S.deck.push(...S.kPile);S.kPile=[];shuffle(S.deck);S.kIn=true;log(S,'토큰 2개가 나와 K 묶음을 덱에 섞었다.')}
   const w=S.seats.map((p,i)=>i).filter(i=>new Set(S.seats[i].tokens).size>=S.goal);
-  if(w.length===1){S.winners=w;S.phase='ended';log(S,`자리 ${w[0]+1} 우승!`);return}
+  if(w.length===1){S.winners=w;S.phase='ended';log(S,`자리 ${w[0]+1} 우승!`);fx(S,{t:'win',seats:w});return}
   if(w.length>=2){
-    if(!S.ot){S.ot=true;S.goal=4;log(S,`3색을 채운 사람이 ${w.length}명. 4색 연장전에 들어간다(4번째 토큰 비용 3장).`)}
+    if(!S.ot){S.ot=true;S.goal=4;fx(S,{t:'banner',text:'4색 연장전!',seats:w,tone:'bad'});log(S,`3색을 채운 사람이 ${w.length}명. 4색 연장전에 들어간다(4번째 토큰 비용 3장).`)}
     else{let c=w.slice(),detail=[];
       while(c.length>1){const sums=c.map(i=>S.seats[i].tokens.slice(0,4).reduce(a=>a+d6(),0));detail.push(c.map((i,k)=>`자리 ${i+1}=${sums[k]}`).join(', '));const m=Math.max(...sums);c=c.filter((_,k)=>sums[k]===m)}
-      S.winners=c;S.phase='ended';log(S,`큐빅 롤: ${detail.join(' / ')} → 자리 ${c[0]+1} 우승!`);return}
+      S.winners=c;S.phase='ended';log(S,`큐빅 롤: ${detail.join(' / ')} → 자리 ${c[0]+1} 우승!`);fx(S,{t:'win',seats:c});return}
   }
   const n=N(S);const pool=Object.keys(MG).filter(k=>MG[k].min<=n&&n<=MG[k].max);
   const b=[];while(b.length<6)b.push(...shuffle(pool.slice()));S.board=b.slice(0,6);
@@ -265,7 +344,11 @@ function startMinigame(S){
     const prizes=bundle.splice(0,5).map((c,k)=>({c,up:k<3}));
     S.mg={id,bundle,hands,prizes,ai:0,pot:[],step:'pre',ready:{},bids:{},won:{},spent:[]};
     ord.forEach(i=>S.mg.won[i]=[]);auctionOpen(S)}
-  log(S,`미니게임 시작: ${MG[id].name}`);
+  if(id==='balloon')balloonStart(S,ord);
+  if(id==='rps'||id==='vault')ovnStart(S,id);
+  if(id==='count')countStart(S,ord);
+  if(id==='race')raceStart(S,ord);
+  log(S,`미니게임 시작: ${MG[id].name}`);fx(S,{t:'title',mg:id});
 }
 function rankBy(scores,desc=true){ // scores: {seat:value} → 순위 그룹 [[seat..],..]
   const ks=Object.keys(scores).map(Number);const vals=[...new Set(ks.map(k=>scores[k]))].sort((a,b)=>desc?b-a:a-b);
@@ -278,11 +361,11 @@ function endMinigame(S,groups){
     if(m.hands)Object.values(m.hands).forEach(h=>back.push(...h));
     if(m.prizes)m.prizes.forEach(p=>p&&back.push(p.c));
     if(m.won)Object.values(m.won).forEach(w=>back.push(...w));
-    if(m.spent)back.push(...m.spent); if(m.pot)back.push(...m.pot.map(p=>p.c||p));
+    if(m.spent)back.push(...m.spent); if(m.pot)back.push(...m.pot.map(p=>p.c||p)); if(m.pile)back.push(...m.pile);
     S.deck.push(...back);shuffle(S.deck)}
   // 동점은 디지털 시험판에서 무작위 순서로 고른다
   const order=[];groups.forEach(g=>order.push(...shuffle(g.slice())));
-  S.lastRank=groups;
+  S.lastRank=groups;fx(S,{t:'rank',groups});
   log(S,'미니게임 순위: '+groups.map((g,k)=>`${k+1}위 ${g.map(i=>'자리 '+(i+1)).join('·')}`).join(' / '));
   const disp=S.rewardDisp||[];S.rewardDisp=null;
   S.mg=null;S.phase='reward';S.reward={disp,order:order.concat(order),pi:0};
@@ -298,7 +381,7 @@ function holdRoll(S,i,item){
   const m=S.mg;const p=S.seats[i];
   if(item){p.hand.splice(p.hand.indexOf(item),1);p.front.push(item)}
   m.k++;const a=d6(),b=item?d6():null;const d=item?Math.max(a,b):a;
-  m.last={i,a,b,d,th:m.k};
+  m.last={i,a,b,d,th:m.k};fx(S,{t:'dice',v:d,both:b!=null?[a,b]:null,bust:d<=m.k,th:m.k,seats:[i]});
   if(d<=m.k){log(S,`버티기: 자리 ${i+1} ${item?`[${a},${b}]→`:''}${d} (기준 ${m.k} 이하) 이번 판 ${m.s}점을 잃었다.`);m.s=0;holdNext(S)}
   else{m.s+=d;log(S,`버티기: 자리 ${i+1} ${item?`[${a},${b}]→`:''}${d}. 이번 판 ${m.s}점.`)}
 }
@@ -319,9 +402,9 @@ function bombFlip(S,i,k){const m=S.mg;const c=m.lay[k];if(!c)return;m.lay[k]=nul
     m.lay=m.lay.filter(Boolean);
     if(m.alive.length===2){m.hits=m.hits||{};out.forEach(j=>m.hits[j]=(m.hits[j]||0)+1);
       log(S,`폭탄! ${out.map(j=>'자리 '+(j+1)).join('·')} (결승 폭탄 ${m.alive.map(j=>'자리 '+(j+1)+' '+(m.hits[j]||0)+'개').join(', ')})`);
-      const dead=m.alive.filter(j=>(m.hits[j]||0)>=2);if(!dead.length){bombLay(S);return}
+      const dead=m.alive.filter(j=>(m.hits[j]||0)>=2);fx(S,{t:'pop',seats:out,bomb:true,small:!dead.length});if(!dead.length){bombLay(S);return}
       m.out.push(dead);m.alive=m.alive.filter(j=>!dead.includes(j));log(S,`탈락: ${dead.map(j=>'자리 '+(j+1)).join('·')}`)}
-    else{m.out.push(out);m.alive=m.alive.filter(j=>!out.includes(j));log(S,`폭탄! 탈락: ${out.map(j=>'자리 '+(j+1)).join('·')}`)}
+    else{m.out.push(out);m.alive=m.alive.filter(j=>!out.includes(j));log(S,`폭탄! 탈락: ${out.map(j=>'자리 '+(j+1)).join('·')}`);fx(S,{t:'pop',seats:out,bomb:true})}
     if(m.alive.length<=1){const groups=[];if(m.alive.length)groups.push(m.alive.slice());for(let k=m.out.length-1;k>=0;k--)groups.push(m.out[k]);
       endMinigame(S,groups);return}
     bombLay(S)}}
@@ -346,13 +429,114 @@ function auctionBid(S,i,c){const m=S.mg;m.hands[i].splice(m.hands[i].indexOf(c),
     const shown=vals.map(j=>`자리 ${j+1}:${cname(b[j])}`).join(', ');
     vals.forEach(j=>m.spent.push(b[j]));
     if(uniq.length){const w=uniq.reduce((a,j)=>R(b[j])>R(b[a])?j:a,uniq[0]);
-      m.won[w].push(...m.pot.map(p=>p.c));log(S,`눈치 경매: ${shown} → 자리 ${w+1}이 ${m.pot.map(p=>cname(p.c)).join('+')} 획득.`);m.pot=[]}
-    else log(S,`눈치 경매: ${shown} → 모두 지워져 상품이 다음 경매에 얹힌다.`);
+      m.won[w].push(...m.pot.map(p=>p.c));log(S,`눈치 경매: ${shown} → 자리 ${w+1}이 ${m.pot.map(p=>cname(p.c)).join('+')} 획득.`);fx(S,{t:'bids',bids:{...b},win:w,pot:m.pot.map(p=>p.c)});m.pot=[]}
+    else{log(S,`눈치 경매: ${shown} → 모두 지워져 상품이 다음 경매에 얹힌다.`);fx(S,{t:'bids',bids:{...b},win:null})}
     m.lastBids=b;m.bids={};
     if(Object.values(m.hands).every(h=>!h.length)){auctionEnd(S);return}
     auctionOpen(S)}}
 function auctionEnd(S){const m=S.mg;const sc={};Object.keys(m.won).forEach(k=>sc[k]=m.won[k].reduce((a,c)=>a+R(c),0));
   log(S,'눈치 경매 점수: '+Object.keys(sc).map(k=>`자리 ${+k+1}=${sc[k]}`).join(', '));endMinigame(S,rankBy(sc))}
+
+/* ---- 연출 이벤트 (화면이 받아서 효과로 보여 준다) ---- */
+function fx(S,o){S.fxn=(S.fxn||0)+1;o.id=S.fxn;(S.fx=S.fx||[]).push(o);if(S.fx.length>12)S.fx.shift()}
+function useItem(S,i,item){const p=S.seats[i];if(!item||!isItem(item)||!p.hand.includes(item))return false;p.hand.splice(p.hand.indexOf(item),1);p.front.push(item);return true}
+function hasItem(S,i){return S.seats[i].hand.some(isItem)}
+function outGroups(m,first){const g=first&&first.length?[first.slice()]:[];for(let k=m.out.length-1;k>=0;k--)g.push(m.out[k]);return g}
+
+/* ---- 풍선 불기 ---- */
+const BLIMIT=50;
+function balloonStart(S,ord){const hands={};ord.forEach(i=>hands[i]=buildBundle(S,3));
+  S.mg={id:'balloon',bundle:[],hands,pile:[],total:0,alive:ord.slice(),ci:0,out:[],last:null,pops:0}}
+function balloonPlay(S,i,c,item){const m=S.mg;if(m.alive[m.ci]!==i||!m.hands[i].includes(c))return false;
+  if(item&&!useItem(S,i,item))return false;
+  m.hands[i].splice(m.hands[i].indexOf(c),1);m.pile.push(c);const v=R(c);
+  m.total=item?Math.max(0,m.total-v):m.total+v;m.last={i,c,sub:!!item,total:m.total};
+  const x=draw(S);if(x)m.hands[i].push(x);
+  log(S,`풍선 불기: 자리 ${i+1} ${cname(c)}${item?' (빼기)':''} → 합 ${m.total}`);
+  if(m.total>BLIMIT){
+    fx(S,{t:'pop',seats:[i],total:m.total});log(S,`펑! 자리 ${i+1} 탈락 (합 ${m.total}).`);
+    const idx=m.alive.indexOf(i);m.out.push([i]);m.alive.splice(idx,1);
+    S.deck.push(...m.pile,...m.hands[i]);m.pile=[];m.hands[i]=[];shuffle(S.deck);m.total=0;m.pops++;m.last=null;
+    if(m.alive.length<=1){endMinigame(S,outGroups(m,m.alive));return}
+    m.ci=idx%m.alive.length;return}
+  m.ci=(m.ci+1)%m.alive.length}
+
+/* ---- 1 대 나머지 공통 (선 가위바위보·금고 털기) ---- */
+function ovnStart(S,id){const n=N(S),lead=S.first,others=[];for(let k=1;k<n;k++)others.push((lead+k)%n);
+  S.mg={id,bundle:[],lead,alive:others,round:1,max:others.length+1,out:[],picks:{},armL:false,saveq:[],losers:[],saved:[],last:null,step:id==='rps'?'pick':'hide'}}
+function ovnLosers(S,losers){const m=S.mg;m.losers=losers;m.saved=[];m.saveq=losers.filter(j=>hasItem(S,j));
+  if(m.saveq.length){m.step='save';return}ovnApply(S)}
+function ovnSave(S,i,item){const m=S.mg;if(m.step!=='save'||!m.saveq.includes(i))return false;
+  if(item){if(!useItem(S,i,item))return false;m.saved.push(i);log(S,`자리 ${i+1}: 아이템으로 버텼다.`);fx(S,{t:'banner',text:'버텼다!',seats:[i],tone:'good'})}
+  m.saveq=m.saveq.filter(j=>j!==i);if(!m.saveq.length)ovnApply(S)}
+function ovnApply(S){const m=S.mg;const dead=m.losers.filter(j=>!m.saved.includes(j));
+  if(dead.length){m.out.push(dead);m.alive=m.alive.filter(j=>!dead.includes(j));log(S,`탈락: ${dead.map(j=>'자리 '+(j+1)).join('·')}`)}
+  m.losers=[];m.saved=[];m.saveq=[];
+  if(!m.alive.length){log(S,`자리 ${m.lead+1}(${m.id==='rps'?'선':'경비원'})이 모두 탈락시켰다!`);fx(S,{t:'banner',text:m.id==='rps'?'선 승리!':'경비원 승리!',seats:[m.lead],tone:'win'});
+    endMinigame(S,[[m.lead],...outGroups(m)]);return}
+  m.round++;
+  if(m.round>m.max){log(S,`살아남은 사람: ${m.alive.map(j=>'자리 '+(j+1)).join('·')}`);fx(S,{t:'banner',text:'살아남았다!',seats:m.alive.slice(),tone:'win'});
+    endMinigame(S,[...outGroups(m,m.alive),[m.lead]]);return}
+  m.picks={};m.armL=false;m.zones=null;m.step=m.id==='rps'?'pick':'hide'}
+
+/* ---- 선 가위바위보 ---- */
+const RPSN={R:'바위',P:'보',S:'가위'},BEATS={R:'S',P:'R',S:'P'};
+function rpsPick(S,i,h){const m=S.mg;if(m.step!=='pick'||m.picks[i]||!(i===m.lead||m.alive.includes(i))||!RPSN[h])return false;
+  m.picks[i]=h;const need=[m.lead,...m.alive];
+  if(need.every(j=>m.picks[j])){const L=m.picks[m.lead];
+    const losers=m.alive.filter(j=>BEATS[L]===m.picks[j]||(m.armL&&m.picks[j]===L));
+    m.last={picks:{...m.picks},armL:m.armL,round:m.round,losers};
+    log(S,`선 가위바위보 ${m.round}판: ${need.map(j=>`자리 ${j+1} ${RPSN[m.picks[j]]}`).join(', ')}`);
+    fx(S,{t:'rps',picks:{...m.picks},lead:m.lead,losers,armL:m.armL});
+    ovnLosers(S,losers)}}
+function rpsArm(S,i,item){const m=S.mg;if(m.step!=='pick'||i!==m.lead||m.picks[m.lead]||m.armL)return false;if(!useItem(S,i,item))return false;
+  m.armL=true;log(S,`자리 ${i+1}(선): 아이템 → 이번엔 비긴 사람도 탈락.`);fx(S,{t:'banner',text:'비겨도 탈락!',seats:[i],tone:'bad'})}
+
+/* ---- 금고 털기 ---- */
+function vaultHide(S,i,z){const m=S.mg;if(m.step!=='hide'||!m.alive.includes(i)||m.picks[i]||![1,2,3].includes(z))return false;
+  m.picks[i]=z;if(m.alive.every(j=>m.picks[j]))m.step='guard'}
+function vaultArm(S,i,item){const m=S.mg;if(i!==m.lead||m.armL||!(m.step==='hide'||m.step==='guard'))return false;if(!useItem(S,i,item))return false;
+  m.armL=true;log(S,`자리 ${i+1}(경비원): 아이템 → 이번엔 구역 2곳을 뒤진다.`);fx(S,{t:'banner',text:'2곳 수색!',seats:[i],tone:'bad'})}
+function vaultGuard(S,i,zones){const m=S.mg;if(m.step!=='guard'||i!==m.lead)return false;
+  zones=[...new Set(zones)].filter(z=>[1,2,3].includes(z));if(zones.length!==(m.armL?2:1))return false;
+  m.zones=zones;const losers=m.alive.filter(j=>zones.includes(m.picks[j]));
+  m.last={picks:{...m.picks},zones,round:m.round,losers};
+  log(S,`금고 털기 ${m.round}판: 경비원이 ${zones.join('·')}번을 뒤짐. 숨은 곳 ${m.alive.map(j=>`자리 ${j+1}→${m.picks[j]}`).join(', ')}`);
+  fx(S,{t:'vault',picks:{...m.picks},zones,lead:m.lead,losers});
+  ovnLosers(S,losers)}
+
+/* ---- 몇 장이었지 ---- */
+const CFLIP=1000,CLEAD=4500;
+function countStart(S,ord){const hits={};ord.forEach(i=>hits[i]=0);S.mg={id:'count',bundle:[],pan:1,hits,seq:null,dec:null,ans:{},arm:{},last:null,step:'flip'};countPan(S)}
+function countPan(S){const m=S.mg;if(m.seq){S.deck.push(...m.seq);if(m.dec)S.deck.push(m.dec);shuffle(S.deck)}
+  m.seq=buildBundle(S,12);m.dec=draw(S);m.t0=Date.now()+CLEAD;m.ans={};m.arm={};m.step='flip'}
+function countOpenAt(m){return m.t0+m.seq.length*CFLIP}
+function countArm(S,i,item){const m=S.mg;if(m.arm[i]||(i in m.ans))return false;if(!useItem(S,i,item))return false;m.arm[i]=true;log(S,`몇 장이었지: 자리 ${i+1} 아이템(±1)`)}
+function countAnswer(S,i,a){const m=S.mg;if((i in m.ans)||!(i in m.hits)||Date.now()<countOpenAt(m)||!(a>=0&&a<=6))return false;
+  m.ans[i]=a;
+  if(Object.keys(m.hits).every(k=>k in m.ans)){
+    const suit=m.dec?U(m.dec):'S';const cnt=m.seq.filter(c=>U(c)===suit).length;const tgt=Math.min(cnt,6);
+    const hit=Object.keys(m.ans).map(Number).filter(k=>m.ans[k]===tgt||(m.arm[k]&&Math.abs(m.ans[k]-tgt)<=1));
+    hit.forEach(k=>m.hits[k]++);
+    m.last={pan:m.pan,suit,cnt,ans:{...m.ans},arm:{...m.arm},hit};
+    log(S,`몇 장이었지 ${m.pan}판: ${SYM[suit]} ${cnt}장. 맞힘 ${hit.map(k=>'자리 '+(k+1)).join('·')||'없음'}`);
+    fx(S,{t:'count',suit,cnt,ans:{...m.ans},hit});
+    m.pan++;
+    if(m.pan>3){S.deck.push(...m.seq);if(m.dec)S.deck.push(m.dec);shuffle(S.deck);m.seq=null;m.dec=null;endMinigame(S,rankBy(m.hits));return}
+    countPan(S)}}
+
+/* ---- 문양 경주 ---- */
+function raceStart(S,ord){S.mg={id:'race',bundle:[],order:ord.slice(),pi:0,bet:{},pos:{S:0,H:0,D:0,C:0},pile:[],step:'bet',last:null}}
+function raceBet(S,i,s){const m=S.mg;if(m.step!=='bet'||m.order[m.pi]!==i||!SYM[s])return false;m.bet[i]=s;m.pi++;log(S,`문양 경주: 자리 ${i+1} → ${SYM[s]}`);if(m.pi>=m.order.length)m.step='race'}
+function raceSwap(S,i,item,s){const m=S.mg;if(m.step!=='race'||!(i in m.bet)||m.bet[i]===s||!SYM[s])return false;if(!useItem(S,i,item))return false;
+  m.bet[i]=s;log(S,`문양 경주: 자리 ${i+1} 아이템 → ${SYM[s]}로 바꿈`);fx(S,{t:'banner',text:`${SYM[s]}로 갈아탔다!`,seats:[i]})}
+function raceEnd(S,win){const m=S.mg;const first=m.order.filter(j=>m.bet[j]===win);const sc={};m.order.filter(j=>m.bet[j]!==win).forEach(j=>sc[j]=m.pos[m.bet[j]]);
+  endMinigame(S,(first.length?[first]:[]).concat(rankBy(sc)))}
+function raceFlip(S,i){const m=S.mg;if(m.step!=='race'||i!==S.first)return false;const c=draw(S);
+  if(!c){const best=SUITS.reduce((a,s)=>m.pos[s]>m.pos[a]?s:a,'S');raceEnd(S,best);return}
+  m.pile.push(c);const s=U(c),fw=R(c)<=10;m.pos[s]=fw?m.pos[s]+1:Math.max(0,m.pos[s]-1);m.last={c,s,fw};
+  log(S,`문양 경주: ${cname(c)} → ${SYM[s]} ${fw?'앞으로':'뒤로'} (${m.pos[s]}칸)`);
+  if(m.pos[s]>=3){log(S,`${SYM[s]} 우승!`);fx(S,{t:'banner',text:`${SYM[s]} 우승!`,suit:s,tone:'win'});raceEnd(S,s)}}
 
 /* 시간 지난 단계 넘기기 (아무 기기나, 잠금 안에서) */
 function advanceTimers(S){
@@ -362,7 +546,7 @@ function advanceTimers(S){
   if(S.phase==='defense'&&S.pending&&now>=S.pending.deadline){resolveAttack(S);return true}
   return false;
 }
-if(typeof module!=='undefined')module.exports={startGame,newLobby,rollBoard,startMain,pickup,pickupDiscard,canMakeToken,makeToken,startAttack,resolveAttack,defend,endTurn,afterMain,holdRoll,holdStop,bombArm,bombFlip,auctionItem,auctionReady,auctionBid,rewardPick,advanceTimers,costFor,MG,R,U,isItem,setRng:f=>RNG=f};
+if(typeof module!=='undefined')module.exports={useDJ,pickDJ,useHQ,useClub,discardCard,balloonPlay,ovnSave,rpsPick,rpsArm,vaultHide,vaultArm,vaultGuard,countArm,countAnswer,countOpenAt,raceBet,raceSwap,raceFlip,startGame,newLobby,rollBoard,startMain,pickup,pickupDiscard,canMakeToken,makeToken,startAttack,resolveAttack,defend,endTurn,afterMain,holdRoll,holdStop,bombArm,bombFlip,auctionItem,auctionReady,auctionBid,rewardPick,advanceTimers,costFor,MG,R,U,isItem,setRng:f=>RNG=f};
 </script>
 
 <script>
@@ -375,11 +559,50 @@ let ui={};                // 임시 화면 상태 (대상 고르기 등)
 let busy=false,lastKey='';const TAB=Math.random().toString(36).slice(2,9);
 const esc=s=>String(s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
 const clone=o=>JSON.parse(JSON.stringify(o));
+const balPrev={v:null,p:null};
+/* ---- 짧은 애니메이션: 처음 본 요소만, 다시 그려도 이어서 ---- */
+const animSeen=new Map();
+function anim(key,ms){const now=Date.now();if(!animSeen.has(key)){animSeen.set(key,now);if(animSeen.size>400)animSeen.delete(animSeen.keys().next().value)}
+  const el=now-animSeen.get(key);return el<ms?{cls:true,style:`animation-delay:-${el}ms;`}:{cls:false,style:''}}
+/* ---- 연출 레이어 (다시 그려도 사라지지 않게 app 밖에 둔다) ---- */
+const fxLayer=document.createElement('div');fxLayer.className='fxlayer';fxLayer.setAttribute('aria-live','polite');document.body.appendChild(fxLayer);
+const toastEl=document.createElement('div');toastEl.className='toast';document.body.appendChild(toastEl);
+let fxq=[],fxBusy=false,lastFx=null;
+const FACE={S:'✌️',R:'✊',P:'✋'};
+const nm=i=>esc(seatName(i));
+function pumpFx(){if(!S)return;const list=S.fx||[];
+  if(lastFx===null){lastFx=S.fxn||0;return}
+  const nw=list.filter(f=>f.id>lastFx);if(!nw.length)return;lastFx=nw[nw.length-1].id;
+  fxq.push(...nw);while(fxq.length>4)fxq.shift();if(!fxBusy)nextFx()}
+function nextFx(){const f=fxq.shift();if(!f){fxBusy=false;return}fxBusy=true;playFx(f,nextFx)}
+function shake(){app.classList.remove('shake');void app.offsetWidth;app.classList.add('shake')}
+function playFx(f,done){
+  const el=document.createElement('div');el.className='fx '+(f.tone||'');let dur=1300;
+  const who=f.seats&&f.seats.length?`<div class="fx-sub">${f.seats.map(nm).join(' · ')}</div>`:'';
+  if(f.t==='dice'){dur=1500;el.innerHTML=`<div class="bigdie rolling">1</div><div class="fx-sub">${f.mg?esc(MG[f.mg].name):''}${f.bust?` · 기준 ${f.th} 이하!`:''}</div>${who}`;
+    const d=el.querySelector('.bigdie');let k=0;const spin=setInterval(()=>{d.textContent=1+((k++*5+3)%6)},70);
+    setTimeout(()=>{clearInterval(spin);d.textContent=f.both?`${f.both[0]}·${f.both[1]}→${f.v}`:f.v;d.classList.remove('rolling');d.classList.add('land');if(f.bust){el.classList.add('bad');d.classList.add('bust');shake()}},650)}
+  else if(f.t==='title'){dur=1700;el.classList.add('title');el.innerHTML=`<div class="fx-kicker">미니게임</div><div class="fx-big">${esc(MG[f.mg].name)}</div><div class="fx-sub">${esc(MG[f.mg].icon)}</div>`}
+  else if(f.t==='pop'){dur=f.small?1100:1400;el.classList.add('bad');el.innerHTML=`<div class="fx-big boom">${f.bomb?'펑!':'빵!'}</div>${who}<div class="fx-sub">${f.small?'폭탄 1개':'탈락'}</div>`;shake()}
+  else if(f.t==='rps'){dur=2200;el.innerHTML=`<div class="fx-kicker">하나 둘 셋!</div><div class="rpsrow">${[f.lead,...Object.keys(f.picks).map(Number).filter(k=>k!==f.lead)].map(k=>`<div class="rpsp ${k===f.lead?'lead':''} ${f.losers.includes(k)?'lose':''}"><span class="hand">${FACE[f.picks[k]]}</span><small>${nm(k)}${k===f.lead?' (선)':''}</small></div>`).join('')}</div><div class="fx-sub">${f.losers.length?f.losers.map(nm).join(' · ')+' 걸림!':'아무도 안 걸렸다'}</div>`;if(f.losers.length)setTimeout(shake,500)}
+  else if(f.t==='vault'){dur=2300;el.innerHTML=`<div class="fx-kicker">수색!</div><div class="vrow">${[1,2,3].map(z=>`<div class="vdoor ${f.zones.includes(z)?'hit':''}"><b>${z}</b><small>${Object.keys(f.picks).filter(k=>f.picks[k]===z).map(k=>nm(+k)).join('<br>')||'&nbsp;'}</small></div>`).join('')}</div><div class="fx-sub">${f.losers.length?f.losers.map(nm).join(' · ')+' 잡혔다!':'헛탕!'}</div>`;if(f.losers.length)setTimeout(shake,600)}
+  else if(f.t==='count'){dur=2000;el.innerHTML=`<div class="fx-kicker">정답</div><div class="fx-big ${f.suit}">${SYM[f.suit]} ${f.cnt}장</div><div class="fx-sub">${Object.keys(f.ans).map(k=>`${nm(+k)} ${f.ans[k]}${f.hit.includes(+k)?' ⭕':' ❌'}`).join(' · ')}</div>`}
+  else if(f.t==='bids'){dur=1800;el.innerHTML=`<div class="fx-kicker">공개!</div><div class="cards center">${Object.keys(f.bids).map(k=>`<div class="bidp">${cardHTML(f.bids[k],{cls:'deal'})}<small>${nm(+k)}</small></div>`).join('')}</div><div class="fx-sub">${f.win!=null?nm(f.win)+' 낙찰!':'모두 지워졌다'}</div>`}
+  else if(f.t==='token'){dur=1300;el.classList.add('good');el.innerHTML=`<div class="bigtok ${f.col}"></div><div class="fx-big">토큰 ${f.n}개째!</div>${who}`}
+  else if(f.t==='attack'){dur=1300;el.classList.add('bad');el.innerHTML=`<div class="fx-big">${cname(f.card)} 공격!</div><div class="fx-sub">${nm(f.seats[0])} → ${nm(f.seats[1])}</div>`;shake()}
+  else if(f.t==='rank'){dur=1900;el.innerHTML=`<div class="fx-kicker">미니게임 결과</div>${f.groups.map((g,k)=>`<div class="rankrow r${k+1}"><b>${k+1}위</b> ${g.map(nm).join(' · ')}</div>`).join('')}`}
+  else if(f.t==='win'){dur=3200;el.classList.add('win');el.innerHTML=`<div class="fx-kicker">우승</div><div class="fx-big">${f.seats.map(nm).join(' · ')}</div>${'<i></i>'.repeat(18)}`}
+  else {el.innerHTML=`<div class="fx-big">${esc(f.text||'')}</div>${who}`}
+  fxLayer.appendChild(el);
+  setTimeout(()=>{el.classList.add('out');setTimeout(()=>{el.remove();done()},260)},dur)}
+let lastActor=null;
+function turnToast(){const a=whoActs();const key=a+'|'+S.phase+'|'+(S.mg?S.mg.id:'');
+  if(key!==lastActor){lastActor=key;if(a!=null&&mine(a)&&S.phase!=='lobby'){toastEl.textContent=`${seatName(a)} 차례!`;toastEl.classList.remove('show');void toastEl.offsetWidth;toastEl.classList.add('show')}}}
 
 function cardHTML(c,opt={}){
-  if(!c||opt.back)return `<div class="card back${opt.click?' click':''}" ${opt.attr||''}>?</div>`;
+  if(!c||opt.back)return `<div class="card back${opt.click?' click':''}${opt.cls?' '+opt.cls:''}" ${opt.attr||''}>?</div>`;
   const s=U(c),r=R(c);
-  return `<div class="card ${s}${isItem(c)?' item':''}${opt.click?' click':''}${sel.has(c)&&opt.selectable?' sel':''}${opt.dim?' dim':''}" ${opt.attr||''} tabindex="${opt.click?0:-1}" title="${cname(c)}">${RL(r)}<small>${SYM[s]}</small>${opt.tag?`<span class="tag">${esc(opt.tag)}</span>`:''}</div>`;
+  return `<div class="card ${s}${isItem(c)?' item':''}${opt.cls?' '+opt.cls:''}${opt.click?' click':''}${sel.has(c)&&opt.selectable?' sel':''}${opt.dim?' dim':''}" ${opt.attr||''} tabindex="${opt.click?0:-1}" title="${cname(c)}">${RL(r)}<small>${SYM[s]}</small>${opt.tag?`<span class="tag">${esc(opt.tag)}</span>`:''}</div>`;
 }
 const tokHTML=t=>`<span class="tok ${t}" title="${SNAME[t]} 토큰"></span>`;
 function seatName(i){const p=S.seats[i];if(!p)return '';const nm=(names[p.uid]&&names[p.uid].name)||'';
@@ -413,12 +636,14 @@ async function boot(){
     try{names=await user.profiles(ids)}catch(e){}
     const key=S.phase+'|'+(S.turn?S.turn.seat+':'+S.ti:'')+'|'+(S.mg?S.mg.id+(S.mg.ci||0)+(S.mg.step||''):'')+'|'+S.round;
     if(key!==lastKey){sel.clear();ui={};lastKey=key}
-    autoCtl();render();
+    autoCtl();render();pumpFx();turnToast();
   },e=>{app.innerHTML=`<div class="panel"><p>연결이 끊겼습니다. 새로고침해 주세요.</p></div>`});
   setInterval(()=>{if(!S)return;
     const dl=S.phase==='clubs'?S.deadline:S.phase==='defense'&&S.pending?S.pending.deadline:null;
-    if(dl){render();if(Date.now()>=dl+300&&S.seats.some(p=>p.uid===me)&&!busy)act(st=>advanceTimers(st)?undefined:false)}
-  },500);
+    const counting=S.phase==='mg'&&S.mg&&S.mg.id==='count'&&Date.now()<countOpenAt(S.mg)+400;
+    if(dl||counting){render();if(counting)autoCtl()}
+    if(dl&&Date.now()>=dl+300&&S.seats.some(p=>p.uid===me)&&!busy)act(st=>advanceTimers(st)?undefined:false)
+  },200);
 }
 function autoCtl(){
   const myseats=(S.seats||[]).map((p,i)=>i).filter(mine);
@@ -437,7 +662,14 @@ function whoActs(){
     if(m.id==='hold')return m.ord[m.ci];
     if(m.id==='bomb')return m.alive[m.ci];
     if(m.id==='auction'){const need=S.seats.map((_,i)=>i).filter(i=>m.step==='pre'?!m.ready[i]:!(i in m.bids));
-      return need.find(mine)??need[0]}}
+      return need.find(mine)??need[0]}
+    const pickOne=need=>need.find(mine)??need[0]??null;
+    if(m.id==='balloon')return m.alive[m.ci];
+    if(m.id==='rps'||m.id==='vault'){if(m.step==='save')return pickOne(m.saveq);
+      if(m.step==='guard')return m.lead;
+      return pickOne((m.id==='rps'?[m.lead,...m.alive]:m.alive).filter(j=>!m.picks[j]))}
+    if(m.id==='count'){if(Date.now()<countOpenAt(m))return null;return pickOne(Object.keys(m.hits).map(Number).filter(k=>!(k in m.ans)))}
+    if(m.id==='race')return m.step==='bet'?m.order[m.pi]:S.first}
   return null;
 }
 
@@ -462,7 +694,7 @@ function render(){
     <div class="panel"><h2>버림 줄 <span class="muted small">(끝 = 오른쪽, 아무 카드나 주울 수 있음)</span></h2>${rowh}</div>
     ${ctl!=null?renderMe():`<div class="panel"><p class="muted">관전 중입니다. 자리에 앉은 사람만 조작할 수 있습니다.</p></div>`}`;
   const players=S.seats.map((p,i)=>{const t=whoActs()===i;
-    return `<div class="pl ${t?'turn':''}"><div class="nm"><strong>${esc(seatName(i))}${i===S.first?' · 선':''}</strong><span class="muted small">손패 ${p.hand.length}</span></div>
+    return `<div class="pl ${t?'turn':''}" style="animation-delay:-${Date.now()%1600}ms"><div class="nm"><strong>${esc(seatName(i))}${i===S.first?' · 선':''}</strong><span class="muted small">손패 ${p.hand.length}</span></div>
     <div class="row">${p.tokens.length?p.tokens.map(tokHTML).join(''):'<span class="muted small">토큰 없음</span>'}</div>
     ${p.front.length?`<div class="row small muted">앞: ${p.front.map(cname).join(' ')}</div>`:''}</div>`}).join('');
   const right=`<div class="panel"><h2>플레이어</h2><div class="players">${players}</div></div>
@@ -480,7 +712,7 @@ function renderLobby(){
    <div class="row">${!sitting?`<button class="primary" data-a="sit">자리에 앉기</button>`:''}
    ${sitting&&S.seats.length<5?`<button data-a="sit">내 자리 하나 더 (혼자 시험)</button>`:''}
    <button class="primary" data-a="start" ${S.seats.length>=2&&S.seats.length<=5&&sitting?'':'disabled'}>게임 시작 (${S.seats.length}명)</button></div>
-   <p class="small muted">개인전 2·3인은 트럼프 1벌, 4·5인은 2벌을 씁니다. 이번 시험판 미니게임: 버티기 · 폭탄 버튼 · 눈치 경매. 라운드마다 메인 턴이 끝나면 미니게임 판 6칸을 이 셋으로 새로 채웁니다. 동점 순위는 무작위 순서로 보상을 고릅니다.</p></div>`;
+   <p class="small muted">개인전 2·3인은 트럼프 1벌, 4·5인은 2벌을 씁니다. 이번 시험판 미니게임 8개: 버티기 · 폭탄 버튼 · 눈치 경매 · 풍선 불기 · 선 가위바위보 · 금고 털기 · 몇 장이었지 · 문양 경주. 라운드마다 메인 턴이 끝나면 이 중 6장을 뽑습니다. 동점 순위는 무작위 순서로 보상을 고릅니다.</p></div>`;
 }
 function myHand(i,opts={}){
   const p=S.seats[i];
@@ -569,6 +801,55 @@ function renderMG(){
       <p class="small">${m.step==='pre'?'경매 전: 아이템을 쓸 사람은 지금':'입찰 중: '+Object.keys(m.bids).length+'/'+S.seats.length+'명 냄'}</p>
       ${m.lastBids?`<p class="small muted">지난 입찰: ${Object.keys(m.lastBids).map(k=>esc(seatName(+k))+' '+cname(m.lastBids[k])).join(', ')}</p>`:''}
       <p class="small">점수: ${sc}</p>${me_}`}
+  if(m.id==='balloon'){const who=m.alive[m.ci];const ratio=Math.min(1,m.total/BLIMIT);
+    const size=70+Math.round(ratio*130);const hue=Math.round(130-130*ratio);
+    const prev=balPrev.v!=null&&balPrev.p===m.pops?balPrev.v:0;const from=Math.max(.3,(70+Math.min(1,prev/BLIMIT)*130)/size);
+    const an=anim('bal'+m.pops+'-'+m.total+'-'+m.pile.length,600);balPrev.v=m.total;balPrev.p=m.pops;
+    const myHandB=i!=null&&m.hands[i]&&m.alive.includes(i)?`<div class="row small muted">풍선 손패 (누르면 냅니다)</div><div class="cards">${m.hands[i].map(c=>cardHTML(c,{click:who===i,attr:`data-a="blp" data-c="${c}"`})).join('')}</div>
+      ${who===i?`<div class="row"><button data-a="bsub" class="${ui.bsub?'primary':''}" ${items.length?'':'disabled'}>${ui.bsub?'빼기 모드 켜짐: 아래 손패에서 아이템 J·Q·K를 고르고 풍선 카드를 누르세요':'아이템으로 빼기'}</button></div>`:''}`:'';
+    body=`<div class="balloon-stage"><div class="balloon ${an.cls?'inflate':''}" style="width:${size}px;height:${Math.round(size*1.15)}px;--from:${from.toFixed(2)};background:hsl(${hue} 70% 55%);${an.style}"><span>${m.total}</span></div><div class="string"></div></div>
+      <p class="center">합 <strong class="big">${m.total}</strong> / ${BLIMIT} · <strong>${esc(seatName(who))}</strong> 차례</p>
+      <div class="row center">${m.alive.map(k=>`<span class="chip ${k===who?'on':''}">${esc(seatName(k))} · ${m.hands[k].length}장</span>`).join('')}${m.out.flat().map(k=>`<span class="chip out">${esc(seatName(k))} 탈락</span>`).join('')}</div>
+      ${m.last?`<div class="row center small muted">방금 ${esc(seatName(m.last.i))}: ${cardHTML(m.last.c,{cls:anim('bl'+m.pile.length+m.last.c,500).cls?'deal':''})}${m.last.sub?' 빼기!':''}</div>`:''}
+      ${myHandB}`}
+  if(m.id==='rps'||m.id==='vault'){const L=m.lead;const amLead=i===L;const isRps=m.id==='rps';
+    const role=k=>k===L?(isRps?'선':'경비원'):(isRps?'':'도둑');
+    const status=`<div class="row center">${[L,...m.alive].map(k=>`<span class="chip ${k===L?'lead':''}">${esc(seatName(k))}${role(k)?' · '+role(k):''} ${m.step!=='save'&&(isRps?m.picks[k]:(k===L?false:m.picks[k]))?'✓':''}</span>`).join('')}${m.out.flat().map(k=>`<span class="chip out">${esc(seatName(k))} 탈락</span>`).join('')}</div>`;
+    let me_='';
+    if(m.step==='save'){me_=m.saveq.includes(i)?`<p><strong>잡혔습니다!</strong> 아이템을 내면 이번엔 빠지지 않습니다.</p><div class="row"><button class="primary" data-a="osave" ${selItem?'':'disabled'}>아이템 내고 버티기${selItem?' ('+cname(selItem)+')':''}</button><button data-a="onosave">탈락 받아들이기</button></div><p class="small muted">아래 손패에서 J·Q·K를 고르세요.</p>`:`<p class="muted">잡힌 사람이 아이템을 쓸지 고르는 중.</p>`}
+    else if(isRps){const canPick=(amLead||m.alive.includes(i))&&!m.picks[i];
+      me_=canPick?`<div class="hands">${['S','R','P'].map(h=>`<button class="hand" data-a="rps" data-hand="${h}"><span>${{S:'✌️',R:'✊',P:'✋'}[h]}</span>${RPSN[h]}</button>`).join('')}</div>
+        ${amLead&&!m.armL?`<div class="row center"><button data-a="rarm" ${selItem?'':'disabled'}>아이템: 이번엔 비긴 사람도 탈락${selItem?' ('+cname(selItem)+')':''}</button></div>`:''}`:
+        (m.picks[i]?`<p class="center muted">냈습니다: ${RPSN[m.picks[i]]}. 다른 사람을 기다리는 중.</p>`:'<p class="center muted">탈락했습니다. 구경 중.</p>');
+      if(m.armL)me_=`<p class="center"><span class="chip bad">이번 판: 비겨도 탈락</span></p>`+me_}
+    else{
+      if(m.step==='hide'){me_=m.alive.includes(i)&&!m.picks[i]?`<p class="center">숨을 금고를 고르세요. 경비원은 못 봅니다.</p><div class="doors">${[1,2,3].map(z=>`<button class="door" data-a="vhide" data-z="${z}">${z}</button>`).join('')}</div>`:
+          amLead?`<p class="center muted">도둑들이 숨는 중… (경비원은 눈을 감으세요)</p>${!m.armL?`<div class="row center"><button data-a="varm" ${selItem?'':'disabled'}>아이템: 이번엔 2곳 수색${selItem?' ('+cname(selItem)+')':''}</button></div>`:''}`:
+          (m.picks[i]?`<p class="center muted">${m.picks[i]}번 금고에 숨었습니다. 쉿.</p>`:'<p class="center muted">구경 중.</p>')}
+      if(m.step==='guard'){const need=m.armL?2:1;const zs=ui.vz||[];
+        me_=amLead?`<p class="center">뒤질 금고를 ${need}곳 고르세요.</p><div class="doors">${[1,2,3].map(z=>`<button class="door ${zs.includes(z)?'on':''}" data-a="vz" data-z="${z}">${z}</button>`).join('')}</div>
+          <div class="row center"><button class="primary" data-a="vgo" ${zs.length===need?'':'disabled'}>수색!</button>${!m.armL?`<button data-a="varm" ${selItem?'':'disabled'}>아이템: 2곳 수색${selItem?' ('+cname(selItem)+')':''}</button>`:''}</div>`:
+          `<p class="center muted">${m.picks[i]?`${m.picks[i]}번 금고에서 숨죽이는 중…`:'경비원이 고르는 중…'}</p>`}}
+    const last=m.last?`<p class="small muted center">지난 판: ${isRps?Object.keys(m.last.picks).map(k=>`${esc(seatName(+k))} ${RPSN[m.last.picks[k]]}`).join(' · '):`경비원 ${m.last.zones.join('·')}번 수색 · `+Object.keys(m.last.picks).map(k=>`${esc(seatName(+k))}→${m.last.picks[k]}`).join(' · ')}</p>`:'';
+    body=`<p class="center"><strong>${m.round}</strong> / ${m.max}판 · ${isRps?'선':'경비원'}: <strong>${esc(seatName(L))}</strong></p>${status}${me_}${last}`}
+  if(m.id==='count'){const now=Date.now();const k=Math.floor((now-m.t0)/CFLIP);const open=now>=countOpenAt(m);
+    let stage;
+    if(now<m.t0)stage=`<div class="flipzone"><div class="bigcard ready">${Math.ceil((m.t0-now)/1000)}</div></div><p class="center">곧 넘깁니다. 문양별로 세어 두세요!</p>`;
+    else if(!open)stage=`<div class="flipzone">${cardHTML(m.seq[k],{cls:'bigc flip',attr:`style="animation-delay:-${(now-m.t0)%CFLIP}ms"`})}</div><p class="center">${k+1} / ${m.seq.length}</p>`;
+    else stage=`<div class="flipzone">${cardHTML(m.dec,{cls:'bigc '+(anim('dec'+m.pan,700).cls?'flip':''),attr:anim('dec'+m.pan,700).style?`style="${anim('dec'+m.pan,700).style}"`:''})}</div><p class="center">정답 문양: <strong class="big ${U(m.dec||'S1')}">${SYM[U(m.dec||'S1')]}</strong> 몇 장이었을까요?</p>`;
+    let me_='';
+    if(open&&i!=null&&(i in m.hits)){
+      if(i in m.ans)me_=`<p class="center muted">${m.ans[i]}장이라고 답했습니다. 기다리는 중.</p>`;
+      else me_=`<div class="nums">${[0,1,2,3,4,5,6].map(a=>`<button class="num" data-a="cans" data-n="${a}">${a}${a===6?'+':''}</button>`).join('')}</div>${!m.arm[i]?`<div class="row center"><button data-a="carm" ${selItem?'':'disabled'}>아이템: ±1도 정답${selItem?' ('+cname(selItem)+')':''}</button></div>`:'<p class="center"><span class="chip on">±1 적용</span></p>'}`}
+    const sc=Object.keys(m.hits).map(k=>`${esc(seatName(+k))} ${m.hits[k]}점`).join(' · ');
+    body=`<p class="center">${m.pan} / 3판 · ${sc}</p>${stage}${me_}${m.last?`<p class="small muted center">지난 판: ${SYM[m.last.suit]} ${m.last.cnt}장 · 맞힘 ${m.last.hit.map(k=>esc(seatName(k))).join(', ')||'없음'}</p>`:''}`}
+  if(m.id==='race'){const lanes=SUITS.map(su=>{const riders=Object.keys(m.bet).filter(k=>m.bet[k]===su).map(k=>esc(seatName(+k)));
+      return `<div class="lane"><span class="lname ${su}">${SYM[su]}</span><div class="track">${[0,1,2,3].map(c=>`<div class="cell ${c===3?'goal':''}">${m.pos[su]===c?`<span class="horse ${su}${m.last&&m.last.s===su&&anim('rh'+m.pile.length,500).cls?' hop':''}">${SYM[su]}</span>`:''}</div>`).join('')}</div><span class="small muted riders">${riders.join(', ')}</span></div>`}).join('');
+    let me_='';
+    if(m.step==='bet'){const who=m.order[m.pi];me_=who===i?`<p class="center">우승할 문양을 고르세요 (겹쳐도 됨)</p><div class="row center">${SUITS.map(su=>`<button class="suitbtn ${su}" data-a="rbet" data-s="${su}">${SYM[su]}</button>`).join('')}</div>`:`<p class="center muted">${esc(seatName(who))}이 고르는 중.</p>`}
+    else{me_=`${i===S.first?`<div class="row center"><button class="primary big" data-a="rflip">카드 뒤집기</button></div>`:`<p class="center muted">선(${esc(seatName(S.first))})이 카드를 뒤집습니다.</p>`}
+      ${i!=null&&(i in m.bet)?`<div class="row center small"><span class="muted">아이템으로 갈아타기:</span>${SUITS.filter(su=>su!==m.bet[i]).map(su=>`<button class="suitbtn small ${su}" data-a="rswap" data-s="${su}" ${selItem?'':'disabled'}>${SYM[su]}</button>`).join('')}</div>`:''}`}
+    body=`<div class="race">${lanes}</div>${m.last?`<div class="row center small muted">방금: ${cardHTML(m.last.c,{cls:anim('rc'+m.pile.length,500).cls?'deal':''})} ${SYM[m.last.s]} ${m.last.fw?'앞으로!':'뒤로…'}</div>`:''}${me_}`}
   const rd=S.rewardDisp&&S.rewardDisp.length?`<div class="row small"><span class="muted">이번 보상(순위대로 두 바퀴):</span></div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:'';
   return `<div class="panel"><h2>미니게임 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2>${rd}<details><summary class="small">카드 뒷면 규칙</summary><div class="rules">${esc(def.text)}</div></details>${body}</div>`;
 }
@@ -630,6 +911,21 @@ app.addEventListener('click',e=>{
     case 'aready':act(st=>{if(!guard(st,'mg')||st.mg.id!=='auction'||st.mg.step!=='pre')return false;auctionReady(st,i)});break;
     case 'abid':{const c=b.dataset.c;act(st=>{const m=st.mg;if(!guard(st,'mg')||m.id!=='auction'||m.step!=='bid'||(i in m.bids)||!m.hands[i].includes(c))return false;auctionBid(st,i,c)})}break;
     case 'rpick':{const c=b.dataset.c;act(st=>{if(!guard(st,'reward')||st.reward.order[st.reward.pi]!==i)return false;rewardPick(st,i,c)})}break;
+    case 'rps':{const h=b.dataset.hand;act(st=>{if(!guard(st,'mg')||st.mg.id!=='rps')return false;return rpsPick(st,i,h)})}break;
+    case 'blp':{const c=b.dataset.c,it=ui.bsub?s.find(isItem):null;if(ui.bsub&&!it){flash('빼기 모드: 아래 손패에서 아이템 J·Q·K를 먼저 고르세요.');break}ui.bsub=false;act(st=>{if(!guard(st,'mg')||st.mg.id!=='balloon')return false;return balloonPlay(st,i,c,it)})}break;
+    case 'bsub':ui.bsub=!ui.bsub;render();break;
+    case 'osave':{const it=s[0];act(st=>{if(!guard(st,'mg')||!(st.mg.id==='rps'||st.mg.id==='vault'))return false;return ovnSave(st,i,it)})}break;
+    case 'onosave':act(st=>{if(!guard(st,'mg')||!(st.mg.id==='rps'||st.mg.id==='vault'))return false;return ovnSave(st,i,null)});break;
+    case 'rarm':{const it=s[0];act(st=>{if(!guard(st,'mg')||st.mg.id!=='rps')return false;return rpsArm(st,i,it)})}break;
+    case 'vhide':{const z=+b.dataset.z;act(st=>{if(!guard(st,'mg')||st.mg.id!=='vault')return false;return vaultHide(st,i,z)})}break;
+    case 'varm':{const it=s[0];act(st=>{if(!guard(st,'mg')||st.mg.id!=='vault')return false;return vaultArm(st,i,it)})}break;
+    case 'vz':{const z=+b.dataset.z;const need=S.mg.armL?2:1;let zs=(ui.vz||[]).slice();zs=zs.includes(z)?zs.filter(x=>x!==z):[...zs,z].slice(-need);ui.vz=zs;render()}break;
+    case 'vgo':{const zs=(ui.vz||[]).slice();ui.vz=[];act(st=>{if(!guard(st,'mg')||st.mg.id!=='vault')return false;return vaultGuard(st,i,zs)})}break;
+    case 'cans':{const n=+b.dataset.n;act(st=>{if(!guard(st,'mg')||st.mg.id!=='count')return false;return countAnswer(st,i,n)})}break;
+    case 'carm':{const it=s[0];act(st=>{if(!guard(st,'mg')||st.mg.id!=='count')return false;return countArm(st,i,it)})}break;
+    case 'rbet':{const su=b.dataset.s;act(st=>{if(!guard(st,'mg')||st.mg.id!=='race')return false;return raceBet(st,i,su)})}break;
+    case 'rswap':{const su=b.dataset.s,it=s[0];act(st=>{if(!guard(st,'mg')||st.mg.id!=='race')return false;return raceSwap(st,i,it,su)})}break;
+    case 'rflip':act(st=>{if(!guard(st,'mg')||st.mg.id!=='race')return false;return raceFlip(st,i)});break;
   }
 });
 app.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.card.click,.slot.pickable')){e.preventDefault();e.target.click()}});
