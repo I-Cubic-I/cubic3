@@ -497,9 +497,9 @@ function renderMe(){
   const myTurn=S.phase==='main'&&t&&t.seat===i;
   if(S.phase==='roll'){body=S.first===i?`<button class="primary" data-a="roll">미니게임 주사위 굴리기</button>`:`<p class="muted">메인 턴이 끝났습니다. 선 플레이어가 미니게임 주사위를 굴리길 기다리는 중.</p>`}
   else if(S.phase==='clubs'){const left=Math.max(0,Math.ceil((S.deadline-Date.now())/1000));
-    const clubs=p.hand.filter(c=>U(c)==='C'&&isItem(c));
+    const clubs=p.front.length?[]:p.hand.filter(c=>U(c)==='C'&&isItem(c));
     body=`<p>♣ 선언 시간 <span class="timer">${left}초</span> · 이번 미니게임: <strong>${esc(MG[S.board[S.die-1]].name)}</strong></p>
-    ${clubs.length?`<div class="row">${clubs.map(c=>R(c)===11?`<button data-a="club" data-c="${c}">♣J 다시 굴리기</button>`:R(c)===12?`<button data-a="club" data-c="${c}" data-x="1">♣Q 눈 +1</button><button data-a="club" data-c="${c}" data-x="-1">♣Q 눈 -1</button>`:`<button data-a="clubK" data-c="${c}">♣K 칸 직접 고르기</button>`).join('')}</div>${ui.mode==='clubK'?'<p class="small">위 미니게임 판에서 칸을 누르세요.</p>':''}`:'<p class="small muted">쓸 수 있는 ♣ 아이템이 없습니다. 시간이 지나면 미니게임이 시작됩니다.</p>'}`}
+    ${clubs.length?`<div class="row">${clubs.map(c=>R(c)===11?`<button data-a="club" data-c="${c}">♣J 다시 굴리기</button>`:R(c)===12?`<button data-a="club" data-c="${c}" data-x="1">♣Q 눈 +1</button><button data-a="club" data-c="${c}" data-x="-1">♣Q 눈 -1</button>`:`<button data-a="clubK" data-c="${c}">♣K 칸 직접 고르기</button>`).join('')}</div>${ui.mode==='clubK'?'<p class="small">위 미니게임 판에서 칸을 누르세요.</p>':''}`:`<p class="small muted">${p.front.length&&p.hand.some(c=>U(c)==='C'&&isItem(c))?'이번 라운드에 아이템을 써서(앞에 놓임) ♣를 쓸 수 없습니다.':'쓸 수 있는 ♣ 아이템이 없습니다.'} 시간이 지나면 미니게임이 시작됩니다.</p>`}`}
   else if(S.phase==='defense'){const P=S.pending;const left=Math.max(0,Math.ceil((P.deadline-Date.now())/1000));
     const hs=P.target===i?p.hand.filter(c=>U(c)==='H'&&(R(c)===11||R(c)===13)):[];
     body=`<p>${esc(seatName(P.attacker))}의 ${cname(P.card)} 공격 → ${esc(seatName(P.target))} · <span class="timer">${left}초</span></p>
@@ -583,7 +583,7 @@ app.addEventListener('click',e=>{
   const rw=e.target.closest('[data-row]');
   if(rw&&ui.mode==='HQ'){const c=rw.dataset.row;if(isItem(c))return;sel.has(c)?sel.delete(c):(sel.size<2&&sel.add(c));render();return}
   const sl=e.target.closest('[data-slot]');
-  if(sl&&ui.mode==='clubK'){const k=+sl.dataset.slot,c=ui.card,i=ctl;ui={};act(st=>{if(st.phase!=='clubs')return false;useClub(st,i,c,k)});return}
+  if(sl&&ui.mode==='clubK'){const k=+sl.dataset.slot,c=ui.card,i=ctl;ui={};act(st=>{if(st.phase!=='clubs'||st.seats[i].front.length)return false;useClub(st,i,c,k)});return}
   const b=e.target.closest('[data-a]');if(!b||b.disabled)return;
   const a=b.dataset.a,i=ctl,s=selArr();
   const guard=(st,ph)=>st.phase===ph;
@@ -597,7 +597,7 @@ app.addEventListener('click',e=>{
     case 'reset2':act(st=>{for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby())});break;
     case 'ctl':ctl=+b.dataset.i;sel.clear();ui={};render();break;
     case 'roll':act(st=>{if(!guard(st,'roll')||st.first!==i)return false;rollBoard(st)});break;
-    case 'club':{const c=b.dataset.c,x=+b.dataset.x||0;act(st=>{if(!guard(st,'clubs')||!st.seats[i].hand.includes(c))return false;useClub(st,i,c,x)})}break;
+    case 'club':{const c=b.dataset.c,x=+b.dataset.x||0;act(st=>{if(!guard(st,'clubs')||!st.seats[i].hand.includes(c)||st.seats[i].front.length)return false;useClub(st,i,c,x)})}break;
     case 'clubK':ui={mode:'clubK',card:b.dataset.c};render();break;
     case 'defend':{const c=b.dataset.c;act(st=>{if(!guard(st,'defense')||st.pending.target!==i)return false;defend(st,i,c)})}break;
     case 'nodef':act(st=>{if(!guard(st,'defense')||st.pending.target!==i)return false;resolveAttack(st)});break;
