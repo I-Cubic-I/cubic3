@@ -101,6 +101,9 @@ button{transition:transform .08s} button:active:not(:disabled){transform:scale(.
 .fx.win i:nth-child(4n){background:var(--c);left:25%;animation-delay:.9s}.fx.win i:nth-child(5n){left:62%;animation-delay:1.2s}
 .toast{position:fixed;top:12px;left:50%;transform:translate(-50%,-40px);background:var(--accent);color:var(--accent-ink);padding:8px 18px;border-radius:999px;font-weight:700;opacity:0;z-index:60;pointer-events:none}
 .toast.show{animation:toast 1.8s ease both}
+.rules-panel{border-color:var(--accent)} .rules-panel.deal{animation:deal .45s ease-out both}
+.rcard{background:var(--sunk);border-radius:10px;padding:12px 14px;display:grid;gap:8px;font-size:14.5px}
+.rline{display:grid;grid-template-columns:52px minmax(0,1fr);gap:8px} .rline b{font-family:var(--display);font-weight:400;color:var(--accent)}
 .balloon-stage{display:grid;justify-items:center;min-height:250px;align-content:end;padding-top:8px}
 .balloon{border-radius:50% 50% 48% 48%/55% 55% 45% 45%;display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--display);font-size:30px;box-shadow:inset -14px -18px 0 rgba(0,0,0,.12),inset 10px 10px 0 rgba(255,255,255,.25);animation:wobble 2.4s ease-in-out infinite;transition:width .4s,height .4s}
 .balloon.inflate{animation:inflate .6s cubic-bezier(.2,1.5,.4,1) both}
@@ -118,7 +121,7 @@ button{transition:transform .08s} button:active:not(:disabled){transform:scale(.
 .race{display:grid;gap:6px}
 .lane{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,120px);gap:8px;align-items:center}
 .lname{font-size:22px;text-align:center} .riders{overflow-wrap:anywhere}
-.track{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.track{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
 .cell{height:40px;border-radius:8px;background:var(--sunk);display:flex;align-items:center;justify-content:center} .cell.goal{background:color-mix(in srgb,var(--warn) 25%,var(--sunk))}
 .horse{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px} .horse.S{background:var(--s)} .horse.H{background:var(--h)} .horse.D{background:var(--dt);color:#1e2b4a} .horse.C{background:var(--c)}
 .horse.hop{animation:hop .5s ease-out}
@@ -178,7 +181,7 @@ const MG={
   count:{name:'몇 장이었지',min:2,max:5,icon:'🂠 12',
     text:'준비: 각자에게 주사위 1개를 준다.\n진행: 덱에서 12장을 1초에 1장씩 넘긴다. 모두 문양별 장수를 센다. 다 넘기면 1장을 더 뒤집는다. 그 카드의 문양이 정답 문양. 각자 그 문양의 장수를 골라 함께 연다(7장 이상이면 6). 맞힌 사람 1점. 3판.\n순위: 맞힌 횟수.\n아이템: 열기 전에 낸다. 정답과 1 차이도 맞힌 걸로 친다.'},
   race:{name:'문양 경주',min:2,max:5,icon:'🂠',
-    text:'준비: 문양 색 말 4개를 출발선에 둔다.\n진행: 선부터 차례로 우승할 문양 하나를 고른다(겹쳐도 된다). 선이 덱에서 한 장씩 뒤집는다. 숫자 카드면 그 문양이 1칸 앞으로, J·Q·K면 1칸 뒤로. 먼저 3칸을 간 문양이 우승.\n순위: 우승 문양을 고른 사람이 모두 1위, 나머지는 고른 문양의 칸 수 순서.\n아이템: 카드를 뒤집기 전에 낸다. 내가 고른 문양을 바꾼다.'}
+    text:'준비: 문양 색 말 4개를 출발선에 둔다.\n진행: 선부터 차례로 우승할 문양 하나를 고른다(겹쳐도 된다). 선이 덱에서 한 장씩 뒤집는다. 숫자 카드면 그 문양이 1칸 앞으로, J·Q·K면 1칸 뒤로. 먼저 5칸을 간 문양이 우승.\n순위: 우승 문양을 고른 사람이 모두 1위, 나머지는 고른 문양의 칸 수 순서.\n아이템: 카드를 뒤집기 전에 낸다. 내가 고른 문양을 바꾼다.'}
 };
 
 function log(S,msg){S.log.unshift(msg);if(S.log.length>80)S.log.length=80}
@@ -216,14 +219,14 @@ function startGame(S){
   startMain(S);
 }
 
-function rollBoard(S){S.die=d6();S.phase='clubs';S.deadline=Date.now()+CLUB_MS+1600;log(S,`${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[S.board[S.die-1]].name}`);fx(S,{t:'dice',v:S.die,mg:S.board[S.die-1]})}
+function rollBoard(S){S.die=d6();S.phase='clubs';S.deadline=null;S.ready={};log(S,`${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[S.board[S.die-1]].name}`);fx(S,{t:'dice',v:S.die,mg:S.board[S.die-1]})}
 function useClub(S,i,c,arg){
   const p=S.seats[i];p.hand.splice(p.hand.indexOf(c),1);p.front.push(c);
   const r=R(c);
   if(r===11){S.die=d6();log(S,`자리 ${i+1}: ♣J로 다시 굴림 → ${S.die}`)}
   else if(r===12){S.die=((S.die-1+arg+6)%6)+1;log(S,`자리 ${i+1}: ♣Q로 눈 ${arg>0?'+1':'-1'} → ${S.die}`)}
   else {S.die=arg;log(S,`자리 ${i+1}: ♣K로 칸 ${arg}을 직접 고름`)}
-  log(S,`이번 미니게임: ${MG[S.board[S.die-1]].name}`);
+  log(S,`이번 미니게임: ${MG[S.board[S.die-1]].name}`);S.ready={};
   if(r===11)fx(S,{t:'dice',v:S.die,mg:S.board[S.die-1],seats:[i]});else fx(S,{t:'banner',text:`${cname(c)} → ${S.die}번 ${MG[S.board[S.die-1]].name}`,seats:[i]});
 }
 function startMain(S){
@@ -329,6 +332,9 @@ function afterMain(S){
   S.phase='roll';S.die=null;log(S,'메인 턴이 모두 끝났다. 미니게임 6장: '+S.board.map(k=>MG[k].name).join(', ')+' / 보상 진열: '+disp.map(cname).join(' '));
 }
 
+/* ---- 규칙 설명 시간: 모두 준비하면 시작 (♣는 그동안 언제든) ---- */
+function readyUp(S,i){if(S.phase!=='clubs')return false;S.ready=S.ready||{};S.ready[i]=true;
+  if(S.seats.every((_,k)=>S.ready[k])){S.deadline=null;reclaim(S);log(S,'모두 준비 완료. 버림 줄과 앞의 아이템을 거둬 덱에 섞었다.');startMinigame(S)}}
 /* ---- 미니게임 공통 ---- */
 function reclaim(S){S.deck.push(...S.row.splice(0));S.seats.forEach(p=>S.deck.push(...p.front.splice(0)));shuffle(S.deck)}
 function buildBundle(S,need){ // 재료 묶음 폐지: 덱에서 필요한 만큼 뽑는다
@@ -526,6 +532,7 @@ function countAnswer(S,i,a){const m=S.mg;if((i in m.ans)||!(i in m.hits)||Date.n
     countPan(S)}}
 
 /* ---- 문양 경주 ---- */
+const RGOAL=5;
 function raceStart(S,ord){S.mg={id:'race',bundle:[],order:ord.slice(),pi:0,bet:{},pos:{S:0,H:0,D:0,C:0},pile:[],step:'bet',last:null}}
 function raceBet(S,i,s){const m=S.mg;if(m.step!=='bet'||m.order[m.pi]!==i||!SYM[s])return false;m.bet[i]=s;m.pi++;log(S,`문양 경주: 자리 ${i+1} → ${SYM[s]}`);if(m.pi>=m.order.length)m.step='race'}
 function raceSwap(S,i,item,s){const m=S.mg;if(m.step!=='race'||!(i in m.bet)||m.bet[i]===s||!SYM[s])return false;if(!useItem(S,i,item))return false;
@@ -536,7 +543,7 @@ function raceFlip(S,i){const m=S.mg;if(m.step!=='race'||i!==S.first)return false
   if(!c){const best=SUITS.reduce((a,s)=>m.pos[s]>m.pos[a]?s:a,'S');raceEnd(S,best);return}
   m.pile.push(c);const s=U(c),fw=R(c)<=10;m.pos[s]=fw?m.pos[s]+1:Math.max(0,m.pos[s]-1);m.last={c,s,fw};
   log(S,`문양 경주: ${cname(c)} → ${SYM[s]} ${fw?'앞으로':'뒤로'} (${m.pos[s]}칸)`);
-  if(m.pos[s]>=3){log(S,`${SYM[s]} 우승!`);fx(S,{t:'banner',text:`${SYM[s]} 우승!`,suit:s,tone:'win'});raceEnd(S,s)}}
+  if(m.pos[s]>=RGOAL){log(S,`${SYM[s]} 우승!`);fx(S,{t:'banner',text:`${SYM[s]} 우승!`,suit:s,tone:'win'});raceEnd(S,s)}}
 
 /* 시간 지난 단계 넘기기 (아무 기기나, 잠금 안에서) */
 function advanceTimers(S){
@@ -546,7 +553,7 @@ function advanceTimers(S){
   if(S.phase==='defense'&&S.pending&&now>=S.pending.deadline){resolveAttack(S);return true}
   return false;
 }
-if(typeof module!=='undefined')module.exports={useDJ,pickDJ,useHQ,useClub,discardCard,balloonPlay,ovnSave,rpsPick,rpsArm,vaultHide,vaultArm,vaultGuard,countArm,countAnswer,countOpenAt,raceBet,raceSwap,raceFlip,startGame,newLobby,rollBoard,startMain,pickup,pickupDiscard,canMakeToken,makeToken,startAttack,resolveAttack,defend,endTurn,afterMain,holdRoll,holdStop,bombArm,bombFlip,auctionItem,auctionReady,auctionBid,rewardPick,advanceTimers,costFor,MG,R,U,isItem,setRng:f=>RNG=f};
+if(typeof module!=='undefined')module.exports={readyUp,useDJ,pickDJ,useHQ,useClub,discardCard,balloonPlay,ovnSave,rpsPick,rpsArm,vaultHide,vaultArm,vaultGuard,countArm,countAnswer,countOpenAt,raceBet,raceSwap,raceFlip,startGame,newLobby,rollBoard,startMain,pickup,pickupDiscard,canMakeToken,makeToken,startAttack,resolveAttack,defend,endTurn,afterMain,holdRoll,holdStop,bombArm,bombFlip,auctionItem,auctionReady,auctionBid,rewardPick,advanceTimers,costFor,MG,R,U,isItem,setRng:f=>RNG=f};
 </script>
 
 <script>
@@ -655,6 +662,7 @@ function autoCtl(){
 function whoActs(){
   if(!S||!S.phase)return null;
   if(S.phase==='roll')return S.first;
+  if(S.phase==='clubs'){const need=S.seats.map((_,k)=>k).filter(k=>!(S.ready||{})[k]);return need.find(mine)??need[0]??null}
   if(S.phase==='main')return S.turn&&S.turn.seat;
   if(S.phase==='defense')return S.pending.target;
   if(S.phase==='reward')return S.reward.order[S.reward.pi];
@@ -687,7 +695,8 @@ function render(){
   const rowh=`<div class="cards">${S.row.length?S.row.map((c,k)=>{const pk=canRow;return cardHTML(c,{click:(ui.mode==='HQ'&&!isItem(c))||pk,selectable:true,tag:pk?'줍기':'',attr:pk?`data-a="prow" data-c="${c}"`:`data-row="${c}"`})}).join(''):'<span class="muted small">비어 있음</span>'}</div>`;
   const left=`<div class="panel"><h2>미니게임 판</h2>${board}
     <div class="row muted small">선 플레이어: ${esc(seatName(S.first))}${S.die?` · 주사위 <span class="die">${S.die}</span>`:''}</div>
-    ${(S.phase==='roll'||S.phase==='clubs')&&S.rewardDisp?`<div class="row small muted">이번 보상:</div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:''}</div>
+    ${S.phase==='roll'&&S.rewardDisp?`<div class="row small muted">이번 보상:</div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:''}</div>
+    ${S.phase==='clubs'?renderRules():''}
     ${S.phase==='mg'?renderMG():''}
     ${S.phase==='reward'?renderReward():''}
     ${S.phase==='ended'?`<div class="panel"><h2>게임 끝</h2><p><strong>${S.winners.map(i=>esc(seatName(i))).join(', ')}</strong> 우승!</p><div class="row"><button class="primary" data-a="restart">같은 자리로 새 게임</button><button data-a="tolobby">로비로</button></div></div>`:''}
@@ -728,10 +737,10 @@ function renderMe(){
   let body='';
   const myTurn=S.phase==='main'&&t&&t.seat===i;
   if(S.phase==='roll'){body=S.first===i?`<button class="primary" data-a="roll">미니게임 주사위 굴리기</button>`:`<p class="muted">메인 턴이 끝났습니다. 선 플레이어가 미니게임 주사위를 굴리길 기다리는 중.</p>`}
-  else if(S.phase==='clubs'){const left=Math.max(0,Math.ceil((S.deadline-Date.now())/1000));
+  else if(S.phase==='clubs'){
     const clubs=p.front.length?[]:p.hand.filter(c=>U(c)==='C'&&isItem(c));
-    body=`<p>♣ 선언 시간 <span class="timer">${left}초</span> · 이번 미니게임: <strong>${esc(MG[S.board[S.die-1]].name)}</strong></p>
-    ${clubs.length?`<div class="row">${clubs.map(c=>R(c)===11?`<button data-a="club" data-c="${c}">♣J 다시 굴리기</button>`:R(c)===12?`<button data-a="club" data-c="${c}" data-x="1">♣Q 눈 +1</button><button data-a="club" data-c="${c}" data-x="-1">♣Q 눈 -1</button>`:`<button data-a="clubK" data-c="${c}">♣K 칸 직접 고르기</button>`).join('')}</div>${ui.mode==='clubK'?'<p class="small">위 미니게임 판에서 칸을 누르세요.</p>':''}`:`<p class="small muted">${p.front.length&&p.hand.some(c=>U(c)==='C'&&isItem(c))?'이번 라운드에 아이템을 써서(앞에 놓임) ♣를 쓸 수 없습니다.':'쓸 수 있는 ♣ 아이템이 없습니다.'} 시간이 지나면 미니게임이 시작됩니다.</p>`}`}
+    body=`<p>규칙 설명 시간 · 이번 미니게임: <strong>${esc(MG[S.board[S.die-1]].name)}</strong> · ♣는 모두 준비할 때까지 쓸 수 있습니다.</p>
+    ${clubs.length?`<div class="row">${clubs.map(c=>R(c)===11?`<button data-a="club" data-c="${c}">♣J 다시 굴리기</button>`:R(c)===12?`<button data-a="club" data-c="${c}" data-x="1">♣Q 눈 +1</button><button data-a="club" data-c="${c}" data-x="-1">♣Q 눈 -1</button>`:`<button data-a="clubK" data-c="${c}">♣K 칸 직접 고르기</button>`).join('')}</div>${ui.mode==='clubK'?'<p class="small">위 미니게임 판에서 칸을 누르세요.</p>':''}`:`<p class="small muted">${p.front.length&&p.hand.some(c=>U(c)==='C'&&isItem(c))?'이번 라운드에 아이템을 써서(앞에 놓임) ♣를 쓸 수 없습니다.':'쓸 수 있는 ♣ 아이템이 없습니다.'}</p>`}`}
   else if(S.phase==='defense'){const P=S.pending;const left=Math.max(0,Math.ceil((P.deadline-Date.now())/1000));
     const hs=P.target===i?p.hand.filter(c=>U(c)==='H'&&(R(c)===11||R(c)===13)):[];
     body=`<p>${esc(seatName(P.attacker))}의 ${cname(P.card)} 공격 → ${esc(seatName(P.target))} · <span class="timer">${left}초</span></p>
@@ -844,7 +853,7 @@ function renderMG(){
     const sc=Object.keys(m.hits).map(k=>`${esc(seatName(+k))} ${m.hits[k]}점`).join(' · ');
     body=`<p class="center">${m.pan} / 3판 · ${sc}</p>${stage}${me_}${m.last?`<p class="small muted center">지난 판: ${SYM[m.last.suit]} ${m.last.cnt}장 · 맞힘 ${m.last.hit.map(k=>esc(seatName(k))).join(', ')||'없음'}</p>`:''}`}
   if(m.id==='race'){const lanes=SUITS.map(su=>{const riders=Object.keys(m.bet).filter(k=>m.bet[k]===su).map(k=>esc(seatName(+k)));
-      return `<div class="lane"><span class="lname ${su}">${SYM[su]}</span><div class="track">${[0,1,2,3].map(c=>`<div class="cell ${c===3?'goal':''}">${m.pos[su]===c?`<span class="horse ${su}${m.last&&m.last.s===su&&anim('rh'+m.pile.length,500).cls?' hop':''}">${SYM[su]}</span>`:''}</div>`).join('')}</div><span class="small muted riders">${riders.join(', ')}</span></div>`}).join('');
+      return `<div class="lane"><span class="lname ${su}">${SYM[su]}</span><div class="track">${[0,1,2,3,4,5].map(c=>`<div class="cell ${c===RGOAL?'goal':''}">${m.pos[su]===c?`<span class="horse ${su}${m.last&&m.last.s===su&&anim('rh'+m.pile.length,500).cls?' hop':''}">${SYM[su]}</span>`:''}</div>`).join('')}</div><span class="small muted riders">${riders.join(', ')}</span></div>`}).join('');
     let me_='';
     if(m.step==='bet'){const who=m.order[m.pi];me_=who===i?`<p class="center">우승할 문양을 고르세요 (겹쳐도 됨)</p><div class="row center">${SUITS.map(su=>`<button class="suitbtn ${su}" data-a="rbet" data-s="${su}">${SYM[su]}</button>`).join('')}</div>`:`<p class="center muted">${esc(seatName(who))}이 고르는 중.</p>`}
     else{me_=`${i===S.first?`<div class="row center"><button class="primary big" data-a="rflip">카드 뒤집기</button></div>`:`<p class="center muted">선(${esc(seatName(S.first))})이 카드를 뒤집습니다.</p>`}
@@ -853,6 +862,14 @@ function renderMG(){
   const rd=S.rewardDisp&&S.rewardDisp.length?`<div class="row small"><span class="muted">이번 보상(순위대로 두 바퀴):</span></div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:'';
   return `<div class="panel"><h2>미니게임 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2>${rd}<details><summary class="small">카드 뒷면 규칙</summary><div class="rules">${esc(def.text)}</div></details>${body}</div>`;
 }
+function renderRules(){const id=S.board[S.die-1],def=MG[id];const rd=S.ready||{};
+  const mineLeft=S.seats.map((_,k)=>k).filter(k=>mine(k)&&!rd[k]);
+  const lines=def.text.split('\n').map(l=>{const k=l.indexOf(':');return k>0?`<div class="rline"><b>${esc(l.slice(0,k))}</b><span>${esc(l.slice(k+1).trim())}</span></div>`:`<div>${esc(l)}</div>`}).join('');
+  return `<div class="panel rules-panel ${anim('rules'+S.round+id,500).cls?'deal':''}"><div class="row" style="justify-content:space-between"><h2>규칙 설명 · ${esc(def.name)} <span class="muted small">${esc(def.icon)}</span></h2></div>
+   <div class="rcard">${lines}</div>
+   ${S.rewardDisp&&S.rewardDisp.length?`<div class="row small muted">이번 보상:</div><div class="cards">${S.rewardDisp.map(c=>cardHTML(c)).join('')}</div>`:''}
+   <div class="row">${S.seats.map((_,k)=>`<span class="chip ${rd[k]?'on':''}">${esc(seatName(k))} ${rd[k]?'준비 완료':'읽는 중'}</span>`).join('')}</div>
+   <div class="row">${mineLeft.length?`<button class="primary big" data-a="ready">준비 완료${mineLeft.length>1?` (내 자리 ${mineLeft.length}개)`:''}</button>`:'<span class="muted">다른 사람을 기다리는 중…</span>'}</div></div>`}
 function renderReward(){const Rw=S.reward;const who=Rw.order[Rw.pi];
   return `<div class="panel"><h2>보상 고르기</h2><p class="small muted">미니게임 순위 순서대로 두 바퀴. 지금: <strong>${esc(seatName(who))}</strong></p>
   <div class="cards">${Rw.disp.map(c=>cardHTML(c,{click:ctl===who,attr:`data-a="rpick" data-c="${c}"`})).join('')}</div></div>`}
@@ -878,6 +895,7 @@ app.addEventListener('click',e=>{
     case 'reset2':act(st=>{for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby())});break;
     case 'ctl':ctl=+b.dataset.i;sel.clear();ui={};render();break;
     case 'roll':act(st=>{if(!guard(st,'roll')||st.first!==i)return false;rollBoard(st)});break;
+    case 'ready':act(st=>{if(!guard(st,'clubs'))return false;let any=false;for(let k=0;k<st.seats.length;k++){if(st.phase!=='clubs')break;if(st.seats[k].uid===me&&!(st.ready||{})[k]){any=true;readyUp(st,k)}}if(!any)return false});break;
     case 'club':{const c=b.dataset.c,x=+b.dataset.x||0;act(st=>{if(!guard(st,'clubs')||!st.seats[i].hand.includes(c)||st.seats[i].front.length)return false;useClub(st,i,c,x)})}break;
     case 'clubK':ui={mode:'clubK',card:b.dataset.c};render();break;
     case 'defend':{const c=b.dataset.c;act(st=>{if(!guard(st,'defense')||st.pending.target!==i)return false;defend(st,i,c)})}break;
