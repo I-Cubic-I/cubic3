@@ -11,6 +11,25 @@ const nm=i=>esc(seatName(i));
 const handSort=h=>h.slice().sort((a,b)=>(U(a)>U(b)?1:U(a)<U(b)?-1:R(a)-R(b)));
 const selArr=()=>[...sel];
 
+/* 아이템 효과 (RULES.md 능력표) */
+const ITEM_FX={
+ S11:['♠ 약탈','남의 손패에서 무작위 1장 뺏기','상대에게 끌어 놓기 · ♥J·♥K로 막힐 수 있음'],
+ S12:['♠ 약탈','문양 하나를 지목해, 상대가 그 문양 숫자 카드를 가졌으면 1장 받기','상대에게 끌어 놓기 · ♥J·♥K로 막힐 수 있음'],
+ S13:['♠ 약탈','남의 토큰 1개 뺏기 (내가 가진 색은 불가)','상대에게 끌어 놓기 · ♥J·♥K로 막힐 수 있음'],
+ H11:['♥ 수호','♠ 공격 1회 막기','남의 턴, 내가 공격받을 때 써요'],
+ H12:['♥ 수호','버림 줄에서 숫자 카드 2장 골라 가져오기','테이블로 끌어 놓기'],
+ H13:['♥ 수호','♠ 공격을 막고 공격한 사람에게 그대로 되돌리기','남의 턴, 내가 공격받을 때 써요 · 되돌린 공격은 못 막아요'],
+ D11:['♦ 거래','덱 위 3장을 보고 1장 갖기, 나머지 2장은 버림','테이블로 끌어 놓기'],
+ D12:['♦ 거래','지금 비용만큼의 같은 문양 숫자 카드로 원하는 색 토큰 만들기','토큰 칸에 먼저 놓고, 숫자 카드를 이어서 놓기'],
+ D13:['♦ 거래','이번 토큰 만들기 비용을 3장으로 (첫 토큰·연장전엔 효과 없음)','토큰 칸에 먼저 놓고, 숫자 카드를 이어서 놓기'],
+ C11:['♣ 흐름','미니게임 주사위 다시 굴리기','규칙 설명 시간에 써요 · 이번 라운드에 아이템을 쓴 사람은 못 써요'],
+ C12:['♣ 흐름','미니게임 주사위 눈 ±1','규칙 설명 시간에 써요 · 이번 라운드에 아이템을 쓴 사람은 못 써요'],
+ C13:['♣ 흐름','미니게임 직접 고르기','규칙 설명 시간에 써요 · 이번 라운드에 아이템을 쓴 사람은 못 써요'],
+};
+function itemTip(c){const base=c.replace(/b$/,'');const f=ITEM_FX[base];if(!f)return null;
+  let mgLine='';if(S&&S.phase==='mg'&&S.mg&&MG[S.mg.id]){const l=MG[S.mg.id].text.split('\n').find(x=>x.startsWith('아이템'));if(l)mgLine=l.slice(l.indexOf(':')+1).trim()}
+  return `<div class="tt-h"><span class="tt-c ${U(base)}">${cname(base)}</span><span class="tt-k">${f[0]}</span></div>`+
+   (mgLine?`<div class="tt-mg"><b>이번 미니게임</b> ${esc(mgLine)}</div><div class="tt-sub">메인 턴 효과: ${esc(f[1])}</div>`:`<div class="tt-b">${esc(f[1])}</div><div class="tt-sub">${esc(f[2])}</div>`)}
 const UI=(()=>{
 let hud,platesEl,mainEl,screenEl,cutEl,fxEl,toastEl;
 let fatalMsg=null;
@@ -126,7 +145,7 @@ function rulesHTML(){const id=S.board[S.die-1],def=MG[id];const rd=S.ready||{};c
 let SC_LOOK=id=>({hold:['#f0b48f','#cf6f48'],bomb:['#f7a3a3','#c94242'],auction:['#f2d27a','#c79a1c'],balloon:['#ffb35c','#e8853a'],rps:['#a9bdff','#6a7fe0'],vault:['#b9c3d6','#6f7d99'],count:['#9cc3ea','#4f86c6'],race:['#8fd0a4','#3f9a63']}[id]||['#cfd4dc','#7b8494']);
 
 /* ---------- 전체 그리기 ---------- */
-function render(){if(fatalMsg||!S)return;renderPlates();
+function render(){if(fatalMsg||!S)return;renderPlates();if(tipFor&&!document.body.contains(tipFor)){const c=tipFor.dataset.h||tipFor.dataset.c;const pinned=tipPinned;hideTip(true);setTimeout(()=>{const el=document.querySelector(`.hcard[data-h="${c}"],.itemtray .mcard[data-h="${c}"]`);if(el&&pinned)showTip(el,true)},0)}
   if(S.phase==='lobby'){screenEl.classList.remove('show');mainEl.innerHTML=lobbyHTML();return}
   const i=ctl;const actor=whoActs();const ph=S.phase;
   let pill='',pillWait=false,sub=null,acts='',note='',center='',extra='';
@@ -197,7 +216,7 @@ async function clubShow(f){screenEl.classList.add('show','alerting');if(!screenE
 let drag=null,swallow=false;
 function dragStart(e){const h=e.target.closest('.hcard');if(!h||e.button>0)return;drag={c:h.dataset.h,el:h,x:e.clientX,y:e.clientY,on:false}}
 function dragMove(e){if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-  if(!drag.on){if(Math.hypot(dx,dy)<10)return;drag.on=true;const g=drag.el.cloneNode(true);g.classList.add('ghost');g.classList.remove('new','sel');document.body.appendChild(g);drag.g=g;drag.el.style.opacity='.25';document.body.classList.add('dragging');Main.dragHint(drag.c,true)}
+  if(!drag.on){if(Math.hypot(dx,dy)<10)return;drag.on=true;hideTip(true);const g=drag.el.cloneNode(true);g.classList.add('ghost');g.classList.remove('new','sel');document.body.appendChild(g);drag.g=g;drag.el.style.opacity='.25';document.body.classList.add('dragging');Main.dragHint(drag.c,true)}
   drag.g.style.left=(e.clientX-59)+'px';drag.g.style.top=(e.clientY-83)+'px';
   const z=dropZone(e.clientX,e.clientY);document.querySelectorAll('.dz').forEach(x=>x.classList.toggle('hot',x.dataset.dz===z.kind));
   drag.g.classList.toggle('over',z.kind!=='hand');e.preventDefault()}
@@ -208,7 +227,23 @@ function dropZone(x,y){const el=document.elementFromPoint(x,y);
   if(el){const tr=el.closest('.tray');if(tr)return {kind:'tray'};const pl=el.closest('[data-plate]');if(pl)return {kind:'seat',i:+pl.dataset.plate}}
   const si=SC.seatAt(x,y);if(si!=null)return {kind:'seat',i:si};
   if(y>window.innerHeight-170)return {kind:'hand'};return {kind:'table'}}
+/* 아이템 툴팁: 올리면 보이고, 누르면 고정 */
+let tipEl=null,tipFor=null,tipPinned=false;
+function showTip(el,pin){const c=el.dataset.h||el.dataset.c;if(!c||!isItem(c))return;const html=itemTip(c);if(!html)return;
+  if(!tipEl){tipEl=document.createElement('div');tipEl.className='tip';tipEl.setAttribute('role','tooltip');document.body.appendChild(tipEl)}
+  tipEl.innerHTML=html;tipFor=el;tipPinned=!!pin;tipEl.classList.add('show');
+  const r=el.getBoundingClientRect();const w=Math.min(300,window.innerWidth-24);tipEl.style.width=w+'px';
+  let x=r.left+r.width/2-w/2;x=Math.max(12,Math.min(window.innerWidth-w-12,x));tipEl.style.left=x+'px';
+  const th=tipEl.offsetHeight;const top=el.classList.contains("hcard")?Math.min(r.top,window.innerHeight-200):r.top;let y=top-th-14;if(y<12)y=r.bottom+12;tipEl.style.top=y+"px"}
+function hideTip(force){if(!tipEl)return;if(tipPinned&&!force)return;tipEl.classList.remove('show');tipFor=null;tipPinned=false}
+document.addEventListener('pointerover',e=>{if(drag&&drag.on){hideTip(true);return}const el=e.target.closest&&e.target.closest('.hcard,.mcard');if(el&&isItem(el.dataset.h||el.dataset.c||'')){if(!tipPinned||tipFor!==el)showTip(el,false)}});
+document.addEventListener('pointerout',e=>{const el=e.target.closest&&e.target.closest('.hcard,.mcard');if(el&&el===tipFor&&!tipPinned)hideTip()});
+document.addEventListener('pointerdown',e=>{if(tipPinned&&!(e.target.closest&&e.target.closest('.hcard,.mcard')))hideTip(true)});
+document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('.hcard,.mcard');if(el)showTip(el,false)});
+document.addEventListener('focusout',()=>hideTip());
+document.addEventListener('keydown',e=>{if(e.key==='Escape')hideTip(true)});
 function onClick(e){if(swallow){swallow=false;return}
+  {const it=e.target.closest('.hcard,.mcard');const c=it&&(it.dataset.h||it.dataset.c);if(c&&isItem(c)){if(tipPinned&&tipFor&&(tipFor.dataset.h||tipFor.dataset.c)===c)hideTip(true);else showTip(it,true)}}
   const h=e.target.closest('[data-h]');if(h){const c=h.dataset.h;sel.has(c)?sel.delete(c):sel.add(c);render();return}
   const b=e.target.closest('[data-a]');if(!b||b.disabled)return;Main.action(b.dataset.a,b.dataset,b)}
 
