@@ -28,6 +28,9 @@ function onState(){SC.sync();const ph=S.phase;const nw=pumpFx();
   if(ph==='clubs'&&!shown&&!choosing&&!clubBusy){SC.settleLined();SC.jumpChosen(S.die);SC.shot('zoom',8);shown=true}
   // 내 차례 알림
   const a=whoActs();const key=a+'|'+ph+'|'+(S.mg?S.mg.id:'');if(key!==lastActor){lastActor=key;if(a!=null&&mine(a)&&!['lobby','clubs','ended'].includes(ph))UI.toast(mySeats().length>1?`${seatName(a)} 차례!`:'내 차례!')}
+  // FPS: 메인 턴에서 내 차례가 아닐 때만(내가 막아야 하는 공격도 제외)
+  const myAct=a!=null&&mine(a);const fps=(ph==='main'||ph==='defense')&&mySeats().length>0&&!myAct;
+  if(!fps&&SC.isLocked())SC.resetLook();SC.setFps(fps);
   prevPhase=ph;UI.render()}
 function canPick(p){if(!S)return false;const i=ctl;
   if(p.kind==='deck')return S.phase==='main'&&S.turn&&S.turn.seat===i&&!S.turn.picked&&!ui.mode;
@@ -47,6 +50,35 @@ function pick(p){if(!canPick(p))return;
   if(p.kind==='door'){if(S.mg.step==='hide')action('vhide',{z:p.z});else action('vz',{z:p.z})}
   if(p.kind==='seat'){const it=ui.card;if(R(it)===11)action('atk',{t:p.i});else UI.toast('아래 버튼에서 대상을 골라 주세요')}}
 
+/* 손패 카드를 끌어 놓았을 때 */
+function dragHint(c,on){}
+function dropCard(c,z){const i=ctl;if(i==null||!S)return;const ph=S.phase;
+  if(ph!=='main'||!S.turn||S.turn.seat!==i){UI.toast('지금은 내 차례가 아니에요');return}
+  const t=S.turn,p=S.seats[i];if(z.kind==='hand')return;
+  if(t.peek){UI.toast('먼저 ♦J로 본 카드 중 1장을 고르세요');return}
+  if(!t.picked){UI.toast('먼저 덱이나 버림 줄에서 1장을 주우세요');return}
+  if(t.mustDiscard){if(z.kind!=='table'){UI.toast('버릴 카드는 테이블에 놓으세요');return}
+    act(st=>{if(st.phase!=='main'||st.turn.seat!==i||!st.turn.mustDiscard||!st.seats[i].hand.includes(c))return false;pickupDiscard(st,i,c)});return}
+  if(t.trim){if(z.kind!=='table')return;act(st=>{const P=st.seats[i];if(st.phase!=='main'||st.turn.seat!==i||!P.hand.includes(c))return false;
+      P.hand.splice(P.hand.indexOf(c),1);discardCard(st,i,c);log(st,`자리 ${i+1}: 손패 정리 ${cname(c)}.`);if(P.hand.length<=6)endTurn(st)});return}
+  if(z.kind==='tray'){if(isItem(c)&&!(U(c)==='D'&&R(c)>=12)){UI.toast('토큰 칸에는 숫자 카드(또는 ♦Q·♦K)를 놓으세요');return}
+    if(isItem(c)){sel.clear();sel.add(c);UI.toast(`${cname(c)}를 골랐어요 · 같은 문양 숫자 카드를 토큰 칸에 놓으세요`);UI.render();return}
+    if(t.token){UI.toast('이번 턴에 이미 토큰을 만들었어요');return}
+    const su=U(c),cost=costFor(S,i);const it=[...sel].find(x=>isItem(x)&&U(x)==='D');
+    if(it){const nums=p.hand.filter(x=>U(x)===su&&!isItem(x)).sort((a,b)=>R(a)-R(b));const need=R(it)===13?3:cost;const pickN=[c,...nums.filter(x=>x!==c)].slice(0,need);const cards=[...pickN,it];
+      const err=canMakeToken(S,i,cards);if(err){UI.toast(err);return}sel.clear();if(R(it)===12){ui={mode:'DQ',cards};UI.render();return}
+      act(st=>{if(st.phase!=='main'||canMakeToken(st,i,cards))return false;makeToken(st,i,cards)});return}
+    action('qtoken',{s:su});const nums=p.hand.filter(x=>U(x)===su&&!isItem(x));if(nums.length<cost)UI.toast(`${SNAME[su]} 숫자 카드가 ${cost}장 필요해요 (지금 ${nums.length}장)`);else{const e=canMakeToken(S,i,nums.sort((a,b)=>R(a)-R(b)).slice(0,cost));if(e)UI.toast(e)}return}
+  if(!isItem(c)){UI.toast('숫자 카드는 토큰 칸에 놓아 토큰을 만들어요');return}
+  if(t.item){UI.toast('이번 턴에 이미 아이템을 썼어요');return}
+  const su=U(c),r=R(c);
+  if(su==='S'){if(z.kind!=='seat'){UI.toast('♠ 공격 카드는 공격할 상대에게 끌어 놓으세요');return}
+    if(z.i===i)return;if(r===11){ui={mode:'target',card:c};action('atk',{t:z.i});return}
+    ui={mode:'target',card:c,only:z.i};sel.clear();sel.add(c);UI.render();UI.toast(r===12?'받을 문양을 고르세요':'뺏을 토큰을 고르세요');return}
+  if(su==='H'&&r===12){ui={mode:'HQ',card:c,hq:new Set()};sel.clear();UI.render();return}
+  if(su==='D'&&r===11){act(st=>{if(st.phase!=='main'||st.turn.seat!==i||st.turn.item)return false;useDJ(st,i,c)});return}
+  if(su==='D'){sel.clear();sel.add(c);UI.toast(`${cname(c)}는 토큰 칸에 숫자 카드와 함께 써요`);UI.render();return}
+  UI.toast(su==='H'?'♥J·♥K는 남의 공격을 막을 때 써요':'♣는 미니게임을 정할 때 써요')}
 function action(a,d){const i=ctl,s=selArr();const guard=(st,ph)=>st.phase===ph;
   switch(a){
     case 'sit':act(st=>{if(st.phase!=='lobby'||st.seats.length>=5)return false;st.seats.push({uid:me});log(st,'자리에 한 명 앉았다.')});break;
@@ -114,6 +146,6 @@ function action(a,d){const i=ctl,s=selArr();const guard=(st,ph)=>st.phase===ph;
     case 'rswap':{const su=d.s,it=s[0];act(st=>{if(!guard(st,'mg')||st.mg.id!=='race')return false;return raceSwap(st,i,it,su)})}break;
     case 'rflip':act(st=>{if(!guard(st,'mg')||st.mg.id!=='race')return false;return raceFlip(st,i)});break;
   }}
-return {onState,canPick,pick,action,rulesReady,rulesShown:()=>shown,clubPlaying:()=>clubBusy};
+return {dragHint,dropCard,onState,canPick,pick,action,rulesReady,rulesShown:()=>shown,clubPlaying:()=>clubBusy};
 })();
 window.addEventListener('DOMContentLoaded',()=>{UI.init();SC.init(document.getElementById('gl'));boot()});

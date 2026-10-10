@@ -77,7 +77,7 @@ const picks=new Set();
 function setPick(o,data){o.userData.pick=data;picks.add(o)}
 function clearPick(o){if(o.userData.pick){delete o.userData.pick;picks.delete(o)}}
 function stepPool(dt){for(const [k,e] of pool){const a=window.__fast?1:1-Math.exp(-dt*e.speed);
-  const tp=e.tp.clone();if(e.lift&&e.obj.position.distanceTo(e.tp)>1.2)tp.y+=e.lift*Math.min(1,e.obj.position.distanceTo(e.tp)/20);
+  const tp=e.tp.clone();if(!window.__fast&&e.lift&&e.obj.position.distanceTo(e.tp)>1.2)tp.y+=e.lift*Math.min(1,e.obj.position.distanceTo(e.tp)/20);
   e.obj.position.lerp(tp,a);e.obj.quaternion.slerp(e.tq,a);const s=e.obj.scale.x+(e.ts-e.obj.scale.x)*a;e.obj.scale.setScalar(s);
   if(e.dying&&s<0.02){scene.remove(e.obj);clearPick(e.obj);pool.delete(k)}}}
 
@@ -303,13 +303,18 @@ let yaw=0,pitch=0;
 /* 마우스가 있는 웹: 시선이 커서를 따라간다(끌 필요 없음). 터치 기기는 끌어서 둘러보기 */
 const MOUSE_LOOK=!!(window.matchMedia&&matchMedia('(hover: hover) and (pointer: fine)').matches);
 let lookT={yaw:0,pitch:0};
-function cursorLook(x,y){const nx=x/W*2-1,ny=y/H*2-1;const dz=v=>Math.sign(v)*Math.max(0,Math.abs(v)-.12)/.88;
-  lookT.yaw=dz(nx)*0.6;lookT.pitch=-dz(ny)*0.22}
+function cursorLook(x,y){const nx=x/W*2-1,ny=y/H*2-1;const dz=(v,e)=>Math.sign(v)*Math.max(0,Math.abs(v)-e)/(1-e);
+  lookT.yaw=dz(nx,.72)*0.75;lookT.pitch=ny<0?-dz(ny,.75)*0.3:0}
+/* FPS 시점: 남의 차례(메인 턴)에만 마우스를 잠근다 */
+let locked=false,fpsOK=false,lockFailed=false;
+function canLock(){return MOUSE_LOOK&&!lockFailed&&!!canvas.requestPointerLock}
+function setFps(ok){fpsOK=ok&&canLock();if(!fpsOK&&locked){locked=false;try{document.exitPointerLock()}catch(e){}}UI.fpsHint(fpsOK,locked)}
+function tryLock(){if(!fpsOK||locked)return;try{const r=canvas.requestPointerLock();if(r&&r.catch)r.catch(()=>{lockFailed=true;setFps(false)})}catch(e){lockFailed=true;setFps(false)}}
 function shot(name,speed=2.6){camS.shot=name;camS.speed=speed}
 function stepCam(dt){const s=SHOTS[camS.shot];const a=window.__fast?1:1-Math.exp(-dt*camS.speed);
   let look=s.l.clone();
-  if(MOUSE_LOOK&&camS.shot==='seat'){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
-  if(camS.shot==='seat'&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.2,Math.min(.5,ph));
+  if(MOUSE_LOOK&&camS.shot==='seat'&&!locked){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
+  if(camS.shot==='seat'&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.25,Math.min(.55,ph));
     look=s.p.clone().add(V(Math.sin(th)*Math.cos(ph)*r,Math.sin(ph)*r,-Math.cos(th)*Math.cos(ph)*r))}
   camS.p.lerp(s.p,a);camS.l.lerp(look,a);camS.fov+=(s.fov-camS.fov)*a;
   camera.position.copy(camS.p);camera.lookAt(camS.l);if(Math.abs(camera.fov-camS.fov)>.01){camera.fov=camS.fov;camera.updateProjectionMatrix()}}
@@ -317,15 +322,23 @@ function stepCam(dt){const s=SHOTS[camS.shot];const a=window.__fast?1:1-Math.exp
 /* ---------------- 입력: 끌어서 둘러보기, 눌러서 고르기 ---------------- */
 let down=null,hover=null;const ray=new T.Raycaster(),mv=new T.Vector2();
 function pickAt(x,y){const r=canvas.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);ray.setFromCamera(mv,camera);
-  const hits=ray.intersectObjects([...picks],false);for(const h of hits){let o=h.object;while(o&&!o.userData.pick)o=o.parent;if(o&&o.visible!==false&&Main.canPick(o.userData.pick))return o}return null}
+  const hits=ray.intersectObjects([...picks],true);for(const h of hits){let o=h.object;while(o&&!o.userData.pick)o=o.parent;if(o&&o.visible!==false&&Main.canPick(o.userData.pick))return o}return null}
 function bindInput(){
   canvas.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,yaw,pitch,moved:false};canvas.setPointerCapture(e.pointerId)});
   canvas.addEventListener('pointermove',e=>{if(down){const dx=e.clientX-down.x,dy=e.clientY-down.y;if(Math.hypot(dx,dy)>6)down.moved=true;
       if(down.moved&&camS.shot==='seat'&&!MOUSE_LOOK){yaw=down.yaw+dx*0.004;pitch=down.pitch-dy*0.003;yaw=Math.max(-1.6,Math.min(1.6,yaw));pitch=Math.max(-.5,Math.min(.6,pitch))}return}
     const o=pickAt(e.clientX,e.clientY);if(o!==hover){setHover(o)}});
-  canvas.addEventListener('pointerup',e=>{const d=down;down=null;if(!d||d.moved)return;const o=pickAt(e.clientX,e.clientY);if(o)Main.pick(o.userData.pick)});
+  canvas.addEventListener('pointerup',e=>{const d=down;down=null;if(!d||d.moved)return;
+    if(locked){const o=pickAt(W/2,H/2);if(o)Main.pick(o.userData.pick);return}
+    if(fpsOK){tryLock();return}
+    const o=pickAt(e.clientX,e.clientY);if(o)Main.pick(o.userData.pick)});
+  document.addEventListener('pointerlockchange',()=>{const was=locked;locked=document.pointerLockElement===canvas;
+    if(locked){yaw=yaw;}else if(was&&!fpsOK){resetLook()}UI.fpsHint(fpsOK,locked)});
+  document.addEventListener('pointerlockerror',()=>{lockFailed=true;setFps(false)});
+  document.addEventListener('mousemove',e=>{if(!locked)return;yaw+=e.movementX*0.0024;pitch-=e.movementY*0.002;
+    if(yaw>Math.PI)yaw-=2*Math.PI;if(yaw<-Math.PI)yaw+=2*Math.PI;pitch=Math.max(-.9,Math.min(.6,pitch))});
   canvas.addEventListener('pointerleave',()=>setHover(null));
-  if(MOUSE_LOOK){window.addEventListener('pointermove',e=>{if(e.pointerType==='mouse')cursorLook(e.clientX,e.clientY)});
+  if(MOUSE_LOOK){window.addEventListener('pointermove',e=>{if(e.pointerType==='mouse'&&!locked)cursorLook(e.clientX,e.clientY)});
     document.addEventListener('mouseleave',()=>{lookT.yaw=0;lookT.pitch=0});window.addEventListener('blur',()=>{lookT.yaw=0;lookT.pitch=0})}
   canvas.addEventListener('dblclick',()=>resetLook());
 }
@@ -457,5 +470,7 @@ function sync(){if(!S)return;if(S.seats&&S.phase!=='lobby')buildSeats();else{for
 
 function goStation(id){if(!stations.has(id))return false;stationShot(id);shot('station',1.4);return true}
 function lightsMain(){if(mgSpot)mgSpot.intensity=0}
-return {init,sync,shot,goStation,lightsMain,resetLook,playIntro,playChoose,settleLined,jumpChosen,alertScreen,setScreen,anchors,worldToScreen,deckScreen,cut,flop:()=>flop,get camShot(){return camS.shot}};
+function seatAt(x,y){const r=canvas.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);ray.setFromCamera(mv,camera);
+  for(const h of ray.intersectObjects([...avatars.values()],true)){let o=h.object;while(o&&!(o.userData.pick&&o.userData.pick.kind==='seat'))o=o.parent;if(o)return o.userData.pick.i}return null}
+return {seatAt,setFps,isLocked:()=>locked,init,sync,shot,goStation,lightsMain,resetLook,playIntro,playChoose,settleLined,jumpChosen,alertScreen,setScreen,anchors,worldToScreen,deckScreen,cut,flop:()=>flop,get camShot(){return camS.shot}};
 })();

@@ -16,7 +16,7 @@ let hud,platesEl,mainEl,screenEl,cutEl,fxEl,toastEl;
 let fatalMsg=null;
 function init(){hud=$('#hud');hud.innerHTML=`<div id="plates"></div><div id="mainui"></div><div id="screen" class="screen" aria-live="polite"></div><div id="cutin" class="cutin"></div><div id="fxl"></div><div id="toast" class="toast" role="status"></div>`;
   platesEl=$('#plates');mainEl=$('#mainui');screenEl=$('#screen');cutEl=$('#cutin');fxEl=$('#fxl');toastEl=$('#toast');
-  hud.addEventListener('click',onClick);hud.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.hcard,.mcard.click')){e.preventDefault();e.target.click()}})}
+  hud.addEventListener('click',onClick);hud.addEventListener('pointerdown',dragStart);window.addEventListener('pointermove',dragMove,{passive:false});window.addEventListener('pointerup',dragEnd);hud.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.hcard,.mcard.click')){e.preventDefault();e.target.click()}})}
 function fatal(m){fatalMsg=m;mainEl.innerHTML=`<div class="panel lobby"><h1>큐빅 파티</h1><p>${esc(m)}</p></div>`}
 
 /* ---------- 이름표 ---------- */
@@ -40,9 +40,9 @@ function renderHand(i,tuck){if(i==null)return '';const h=handSort(S.seats[i].han
 /* ---------- 메인 턴 조작 ---------- */
 function turnActs(i){const t=S.turn,p=S.seats[i];const s=selArr();
   if(t.peek)return {pill:'♦J: 덱 위 카드 중 1장을 고르세요',center:`<div class="panel center-panel"><div class="line" style="text-align:center;margin-bottom:12px">나머지는 버림 줄로 갑니다</div><div class="mini-cards">${t.peek.map(c=>mc(c,{cls:'click',attr:`data-a="dj" data-c="${c}" tabindex="0" role="button"`})).join('')}</div></div>`};
-  if(t.mustDiscard)return {pill:`${cname(t.justTook)}을 주웠어요 · 버릴 카드 1장을 고르세요`,acts:`<button class="btn primary" data-a="pdisc" ${s.length===1?'':'disabled'}>고른 카드 버리기</button>`};
-  if(t.trim){const over=p.hand.length-6;return {pill:`손패가 6장을 넘어요 · ${over}장을 골라 버리세요`,acts:`<button class="btn primary" data-a="trim" ${s.length===over?'':'disabled'}>${s.length}/${over}장 버리고 턴 끝</button>`}}
-  if(ui.mode==='target'){const it=ui.card;const others=S.seats.map((_,k)=>k).filter(k=>k!==i);let a='';
+  if(t.mustDiscard)return {pill:`${cname(t.justTook)}을 주웠어요 · 버릴 카드를 테이블로 끌어 놓으세요`,acts:s.length===1?`<button class="btn sm" data-a="pdisc">고른 카드 버리기</button>`:''};
+  if(t.trim){const over=p.hand.length-6;return {pill:`손패가 6장을 넘어요 · ${over}장을 테이블로 끌어 버리세요`,acts:`<button class="btn primary" data-a="trim" ${s.length===over?'':'disabled'}>${s.length}/${over}장 버리고 턴 끝</button>`}}
+  if(ui.mode==='target'){const it=ui.card;const others=S.seats.map((_,k)=>k).filter(k=>k!==i&&(ui.only==null||k===ui.only));let a='';
     if(R(it)===12)a+=`<div class="group">${SUITS.map(su=>`<button class="btn sm ${ui.suit===su?'primary':''}" data-a="tsuit" data-s="${su}">${SYM[su]} ${SNAME[su]}</button>`).join('')}</div>`;
     a+=`<div class="group">${others.map(k=>R(it)===13?S.seats[k].tokens.filter(c=>!p.tokens.includes(c)).map(c=>`<button class="btn sm" data-a="atk" data-t="${k}" data-s="${c}">${nm(k)} <span class="tok ${c}"></span></button>`).join(''):`<button class="btn sm" data-a="atk" data-t="${k}" ${R(it)===12&&!ui.suit?'disabled':''}>${nm(k)}</button>`).join('')}<button class="btn sm" data-a="cancel">취소</button></div>`;
     return {pill:`${cname(it)} · 공격할 사람을 고르세요${R(it)===12?' (받을 문양도)':''}`,acts:a}}
@@ -59,7 +59,7 @@ function turnActs(i){const t=S.turn,p=S.seats[i];const s=selArr();
     else note=`${cname(one)}: ${su==='H'?'남의 공격을 막을 때 써요.':su==='C'?'미니게임을 정할 때 써요.':'토큰 만들 카드와 함께 고르세요.'}`}
   if(s.length&&tokErr&&!one)note=tokErr;
   a+=`<button class="btn ${t.picked?'primary':''}" data-a="end" ${t.picked?'':'disabled'}>턴 끝내기</button>`;
-  return {pill:t.picked?'토큰을 만들거나 아이템을 쓰고, 턴을 끝내세요':'덱이나 버림 줄에서 1장을 주우세요',sub:[[t.picked?'줍기 완료':'줍기','pick',!t.picked],[`아이템 ${t.item?1:0}/1`,'',false],[`토큰 ${t.token?1:0}/1 · 다음 ${costFor(S,i)}장`,'',false]],acts:a,note:note||(!t.picked?'테이블의 덱이나 버림 줄 카드를 눌러도 돼요':'')}}
+  return {pill:t.picked?'카드를 끌어 토큰 칸에 놓으면 토큰, 상대에게 놓으면 공격':'테이블의 덱이나 버림 줄 카드를 눌러 주우세요',sub:[[t.picked?'줍기 완료':'줍기','pick',!t.picked],[`아이템 ${t.item?1:0}/1`,'',false],[`토큰 ${t.token?1:0}/1 · 다음 ${costFor(S,i)}장`,'',false]],acts:a,note:note||''}}
 
 /* ---------- 미니게임 HUD ---------- */
 function mgPanel(){const m=S.mg,def=MG[m.id];const i=ctl;let body='';const s=selArr();const selItem=s.length===1&&isItem(s[0])?s[0]:null;
@@ -146,12 +146,13 @@ function render(){if(fatalMsg||!S)return;renderPlates();
     extra=`<div class="panel" style="position:absolute;left:20px;top:74px;width:260px;pointer-events:auto"><div style="font-size:13px;letter-spacing:1px;color:var(--brass);margin-bottom:8px">미니게임 결과</div>${(S.lastRank||[]).map((g,k)=>`<div style="display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center;margin:4px 0"><span class="disp" style="font-size:${k?18:24}px;color:${k?'var(--muted)':'var(--brass)'}">${k+1}위</span><span>${g.map(nm).join(' · ')}</span></div>`).join('')}</div>
      <div style="position:absolute;left:50%;top:${window.innerWidth<=720?120:96}px;transform:translateX(-50%);display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;padding:8px 12px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--line);max-width:94vw;pointer-events:auto"><span style="font-size:13px;color:var(--muted)">고르는 순서</span>${Rw.order.map((k,j)=>`<span class="chip" style="font-size:12px;${j===Rw.pi?'background:var(--brass);color:var(--brass-ink);border-color:var(--brass)':j<Rw.pi?'opacity:.4':''}">${nm(k)}</span>`).join('')}</div>`;handTuck=false}
   else if(ph==='ended'){center=`<div class="panel center-panel" style="text-align:center"><div class="disp" style="font-size:20px;color:var(--brass)">우승</div><div class="disp" style="font-size:52px;margin:6px 0 16px">${S.winners.map(nm).join(' · ')}</div><div class="btnrow"><button class="btn primary" data-a="restart">같은 자리로 새 게임</button><button class="btn" data-a="tolobby">로비로</button></div></div>`}
-  const tray=i!=null&&!['mg','clubs'].includes(ph)?`<div class="tray"><span class="lbl">내 토큰 · ${nm(i)}</span><div class="row">${[0,1,2].concat(S.ot?[3]:[]).map(k=>{const t=S.seats[i].tokens[k];return `<span class="cube ${t||'empty'}"></span>`}).join('')}</div></div>`:'';
+  const tray=i!=null&&!['mg','clubs'].includes(ph)?`<div class="tray dz" data-dz="tray"><span class="lbl">내 토큰 · ${nm(i)} · 카드를 끌어 놓으면 토큰</span><div class="row">${[0,1,2].concat(S.ot?[3]:[]).map(k=>{const t=S.seats[i].tokens[k];return `<span class="cube ${t||'empty'}"></span>`}).join('')}</div></div>`:'';
   const prompt=`<div class="prompt"><div class="pill${pillWait?' wait':''}">${esc(pill)}</div>${sub?`<div class="subchips">${sub.map(([t,_,on])=>`<span class="chip${on?' on':''}">${esc(t)}</span>`).join('')}</div>`:''}</div>`;
   const actsEl=acts||note?`<div class="acts">${note?`<div class="note">${esc(note)}</div>`:''}<div class="group">${acts}</div></div>`:'';
   const notice=flashMsg?`<div class="notice" role="alert">${esc(flashMsg)}</div>`:'';
   const drawer=ui.log?`<div class="panel drawer">${S.log.slice(0,60).map(l=>`<div>${esc(l)}</div>`).join('')}<div style="margin-top:10px"><button class="btn sm danger" data-a="${ui.confirmReset?'reset2':'reset1'}">${ui.confirmReset?'정말 테이블을 비울까요? 한 번 더':'테이블 비우기'}</button></div></div>`:'';
-  mainEl.innerHTML=topl+topr+(ph==='clubs'?'':prompt)+notice+extra+tray+itemTray+(i!=null?renderHand(i,handTuck):'')+actsEl+center+drawer;
+  const dz=ph==='main'&&i!=null&&S.turn.seat===i&&S.turn.picked?`<div class="dz" data-dz="table"><span>테이블에 놓기</span></div>`:'';
+  mainEl.innerHTML=dz+topl+topr+(ph==='clubs'?'':prompt)+notice+extra+tray+itemTray+(i!=null?renderHand(i,handTuck):'')+actsEl+center+drawer;
   // 규칙 화면
   if(ph==='clubs'&&Main.rulesShown()&&!Main.clubPlaying()){screenEl.innerHTML=rulesHTML();screenEl.classList.add('show')}
   else if(!Main.clubPlaying()){screenEl.classList.remove('show','alerting')}
@@ -192,9 +193,28 @@ async function clubShow(f){screenEl.classList.add('show','alerting');if(!screenE
   cutEl.classList.add('show');await new Promise(r=>setTimeout(r,1900));cutEl.classList.remove('show');screenEl.classList.remove('show','alerting')}
 
 /* ---------- 입력 ---------- */
-function onClick(e){
+/* ---------- 손패 끌기: 테이블로 버리기, 토큰 칸으로 토큰, 상대에게 공격 ---------- */
+let drag=null,swallow=false;
+function dragStart(e){const h=e.target.closest('.hcard');if(!h||e.button>0)return;drag={c:h.dataset.h,el:h,x:e.clientX,y:e.clientY,on:false}}
+function dragMove(e){if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(!drag.on){if(Math.hypot(dx,dy)<10)return;drag.on=true;const g=drag.el.cloneNode(true);g.classList.add('ghost');g.classList.remove('new','sel');document.body.appendChild(g);drag.g=g;drag.el.style.opacity='.25';document.body.classList.add('dragging');Main.dragHint(drag.c,true)}
+  drag.g.style.left=(e.clientX-59)+'px';drag.g.style.top=(e.clientY-83)+'px';
+  const z=dropZone(e.clientX,e.clientY);document.querySelectorAll('.dz').forEach(x=>x.classList.toggle('hot',x.dataset.dz===z.kind));
+  drag.g.classList.toggle('over',z.kind!=='hand');e.preventDefault()}
+function dragEnd(e){const d=drag;drag=null;if(!d)return;if(!d.on)return;swallow=true;setTimeout(()=>swallow=false,0);
+  d.g.remove();d.el.style.opacity='';document.body.classList.remove('dragging');Main.dragHint(d.c,false);
+  Main.dropCard(d.c,dropZone(e.clientX,e.clientY))}
+function dropZone(x,y){const el=document.elementFromPoint(x,y);
+  if(el){const tr=el.closest('.tray');if(tr)return {kind:'tray'};const pl=el.closest('[data-plate]');if(pl)return {kind:'seat',i:+pl.dataset.plate}}
+  const si=SC.seatAt(x,y);if(si!=null)return {kind:'seat',i:si};
+  if(y>window.innerHeight-170)return {kind:'hand'};return {kind:'table'}}
+function onClick(e){if(swallow){swallow=false;return}
   const h=e.target.closest('[data-h]');if(h){const c=h.dataset.h;sel.has(c)?sel.delete(c):sel.add(c);render();return}
   const b=e.target.closest('[data-a]');if(!b||b.disabled)return;Main.action(b.dataset.a,b.dataset,b)}
 
-return {init,render,fatal,placePlates,queueFx,toast,clubShow,shake};
+let fpsEl=null;
+function fpsHint(ok,locked){if(!fpsEl){fpsEl=document.createElement('div');fpsEl.id='fpshint';hud.appendChild(fpsEl)}
+  fpsEl.className=locked?'fps on':ok?'fps':'fps off';
+  fpsEl.innerHTML=locked?'<div class="xh" aria-hidden="true"></div><div class="fpstip">Esc · 커서 꺼내기</div>':ok?'<div class="fpstip">화면을 클릭하면 1인칭 시점 (마우스로 둘러보기)</div>':''}
+return {dropZone,fpsHint,init,render,fatal,placePlates,queueFx,toast,clubShow,shake};
 })();

@@ -54,7 +54,7 @@ function autoCtl(){
   if(a!=null&&mine(a))ctl=a;else if(ctl==null||!mine(ctl))ctl=ms[0];
 }
 /* 화면 기준 자리: 내가 앉은 첫 자리(관전이면 0) */
-function viewSeat(){const ms=mySeats();return ms.length?ms[0]:0}
+function viewSeat(){const ms=mySeats();if(!ms.length)return 0;return ctl!=null&&ms.includes(ctl)?ctl:ms[0]}
 
 async function boot(){
   try{[db,user]=await Promise.all([claude.use('db'),claude.use('user')])}catch(e){}
