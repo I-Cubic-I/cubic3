@@ -1086,8 +1086,9 @@ function tryLock(){if(!fpsOK||locked)return;try{const r=canvas.requestPointerLoc
 function shot(name,speed=2.6){camS.shot=name;camS.speed=speed}
 function stepCam(dt){const s=SHOTS[camS.shot];const a=window.__fast?1:1-Math.exp(-dt*camS.speed);
   let look=s.l.clone();
-  if(MOUSE_LOOK&&(camS.shot==='seat'||camS.shot==='myturn')&&!locked){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
-  if((camS.shot==='seat'||camS.shot==='myturn')&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.25,Math.min(.55,ph));
+  if(camS.shot==='myturn'){yaw=0;pitch=0}
+  if(MOUSE_LOOK&&camS.shot==='seat'&&!locked){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
+  if(camS.shot==='seat'&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.25,Math.min(.55,ph));
     look=s.p.clone().add(V(Math.sin(th)*Math.cos(ph)*r,Math.sin(ph)*r,-Math.cos(th)*Math.cos(ph)*r))}
   camS.p.lerp(s.p,a);camS.l.lerp(look,a);camS.fov+=(s.fov-camS.fov)*a;
   camera.position.copy(camS.p);camera.lookAt(camS.l);if(Math.abs(camera.fov-camS.fov)>.01){camera.fov=camS.fov;camera.updateProjectionMatrix()}}
