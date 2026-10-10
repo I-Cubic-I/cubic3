@@ -327,7 +327,7 @@ function bindInput(){
   canvas.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,yaw,pitch,moved:false};canvas.setPointerCapture(e.pointerId)});
   canvas.addEventListener('pointermove',e=>{if(down){const dx=e.clientX-down.x,dy=e.clientY-down.y;if(Math.hypot(dx,dy)>6)down.moved=true;
       if(down.moved&&camS.shot==='seat'&&!MOUSE_LOOK){yaw=down.yaw+dx*0.004;pitch=down.pitch-dy*0.003;yaw=Math.max(-1.6,Math.min(1.6,yaw));pitch=Math.max(-.5,Math.min(.6,pitch))}return}
-    const o=pickAt(e.clientX,e.clientY);if(o!==hover){setHover(o)}});
+    const o=pickAt(e.clientX,e.clientY);if(o!==hover){setHover(o)}tipAt(e.clientX,e.clientY)});
   canvas.addEventListener('pointerup',e=>{const d=down;down=null;if(!d||d.moved)return;
     if(locked){const o=pickAt(W/2,H/2);if(o)Main.pick(o.userData.pick);return}
     if(fpsOK){tryLock();return}
@@ -335,13 +335,19 @@ function bindInput(){
   document.addEventListener('pointerlockchange',()=>{const was=locked;locked=document.pointerLockElement===canvas;
     if(locked){yaw=yaw;}else if(was&&!fpsOK){resetLook()}UI.fpsHint(fpsOK,locked)});
   document.addEventListener('pointerlockerror',()=>{lockFailed=true;setFps(false)});
-  document.addEventListener('mousemove',e=>{if(!locked)return;yaw+=e.movementX*0.0024;pitch-=e.movementY*0.002;
+  document.addEventListener('mousemove',e=>{if(!locked)return;tipAt(W/2,H/2);yaw+=e.movementX*0.0024;pitch-=e.movementY*0.002;
     if(yaw>Math.PI)yaw-=2*Math.PI;if(yaw<-Math.PI)yaw+=2*Math.PI;pitch=Math.max(-.9,Math.min(.6,pitch))});
-  canvas.addEventListener('pointerleave',()=>setHover(null));
+  canvas.addEventListener('pointerleave',()=>{setHover(null);UI.tip3d(null)});
   if(MOUSE_LOOK){window.addEventListener('pointermove',e=>{if(e.pointerType==='mouse'&&!locked)cursorLook(e.clientX,e.clientY)});
     document.addEventListener('mouseleave',()=>{lookT.yaw=0;lookT.pitch=0});window.addEventListener('blur',()=>{lookT.yaw=0;lookT.pitch=0})}
   canvas.addEventListener('dblclick',()=>resetLook());
 }
+/* 테이블 위 앞면 아이템 카드: 마우스를 올리면 효과 툴팁 */
+function cardScreen(c){const e=pool.get('c:'+c);return e?worldToScreen(e.obj.position):null}
+function tipAt(x,y){const r=canvas.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);ray.setFromCamera(mv,camera);
+  const objs=[];for(const [,e] of pool){const c=e.obj.userData.card;if(c&&isItem(c)&&!e.dying)objs.push(e.obj)}
+  let found=null;for(const h of ray.intersectObjects(objs,true)){let o=h.object;while(o&&!o.userData.card)o=o.parent;if(o){found=o.userData.card;break}}
+  UI.tip3d(found,x,y)}
 function setHover(o){if(hover)glow(hover,false);hover=o;if(o)glow(o,true);canvas.style.cursor=o?'pointer':(MOUSE_LOOK?'default':'grab')}
 function glow(o,on){o.traverse(m=>{if(m.isMesh&&m.material&&!Array.isArray(m.material)&&m.material.emissive){if(on){m.userData.em=m.material.emissive.getHex();m.material=m.material.clone();m.material.emissive.set('#5a4612')}else if(m.userData.em!=null){m.material.emissive.setHex(m.userData.em)}}})}
 function resetLook(){yaw=0;pitch=0;lookT.yaw=0;lookT.pitch=0}
@@ -472,5 +478,5 @@ function goStation(id){if(!stations.has(id))return false;stationShot(id);shot('s
 function lightsMain(){if(mgSpot)mgSpot.intensity=0}
 function seatAt(x,y){const r=canvas.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);ray.setFromCamera(mv,camera);
   for(const h of ray.intersectObjects([...avatars.values()],true)){let o=h.object;while(o&&!(o.userData.pick&&o.userData.pick.kind==='seat'))o=o.parent;if(o)return o.userData.pick.i}return null}
-return {seatAt,setFps,isLocked:()=>locked,init,sync,shot,goStation,lightsMain,resetLook,playIntro,playChoose,settleLined,jumpChosen,alertScreen,setScreen,anchors,worldToScreen,deckScreen,cut,flop:()=>flop,get camShot(){return camS.shot}};
+return {cardScreen,seatAt,setFps,isLocked:()=>locked,init,sync,shot,goStation,lightsMain,resetLook,playIntro,playChoose,settleLined,jumpChosen,alertScreen,setScreen,anchors,worldToScreen,deckScreen,cut,flop:()=>flop,get camShot(){return camS.shot}};
 })();

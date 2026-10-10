@@ -1099,7 +1099,7 @@ function bindInput(){
   canvas.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,yaw,pitch,moved:false};canvas.setPointerCapture(e.pointerId)});
   canvas.addEventListener('pointermove',e=>{if(down){const dx=e.clientX-down.x,dy=e.clientY-down.y;if(Math.hypot(dx,dy)>6)down.moved=true;
       if(down.moved&&camS.shot==='seat'&&!MOUSE_LOOK){yaw=down.yaw+dx*0.004;pitch=down.pitch-dy*0.003;yaw=Math.max(-1.6,Math.min(1.6,yaw));pitch=Math.max(-.5,Math.min(.6,pitch))}return}
-    const o=pickAt(e.clientX,e.clientY);if(o!==hover){setHover(o)}});
+    const o=pickAt(e.clientX,e.clientY);if(o!==hover){setHover(o)}tipAt(e.clientX,e.clientY)});
   canvas.addEventListener('pointerup',e=>{const d=down;down=null;if(!d||d.moved)return;
     if(locked){const o=pickAt(W/2,H/2);if(o)Main.pick(o.userData.pick);return}
     if(fpsOK){tryLock();return}
@@ -1107,13 +1107,19 @@ function bindInput(){
   document.addEventListener('pointerlockchange',()=>{const was=locked;locked=document.pointerLockElement===canvas;
     if(locked){yaw=yaw;}else if(was&&!fpsOK){resetLook()}UI.fpsHint(fpsOK,locked)});
   document.addEventListener('pointerlockerror',()=>{lockFailed=true;setFps(false)});
-  document.addEventListener('mousemove',e=>{if(!locked)return;yaw+=e.movementX*0.0024;pitch-=e.movementY*0.002;
+  document.addEventListener('mousemove',e=>{if(!locked)return;tipAt(W/2,H/2);yaw+=e.movementX*0.0024;pitch-=e.movementY*0.002;
     if(yaw>Math.PI)yaw-=2*Math.PI;if(yaw<-Math.PI)yaw+=2*Math.PI;pitch=Math.max(-.9,Math.min(.6,pitch))});
-  canvas.addEventListener('pointerleave',()=>setHover(null));
+  canvas.addEventListener('pointerleave',()=>{setHover(null);UI.tip3d(null)});
   if(MOUSE_LOOK){window.addEventListener('pointermove',e=>{if(e.pointerType==='mouse'&&!locked)cursorLook(e.clientX,e.clientY)});
     document.addEventListener('mouseleave',()=>{lookT.yaw=0;lookT.pitch=0});window.addEventListener('blur',()=>{lookT.yaw=0;lookT.pitch=0})}
   canvas.addEventListener('dblclick',()=>resetLook());
 }
+/* 테이블 위 앞면 아이템 카드: 마우스를 올리면 효과 툴팁 */
+function cardScreen(c){const e=pool.get('c:'+c);return e?worldToScreen(e.obj.position):null}
+function tipAt(x,y){const r=canvas.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);ray.setFromCamera(mv,camera);
+  const objs=[];for(const [,e] of pool){const c=e.obj.userData.card;if(c&&isItem(c)&&!e.dying)objs.push(e.obj)}
+  let found=null;for(const h of ray.intersectObjects(objs,true)){let o=h.object;while(o&&!o.userData.card)o=o.parent;if(o){found=o.userData.card;break}}
+  UI.tip3d(found,x,y)}
 function setHover(o){if(hover)glow(hover,false);hover=o;if(o)glow(o,true);canvas.style.cursor=o?'pointer':(MOUSE_LOOK?'default':'grab')}
 function glow(o,on){o.traverse(m=>{if(m.isMesh&&m.material&&!Array.isArray(m.material)&&m.material.emissive){if(on){m.userData.em=m.material.emissive.getHex();m.material=m.material.clone();m.material.emissive.set('#5a4612')}else if(m.userData.em!=null){m.material.emissive.setHex(m.userData.em)}}})}
 function resetLook(){yaw=0;pitch=0;lookT.yaw=0;lookT.pitch=0}
@@ -1244,7 +1250,7 @@ function goStation(id){if(!stations.has(id))return false;stationShot(id);shot('s
 function lightsMain(){if(mgSpot)mgSpot.intensity=0}
 function seatAt(x,y){const r=canvas.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);ray.setFromCamera(mv,camera);
   for(const h of ray.intersectObjects([...avatars.values()],true)){let o=h.object;while(o&&!(o.userData.pick&&o.userData.pick.kind==='seat'))o=o.parent;if(o)return o.userData.pick.i}return null}
-return {seatAt,setFps,isLocked:()=>locked,init,sync,shot,goStation,lightsMain,resetLook,playIntro,playChoose,settleLined,jumpChosen,alertScreen,setScreen,anchors,worldToScreen,deckScreen,cut,flop:()=>flop,get camShot(){return camS.shot}};
+return {cardScreen,seatAt,setFps,isLocked:()=>locked,init,sync,shot,goStation,lightsMain,resetLook,playIntro,playChoose,settleLined,jumpChosen,alertScreen,setScreen,anchors,worldToScreen,deckScreen,cut,flop:()=>flop,get camShot(){return camS.shot}};
 })();
 
 /* ================= 화면 위 UI와 흐름 연출 ================= */
@@ -1255,7 +1261,7 @@ const ICON={
   eye:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/></svg>',
 };
 const SUITN={S:'♠',H:'♥',D:'♦',C:'♣'};
-const mc=(c,o={})=>c?`<div class="mcard ${U(c)}${o.cls?' '+o.cls:''}" ${o.attr||''} title="${cname(c)}">${RL(R(c))}<small>${SYM[U(c)]}</small></div>`:`<div class="mcard back${o.cls?' '+o.cls:''}" ${o.attr||''}>?</div>`;
+const mc=(c,o={})=>c?`<div class="mcard ${U(c)}${o.cls?' '+o.cls:''}" ${o.attr||''} ${/data-[ch]=/.test(o.attr||'')?'':`data-c="${c}"`} title="${isItem(c)?'':cname(c)}">${RL(R(c))}<small>${SYM[U(c)]}</small></div>`:`<div class="mcard back${o.cls?' '+o.cls:''}" ${o.attr||''}>?</div>`;
 const nm=i=>esc(seatName(i));
 const handSort=h=>h.slice().sort((a,b)=>(U(a)>U(b)?1:U(a)<U(b)?-1:R(a)-R(b)));
 const selArr=()=>[...sel];
@@ -1394,7 +1400,7 @@ function rulesHTML(){const id=S.board[S.die-1],def=MG[id];const rd=S.ready||{};c
 let SC_LOOK=id=>({hold:['#f0b48f','#cf6f48'],bomb:['#f7a3a3','#c94242'],auction:['#f2d27a','#c79a1c'],balloon:['#ffb35c','#e8853a'],rps:['#a9bdff','#6a7fe0'],vault:['#b9c3d6','#6f7d99'],count:['#9cc3ea','#4f86c6'],race:['#8fd0a4','#3f9a63']}[id]||['#cfd4dc','#7b8494']);
 
 /* ---------- 전체 그리기 ---------- */
-function render(){if(fatalMsg||!S)return;renderPlates();if(tipFor&&!document.body.contains(tipFor)){const c=tipFor.dataset.h||tipFor.dataset.c;const pinned=tipPinned;hideTip(true);setTimeout(()=>{const el=document.querySelector(`.hcard[data-h="${c}"],.itemtray .mcard[data-h="${c}"]`);if(el&&pinned)showTip(el,true)},0)}
+function render(){if(fatalMsg||!S)return;renderPlates();if(tipFor&&tipFor!=="3d"&&!document.body.contains(tipFor)){const c=tipFor.dataset.h||tipFor.dataset.c;const pinned=tipPinned;hideTip(true);setTimeout(()=>{const el=document.querySelector(`.hcard[data-h="${c}"],.itemtray .mcard[data-h="${c}"]`);if(el&&pinned)showTip(el,true)},0)}
   if(S.phase==='lobby'){screenEl.classList.remove('show');mainEl.innerHTML=lobbyHTML();return}
   const i=ctl;const actor=whoActs();const ph=S.phase;
   let pill='',pillWait=false,sub=null,acts='',note='',center='',extra='';
@@ -1480,10 +1486,17 @@ function dropZone(x,y){const el=document.elementFromPoint(x,y);
 let tipEl=null,tipFor=null,tipPinned=false;
 function showTip(el,pin){const c=el.dataset.h||el.dataset.c;if(!c||!isItem(c))return;const html=itemTip(c);if(!html)return;
   if(!tipEl){tipEl=document.createElement('div');tipEl.className='tip';tipEl.setAttribute('role','tooltip');document.body.appendChild(tipEl)}
-  tipEl.innerHTML=html;tipFor=el;tipPinned=!!pin;tipEl.classList.add('show');
+  tipEl.innerHTML=html;tipEl.dataset.c='';tipFor=el;tipPinned=!!pin;tipEl.classList.add('show');
   const r=el.getBoundingClientRect();const w=Math.min(300,window.innerWidth-24);tipEl.style.width=w+'px';
   let x=r.left+r.width/2-w/2;x=Math.max(12,Math.min(window.innerWidth-w-12,x));tipEl.style.left=x+'px';
   const th=tipEl.offsetHeight;const top=el.classList.contains("hcard")?Math.min(r.top,window.innerHeight-200):r.top;let y=top-th-14;if(y<12)y=r.bottom+12;tipEl.style.top=y+"px"}
+function tip3d(c,x,y){if(tipPinned&&tipFor)return;
+  if(!c){if(tipFor==='3d')hideTip(true);return}
+  const html=itemTip(c);if(!html)return;
+  if(!tipEl){tipEl=document.createElement('div');tipEl.className='tip';tipEl.setAttribute('role','tooltip');document.body.appendChild(tipEl)}
+  if(tipEl.dataset.c!==c){tipEl.innerHTML=html;tipEl.dataset.c=c}tipFor='3d';tipEl.classList.add('show');
+  const w=Math.min(300,window.innerWidth-24);tipEl.style.width=w+'px';const th=tipEl.offsetHeight;
+  let lx=Math.max(12,Math.min(window.innerWidth-w-12,x+18));let ly=y-th-18;if(ly<12)ly=y+24;tipEl.style.left=lx+'px';tipEl.style.top=ly+'px'}
 function hideTip(force){if(!tipEl)return;if(tipPinned&&!force)return;tipEl.classList.remove('show');tipFor=null;tipPinned=false}
 document.addEventListener('pointerover',e=>{if(drag&&drag.on){hideTip(true);return}const el=e.target.closest&&e.target.closest('.hcard,.mcard');if(el&&isItem(el.dataset.h||el.dataset.c||'')){if(!tipPinned||tipFor!==el)showTip(el,false)}});
 document.addEventListener('pointerout',e=>{const el=e.target.closest&&e.target.closest('.hcard,.mcard');if(el&&el===tipFor&&!tipPinned)hideTip()});
@@ -1500,7 +1513,7 @@ let fpsEl=null;
 function fpsHint(ok,locked){if(!fpsEl){fpsEl=document.createElement('div');fpsEl.id='fpshint';hud.appendChild(fpsEl)}
   fpsEl.className=locked?'fps on':ok?'fps':'fps off';
   fpsEl.innerHTML=locked?'<div class="xh" aria-hidden="true"></div><div class="fpstip">Esc · 커서 꺼내기</div>':ok?'<div class="fpstip">화면을 클릭하면 1인칭 시점 (마우스로 둘러보기)</div>':''}
-return {dropZone,fpsHint,init,render,fatal,placePlates,queueFx,toast,clubShow,shake};
+return {tip3d,dropZone,fpsHint,init,render,fatal,placePlates,queueFx,toast,clubShow,shake};
 })();
 
 /* ================= 흐름: 상태·연출 이벤트 → 3D 연출과 화면 ================= */
