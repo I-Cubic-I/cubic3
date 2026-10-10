@@ -293,6 +293,7 @@ function buildDie(){die=makeDie();die.position.set(DIE.x,TY-10,DIE.z);die.visibl
 /* ---------------- 카메라 ---------------- */
 const SHOTS={
   seat:{p:V(0,150,128),l:V(0,66,-24),fov:52},
+  myturn:{p:V(-8,124,44),l:V(-8,TY,-12),fov:48},
   top:{p:V(0,250,34),l:V(0,TY,6),fov:40},
   monitor:{p:V(MON.x,TY+30,MON.z+70),l:V(MON.x,TY+22,MON.z+14),fov:42},
   zoom:{p:V(MON.x,TY+26,MON.z+30),l:V(MON.x,TY+26,MON.z+15.8),fov:42},
@@ -313,8 +314,8 @@ function tryLock(){if(!fpsOK||locked)return;try{const r=canvas.requestPointerLoc
 function shot(name,speed=2.6){camS.shot=name;camS.speed=speed}
 function stepCam(dt){const s=SHOTS[camS.shot];const a=window.__fast?1:1-Math.exp(-dt*camS.speed);
   let look=s.l.clone();
-  if(MOUSE_LOOK&&camS.shot==='seat'&&!locked){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
-  if(camS.shot==='seat'&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.25,Math.min(.55,ph));
+  if(MOUSE_LOOK&&(camS.shot==='seat'||camS.shot==='myturn')&&!locked){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
+  if((camS.shot==='seat'||camS.shot==='myturn')&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.25,Math.min(.55,ph));
     look=s.p.clone().add(V(Math.sin(th)*Math.cos(ph)*r,Math.sin(ph)*r,-Math.cos(th)*Math.cos(ph)*r))}
   camS.p.lerp(s.p,a);camS.l.lerp(look,a);camS.fov+=(s.fov-camS.fov)*a;
   camera.position.copy(camS.p);camera.lookAt(camS.l);if(Math.abs(camera.fov-camS.fov)>.01){camera.fov=camS.fov;camera.updateProjectionMatrix()}}
@@ -451,7 +452,7 @@ function deckScreen(){return worldToScreen(onTable(-38,-14,2))}
 /* ---------------- 루프 ---------------- */
 function resize(){W=window.innerWidth;H=window.innerHeight;dpr=Math.min(2,window.devicePixelRatio||1);renderer.setPixelRatio(dpr);renderer.setSize(W,H,false);camera.aspect=W/H;
   // 좁은 화면: 조금 더 물러나 테이블이 들어오게
-  const narrow=W/H<1.1;SHOTS.seat.p.set(0,narrow?190:150,narrow?170:128);SHOTS.top.p.set(0,narrow?330:250,narrow?44:34);SHOTS.reward.p.set(0,narrow?190:150,narrow?110:82);
+  const narrow=W/H<1.1;SHOTS.myturn.p.set(-8,narrow?150:124,narrow?66:44);SHOTS.seat.p.set(0,narrow?190:150,narrow?170:128);SHOTS.top.p.set(0,narrow?330:250,narrow?44:34);SHOTS.reward.p.set(0,narrow?190:150,narrow?110:82);
   camera.updateProjectionMatrix()}
 function frame(){const now=performance.now();const dt=Math.min(.12,(now-lastT)/1000);lastT=now;const t=(now-clockT0)/1000;
   stepPool(dt);stepCam(dt);tickMG(dt,t);

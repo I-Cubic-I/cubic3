@@ -28,6 +28,8 @@ function onState(){SC.sync();const ph=S.phase;const nw=pumpFx();
   if(ph==='clubs'&&!shown&&!choosing&&!clubBusy){SC.settleLined();SC.jumpChosen(S.die);SC.shot('zoom',8);shown=true}
   // 내 차례 알림
   const a=whoActs();const key=a+'|'+ph+'|'+(S.mg?S.mg.id:'');if(key!==lastActor){lastActor=key;if(a!=null&&mine(a)&&!['lobby','clubs','ended'].includes(ph))UI.toast(mySeats().length>1?`${seatName(a)} 차례!`:'내 차례!')}
+  // 시점: 내 메인 턴이면 덱·버림 줄 쪽으로 확대, 남의 차례면 테이블 전체
+  if(ph==='main'||ph==='defense'){const want=S.turn&&mine(S.turn.seat)&&ph==='main'?'myturn':'seat';if(SC.camShot!==want&&(SC.camShot==='seat'||SC.camShot==='myturn')){SC.resetLook();SC.shot(want,2.2)}}
   // FPS: 메인 턴에서 내 차례가 아닐 때만(내가 막아야 하는 공격도 제외)
   const myAct=a!=null&&mine(a);const fps=(ph==='main'||ph==='defense')&&mySeats().length>0&&!myAct;
   if(!fps&&SC.isLocked())SC.resetLook();SC.setFps(fps);
@@ -90,7 +92,7 @@ function action(a,d){const i=ctl,s=selArr();const guard=(st,ph)=>st.phase===ph;
     case 'reset2':ui.log=false;act(st=>{for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby())});break;
     case 'log':ui.log=!ui.log;UI.render();break;
     case 'viewtop':SC.shot(SC.camShot==='top'?'seat':'top');break;
-    case 'viewseat':SC.resetLook();SC.shot(S.phase==='reward'?'reward':'seat');break;
+    case 'viewseat':SC.resetLook();SC.shot(S.phase==='reward'?'reward':S.phase==='main'&&S.turn&&mine(S.turn.seat)?'myturn':'seat');break;
     case 'ctl':ctl=+d.i;sel.clear();ui={};UI.render();break;
     case 'togglehand':ui.showHand=!ui.showHand;UI.render();break;
     case 'rulesagain':ui.rulesAgain=!ui.rulesAgain;UI.render();break;

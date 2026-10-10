@@ -1065,6 +1065,7 @@ function buildDie(){die=makeDie();die.position.set(DIE.x,TY-10,DIE.z);die.visibl
 /* ---------------- 카메라 ---------------- */
 const SHOTS={
   seat:{p:V(0,150,128),l:V(0,66,-24),fov:52},
+  myturn:{p:V(-8,124,44),l:V(-8,TY,-12),fov:48},
   top:{p:V(0,250,34),l:V(0,TY,6),fov:40},
   monitor:{p:V(MON.x,TY+30,MON.z+70),l:V(MON.x,TY+22,MON.z+14),fov:42},
   zoom:{p:V(MON.x,TY+26,MON.z+30),l:V(MON.x,TY+26,MON.z+15.8),fov:42},
@@ -1085,8 +1086,8 @@ function tryLock(){if(!fpsOK||locked)return;try{const r=canvas.requestPointerLoc
 function shot(name,speed=2.6){camS.shot=name;camS.speed=speed}
 function stepCam(dt){const s=SHOTS[camS.shot];const a=window.__fast?1:1-Math.exp(-dt*camS.speed);
   let look=s.l.clone();
-  if(MOUSE_LOOK&&camS.shot==='seat'&&!locked){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
-  if(camS.shot==='seat'&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.25,Math.min(.55,ph));
+  if(MOUSE_LOOK&&(camS.shot==='seat'||camS.shot==='myturn')&&!locked){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
+  if((camS.shot==='seat'||camS.shot==='myturn')&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.25,Math.min(.55,ph));
     look=s.p.clone().add(V(Math.sin(th)*Math.cos(ph)*r,Math.sin(ph)*r,-Math.cos(th)*Math.cos(ph)*r))}
   camS.p.lerp(s.p,a);camS.l.lerp(look,a);camS.fov+=(s.fov-camS.fov)*a;
   camera.position.copy(camS.p);camera.lookAt(camS.l);if(Math.abs(camera.fov-camS.fov)>.01){camera.fov=camS.fov;camera.updateProjectionMatrix()}}
@@ -1223,7 +1224,7 @@ function deckScreen(){return worldToScreen(onTable(-38,-14,2))}
 /* ---------------- 루프 ---------------- */
 function resize(){W=window.innerWidth;H=window.innerHeight;dpr=Math.min(2,window.devicePixelRatio||1);renderer.setPixelRatio(dpr);renderer.setSize(W,H,false);camera.aspect=W/H;
   // 좁은 화면: 조금 더 물러나 테이블이 들어오게
-  const narrow=W/H<1.1;SHOTS.seat.p.set(0,narrow?190:150,narrow?170:128);SHOTS.top.p.set(0,narrow?330:250,narrow?44:34);SHOTS.reward.p.set(0,narrow?190:150,narrow?110:82);
+  const narrow=W/H<1.1;SHOTS.myturn.p.set(-8,narrow?150:124,narrow?66:44);SHOTS.seat.p.set(0,narrow?190:150,narrow?170:128);SHOTS.top.p.set(0,narrow?330:250,narrow?44:34);SHOTS.reward.p.set(0,narrow?190:150,narrow?110:82);
   camera.updateProjectionMatrix()}
 function frame(){const now=performance.now();const dt=Math.min(.12,(now-lastT)/1000);lastT=now;const t=(now-clockT0)/1000;
   stepPool(dt);stepCam(dt);tickMG(dt,t);
@@ -1546,6 +1547,8 @@ function onState(){SC.sync();const ph=S.phase;const nw=pumpFx();
   if(ph==='clubs'&&!shown&&!choosing&&!clubBusy){SC.settleLined();SC.jumpChosen(S.die);SC.shot('zoom',8);shown=true}
   // 내 차례 알림
   const a=whoActs();const key=a+'|'+ph+'|'+(S.mg?S.mg.id:'');if(key!==lastActor){lastActor=key;if(a!=null&&mine(a)&&!['lobby','clubs','ended'].includes(ph))UI.toast(mySeats().length>1?`${seatName(a)} 차례!`:'내 차례!')}
+  // 시점: 내 메인 턴이면 덱·버림 줄 쪽으로 확대, 남의 차례면 테이블 전체
+  if(ph==='main'||ph==='defense'){const want=S.turn&&mine(S.turn.seat)&&ph==='main'?'myturn':'seat';if(SC.camShot!==want&&(SC.camShot==='seat'||SC.camShot==='myturn')){SC.resetLook();SC.shot(want,2.2)}}
   // FPS: 메인 턴에서 내 차례가 아닐 때만(내가 막아야 하는 공격도 제외)
   const myAct=a!=null&&mine(a);const fps=(ph==='main'||ph==='defense')&&mySeats().length>0&&!myAct;
   if(!fps&&SC.isLocked())SC.resetLook();SC.setFps(fps);
@@ -1608,7 +1611,7 @@ function action(a,d){const i=ctl,s=selArr();const guard=(st,ph)=>st.phase===ph;
     case 'reset2':ui.log=false;act(st=>{for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby())});break;
     case 'log':ui.log=!ui.log;UI.render();break;
     case 'viewtop':SC.shot(SC.camShot==='top'?'seat':'top');break;
-    case 'viewseat':SC.resetLook();SC.shot(S.phase==='reward'?'reward':'seat');break;
+    case 'viewseat':SC.resetLook();SC.shot(S.phase==='reward'?'reward':S.phase==='main'&&S.turn&&mine(S.turn.seat)?'myturn':'seat');break;
     case 'ctl':ctl=+d.i;sel.clear();ui={};UI.render();break;
     case 'togglehand':ui.showHand=!ui.showHand;UI.render();break;
     case 'rulesagain':ui.rulesAgain=!ui.rulesAgain;UI.render();break;
