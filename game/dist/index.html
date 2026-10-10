@@ -1040,9 +1040,15 @@ const SHOTS={
 };
 const camS={p:V(0,150,128),l:V(0,66,-24),fov:52,shot:'seat',speed:2.6};
 let yaw=0,pitch=0;
+/* 마우스가 있는 웹: 시선이 커서를 따라간다(끌 필요 없음). 터치 기기는 끌어서 둘러보기 */
+const MOUSE_LOOK=!!(window.matchMedia&&matchMedia('(hover: hover) and (pointer: fine)').matches);
+let lookT={yaw:0,pitch:0};
+function cursorLook(x,y){const nx=x/W*2-1,ny=y/H*2-1;const dz=v=>Math.sign(v)*Math.max(0,Math.abs(v)-.12)/.88;
+  lookT.yaw=dz(nx)*0.6;lookT.pitch=-dz(ny)*0.22}
 function shot(name,speed=2.6){camS.shot=name;camS.speed=speed}
 function stepCam(dt){const s=SHOTS[camS.shot];const a=window.__fast?1:1-Math.exp(-dt*camS.speed);
   let look=s.l.clone();
+  if(MOUSE_LOOK&&camS.shot==='seat'){const k=1-Math.exp(-dt*4);yaw+=(lookT.yaw-yaw)*k;pitch+=(lookT.pitch-pitch)*k}
   if(camS.shot==='seat'&&(yaw||pitch)){const d=s.l.clone().sub(s.p);const r=d.length();let th=Math.atan2(d.x,-d.z)+yaw;let ph=Math.asin(d.y/r)+pitch;ph=Math.max(-1.2,Math.min(.5,ph));
     look=s.p.clone().add(V(Math.sin(th)*Math.cos(ph)*r,Math.sin(ph)*r,-Math.cos(th)*Math.cos(ph)*r))}
   camS.p.lerp(s.p,a);camS.l.lerp(look,a);camS.fov+=(s.fov-camS.fov)*a;
@@ -1055,15 +1061,17 @@ function pickAt(x,y){const r=canvas.getBoundingClientRect();mv.set((x-r.left)/r.
 function bindInput(){
   canvas.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,yaw,pitch,moved:false};canvas.setPointerCapture(e.pointerId)});
   canvas.addEventListener('pointermove',e=>{if(down){const dx=e.clientX-down.x,dy=e.clientY-down.y;if(Math.hypot(dx,dy)>6)down.moved=true;
-      if(down.moved&&camS.shot==='seat'){yaw=down.yaw+dx*0.004;pitch=down.pitch-dy*0.003;yaw=Math.max(-1.6,Math.min(1.6,yaw));pitch=Math.max(-.5,Math.min(.6,pitch))}return}
+      if(down.moved&&camS.shot==='seat'&&!MOUSE_LOOK){yaw=down.yaw+dx*0.004;pitch=down.pitch-dy*0.003;yaw=Math.max(-1.6,Math.min(1.6,yaw));pitch=Math.max(-.5,Math.min(.6,pitch))}return}
     const o=pickAt(e.clientX,e.clientY);if(o!==hover){setHover(o)}});
   canvas.addEventListener('pointerup',e=>{const d=down;down=null;if(!d||d.moved)return;const o=pickAt(e.clientX,e.clientY);if(o)Main.pick(o.userData.pick)});
   canvas.addEventListener('pointerleave',()=>setHover(null));
+  if(MOUSE_LOOK){window.addEventListener('pointermove',e=>{if(e.pointerType==='mouse')cursorLook(e.clientX,e.clientY)});
+    document.addEventListener('mouseleave',()=>{lookT.yaw=0;lookT.pitch=0});window.addEventListener('blur',()=>{lookT.yaw=0;lookT.pitch=0})}
   canvas.addEventListener('dblclick',()=>resetLook());
 }
-function setHover(o){if(hover)glow(hover,false);hover=o;if(o)glow(o,true);canvas.style.cursor=o?'pointer':'grab'}
+function setHover(o){if(hover)glow(hover,false);hover=o;if(o)glow(o,true);canvas.style.cursor=o?'pointer':(MOUSE_LOOK?'default':'grab')}
 function glow(o,on){o.traverse(m=>{if(m.isMesh&&m.material&&!Array.isArray(m.material)&&m.material.emissive){if(on){m.userData.em=m.material.emissive.getHex();m.material=m.material.clone();m.material.emissive.set('#5a4612')}else if(m.userData.em!=null){m.material.emissive.setHex(m.userData.em)}}})}
-function resetLook(){yaw=0;pitch=0}
+function resetLook(){yaw=0;pitch=0;lookT.yaw=0;lookT.pitch=0}
 
 /* ---------------- 배치 (상태 → 목표) ---------------- */
 const yHat=V(0,1,0);
