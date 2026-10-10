@@ -228,7 +228,7 @@ function useClub(S,i,c,arg){
   else if(r===12){S.die=((S.die-1+arg+6)%6)+1;log(S,`자리 ${i+1}: ♣Q로 눈 ${arg>0?'+1':'-1'} → ${S.die}`)}
   else {S.die=arg;log(S,`자리 ${i+1}: ♣K로 칸 ${arg}을 직접 고름`)}
   log(S,`이번 미니게임: ${MG[S.board[S.die-1]].name}`);S.ready={};
-  if(r===11)fx(S,{t:'dice',v:S.die,mg:S.board[S.die-1],seats:[i]});else fx(S,{t:'banner',text:`${cname(c)} → ${S.die}번 ${MG[S.board[S.die-1]].name}`,seats:[i]});
+  if(r===11)fx(S,{t:'dice',v:S.die,mg:S.board[S.die-1],seats:[i],club:c});else fx(S,{t:'banner',text:`${cname(c)} → ${S.die}번 ${MG[S.board[S.die-1]].name}`,seats:[i],club:c,v:S.die});
 }
 function startMain(S){
   S.phase='main'; S.deadline=null;
