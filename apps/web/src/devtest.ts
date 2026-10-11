@@ -1,0 +1,47 @@
+/* 개발 서버 전용 자동 진행: 판정이 허용한 행동을 무작위로 골라 내 자리들로 진행한다.
+   화면 시험에서 원하는 단계(미니게임 등)까지 빨리 가기 위한 것. */
+import { type Action, type GameState, canAct, countOpenAt, isItem, now } from '@cubic3/engine';
+import { useStore } from './store';
+
+function candidates(S: GameState, seat: number): Action[] {
+  const p = S.seats[seat]; const hand = p.hand; const its = hand.filter(isItem);
+  const c: Action[] = [
+    { type: 'roll', seat }, { type: 'ready' }, { type: 'noDefend', seat }, { type: 'pickDeck', seat }, { type: 'endTurn', seat },
+    { type: 'holdStop', seat }, { type: 'auctionReady', seat }, { type: 'raceFlip', seat },
+  ];
+  for (const card of hand) c.push({ type: 'discard', seat, card }, { type: 'defend', seat, card });
+  for (const card of S.row) c.push({ type: 'pickRow', seat, card });
+  for (const card of S.turn?.peek || []) c.push({ type: 'diamondJPick', seat, card });
+  for (const card of S.reward?.disp || []) c.push({ type: 'reward', seat, card });
+  for (const su of ['S', 'H', 'D', 'C'] as const) { const nums = hand.filter(x => x[0] === su && !isItem(x)); for (const n of [3, 4, 5]) c.push({ type: 'token', seat, cards: nums.slice(0, n) }); }
+  if (hand.length > 6) c.push({ type: 'trim', seat, cards: hand.slice(0, hand.length - 6) });
+  const m = S.mg;
+  for (const it of [...its, null]) { c.push({ type: 'holdRoll', seat, item: it }, { type: 'ovnSave', seat, item: it }); }
+  if (m?.id === 'bomb') m.lay.forEach((_, k) => c.push({ type: 'bombFlip', seat, k }));
+  if (m?.id === 'auction') (m.hands[seat] || []).forEach(card => c.push({ type: 'auctionBid', seat, card }));
+  if (m?.id === 'balloon') (m.hands[seat] || []).forEach(card => c.push({ type: 'balloon', seat, card }));
+  for (const hnd of ['R', 'P', 'S'] as const) c.push({ type: 'rps', seat, hand: hnd });
+  for (const z of [1, 2, 3]) c.push({ type: 'vaultHide', seat, zone: z }, { type: 'vaultGuard', seat, zones: [z] });
+  for (let n = 0; n <= 6; n++) c.push({ type: 'countAnswer', seat, n });
+  for (const su of ['S', 'H', 'D', 'C'] as const) c.push({ type: 'raceBet', seat, suit: su });
+  return c;
+}
+
+/** 조건이 맞을 때까지(또는 steps번) 진행. 돌려주는 값: 멈춘 이유 */
+export async function auto(opt: { until?: (S: GameState) => boolean; steps?: number; delay?: number } = {}): Promise<string> {
+  const { steps = 3000, delay = 0 } = opt;
+  for (let k = 0; k < steps; k++) {
+    const st = useStore.getState(); const S = st.S; if (!S) return 'no state';
+    if (opt.until?.(S)) return 'until';
+    if (S.phase === 'ended' || S.phase === 'lobby') return S.phase;
+    if (S.mg?.id === 'count' && now() < countOpenAt(S.mg)) { await new Promise(r => setTimeout(r, 300)); continue; }
+    const opts: Action[] = [];
+    S.seats.forEach((p, i) => { if (p.uid === st.me) for (const a of candidates(S, i)) if (!canAct(S, st.me, a)) opts.push(a); });
+    if (!opts.length) { await new Promise(r => setTimeout(r, 200)); continue; }
+    const pref = opts.filter(a => a.type === 'token' || a.type === 'trim');
+    const a = pref.length && Math.random() < .9 ? pref[Math.floor(Math.random() * pref.length)] : opts[Math.floor(Math.random() * opts.length)];
+    await st.act(a);
+    await new Promise(r => setTimeout(r, delay));
+  }
+  return 'steps';
+}

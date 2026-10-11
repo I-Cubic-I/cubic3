@@ -66,6 +66,8 @@ function dieEuler(v: number): E3 {
 function makeCube(s: Suit): THREE.Mesh {
   const m = new T.Mesh(new T.BoxGeometry(2.2, 2.2, 2.2), mat(SUITCOL[s], { roughness: .35 })); m.castShadow = true; return m;
 }
+/** 시험판(r128)은 조명·일부 재질의 16진수 색을 변환 없이 썼다. 같은 색이 나오게 선형 값으로 해석한다 */
+const lin = (hex: string) => new T.Color().setHex(parseInt(hex.slice(1), 16), T.LinearSRGBColorSpace);
 function hsl(h: number, s: number, l: number): THREE.Color { return new T.Color().setHSL(h / 360, s, l, T.SRGBColorSpace); }
 
 /* ---------------- 아바타 (앉아서 테이블을 바라본다) ---------------- */
@@ -181,7 +183,7 @@ export class World {
   attach(scene: THREE.Scene, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement): void {
     this.scene = scene; this.camera = camera; this.canvas = canvas;
     this.buildRoom(); this.buildHall(); this.buildStations(); this.buildMonitor(); this.buildBox(); this.buildDie();
-    this.mgSpot = new T.SpotLight('#ffe4bf', 0, 0, .6, .5, 0); scene.add(this.mgSpot, this.mgSpot.target);
+    this.mgSpot = new T.SpotLight(lin('#ffe4bf'), 0, 0, .6, .5, 0); scene.add(this.mgSpot, this.mgSpot.target);
     this.bindInput();
   }
   dispose(): void {
@@ -200,10 +202,10 @@ export class World {
     const scene = this.scene;
     scene.background = new T.Color('#14110e');
     // 시험판(three r128, 예전 조명 단위)과 같은 밝기가 되도록 세기에 π를 곱하고 거리 감쇠를 끈다
-    scene.add(new T.HemisphereLight('#fff1dd', '#1a1410', .6 * PI));
-    const spot = new T.SpotLight('#ffe4bf', 1.25 * PI, 0, 0.72, 0.55, 0); spot.position.set(0, 280, 60); spot.target.position.set(0, TY, 0);
+    scene.add(new T.HemisphereLight(lin('#fff1dd'), lin('#1a1410'), .6 * PI));
+    const spot = new T.SpotLight(lin('#ffe4bf'), 1.25 * PI, 0, 0.72, 0.55, 0); spot.position.set(0, 280, 60); spot.target.position.set(0, TY, 0);
     spot.castShadow = true; spot.shadow.mapSize.set(1024, 1024); spot.shadow.camera.near = 100; spot.shadow.camera.far = 500; spot.shadow.bias = -0.0006; scene.add(spot, spot.target);
-    const fill = new T.DirectionalLight('#c9d8ff', .18 * PI); fill.position.set(-120, 160, 200); scene.add(fill);
+    const fill = new T.DirectionalLight(lin('#c9d8ff'), .18 * PI); fill.position.set(-120, 160, 200); scene.add(fill);
     const rug = new T.Mesh(new T.CircleGeometry(165, 64), mat('#3a1f1a', { roughness: 1 })); rug.rotation.x = -PI / 2; rug.position.y = .2; rug.receiveShadow = true; scene.add(rug);
     const wood = mat('#5b3b23', { roughness: .55 });
     const top = new T.Mesh(new T.CylinderGeometry(TR, TR - 1, 4, 72), wood); top.position.y = TY - 2; top.castShadow = true; top.receiveShadow = true; scene.add(top);
@@ -269,7 +271,8 @@ export class World {
     });
     // 등: 가운데 테이블 위 큰 등 + 구석의 따뜻한 빛
     this.pendant(0, 0, 1.25);
-    [[-600, -600], [600, 600], [600, -600], [-600, 600]].forEach(([x, z]) => { const l = new T.PointLight('#ffb36b', .35 * PI, 900, 0); l.position.set(x, 300, z); scene.add(l); });
+    // 예전 감쇠((1-d/900)²)에 가깝게: 물리 감쇠(1/d²)로 바꾸고 세기를 d≈500에서 맞춘다
+    [[-600, -600], [600, 600], [600, -600], [-600, 600]].forEach(([x, z]) => { const l = new T.PointLight(lin('#ffb36b'), .35 * PI * 61000, 900, 2); l.position.set(x, 300, z); scene.add(l); });
   }
   private pendant(x: number, z: number, s = 1, col = '#e8b84a'): THREE.Group {
     const g = new T.Group(); const cord = new T.Mesh(new T.CylinderGeometry(.6, .6, 150, 6), mat('#111')); cord.position.y = 345; g.add(cord);
@@ -322,7 +325,7 @@ export class World {
     const m = S.mg, id = m.id; const st0 = this.stations.get(id); if (!st0) return; const P = st0.parts;
     if (m.id === 'balloon') {
       if (!P.bal) {
-        const b = new T.Mesh(new T.SphereGeometry(10, 32, 24), new T.MeshStandardMaterial({ color: '#e8853a', roughness: .35 })); b.castShadow = true;
+        const b = new T.Mesh(new T.SphereGeometry(10, 32, 24), new T.MeshStandardMaterial({ color: lin('#e8853a'), roughness: .35 })); b.castShadow = true;
         const knot = new T.Mesh(new T.ConeGeometry(1.6, 3, 12), b.material); knot.position.y = -10.5; knot.rotation.x = PI; b.add(knot);
         const str = new T.Mesh(new T.CylinderGeometry(.15, .15, 40, 4), mat('#d8cfc0')); st0.props.add(b, str); P.bal = b; P.str = str;
       }
@@ -360,12 +363,12 @@ export class World {
           const face = new T.Mesh(new T.PlaneGeometry(18, 26), new T.MeshStandardMaterial({
             map: ctex('vd' + z, 128, 180, (gg, w, h) => { gg.fillStyle = '#6b7584'; gg.fillRect(0, 0, w, h); gg.strokeStyle = '#2a2f37'; gg.lineWidth = 6; gg.strokeRect(8, 8, w - 16, h - 16); gg.beginPath(); gg.arc(w / 2, h * .62, 30, 0, 7); gg.stroke(); gg.fillStyle = '#e8b84a'; gg.font = `64px ${FONT_D}`; gg.textAlign = 'center'; gg.fillText(String(z), w / 2, 64); }), roughness: .4, metalness: .4,
           }));
-          face.position.set(0, 15, -8.1); face.rotation.y = PI; const lamp = new T.Mesh(new T.SphereGeometry(2.2, 12, 8), new T.MeshBasicMaterial({ color: '#3a1010' })); lamp.position.set(0, 33, -2);
+          face.position.set(0, 15, -8.1); face.rotation.y = PI; const lamp = new T.Mesh(new T.SphereGeometry(2.2, 12, 8), new T.MeshBasicMaterial({ color: lin('#3a1010') })); lamp.position.set(0, 33, -2);
           g.add(bx, face, lamp); g.userData.lamp = lamp; g.position.set((2 - z) * 30, TY, 8); st0.props.add(g); this.setPick(bx, { kind: 'door', z }); return g;
         });
       }
       const hit = (m.last as { zones?: number[] } | null)?.zones || [];
-      P.doors.forEach((d: THREE.Group, k: number) => { (d.userData.lamp.material as THREE.MeshBasicMaterial).color.set(hit.includes(k + 1) ? '#ff4d4d' : '#3a1010'); });
+      P.doors.forEach((d: THREE.Group, k: number) => { (d.userData.lamp.material as THREE.MeshBasicMaterial).color.copy(lin(hit.includes(k + 1) ? '#ff4d4d' : '#3a1010')); });
     }
     if (m.id === 'count') {
       if (!P.stand) {
@@ -415,8 +418,8 @@ export class World {
     const scr = new T.Mesh(new T.PlaneGeometry(29, 21), new T.MeshBasicMaterial({ map: this.screenTex })); scr.position.set(0, 26, 15.8);
     const slotPlate = new T.Mesh(new T.BoxGeometry(13, 2.6, .6), dark); slotPlate.position.set(4, 9.5, 15.2);
     const slot = new T.Mesh(new T.BoxGeometry(11, .6, .8), mat('#120f0c')); slot.position.set(4, 9.8, 15.3);
-    const led1 = new T.Mesh(new T.SphereGeometry(.45, 8, 6), new T.MeshBasicMaterial({ color: '#5bd47a' })); led1.position.set(-13, 9.6, 15.4);
-    const led2 = led1.clone(); led2.material = new T.MeshBasicMaterial({ color: '#e8b84a' }); led2.position.x = -11.6;
+    const led1 = new T.Mesh(new T.SphereGeometry(.45, 8, 6), new T.MeshBasicMaterial({ color: lin('#5bd47a') })); led1.position.set(-13, 9.6, 15.4);
+    const led2 = led1.clone(); led2.material = new T.MeshBasicMaterial({ color: lin('#e8b84a') }); led2.position.x = -11.6;
     const logo = new T.Mesh(new T.PlaneGeometry(10, 1.6), new T.MeshBasicMaterial({ map: ctex('logo', 256, 40, (g, w, h) => { g.fillStyle = '#e6dcc7'; g.fillRect(0, 0, w, h); g.fillStyle = '#8a7f6a'; g.font = `34px ${FONT_M}`; g.textBaseline = 'middle'; g.fillText('CUBIC·VISION', 4, 22); }) }));
     logo.position.set(-9, 12.4, 15.55);
     const foot = new T.Mesh(new T.BoxGeometry(30, 2, 26), dark); foot.position.y = 1;
@@ -711,7 +714,7 @@ export class World {
     o.traverse(m => {
       const mesh = m as THREE.Mesh; if (!mesh.isMesh || !mesh.material || Array.isArray(mesh.material)) return;
       const mt = mesh.material as THREE.MeshStandardMaterial; if (!mt.emissive) return;
-      if (on) { mesh.userData.em = mt.emissive.getHex(); mesh.material = mt.clone(); (mesh.material as THREE.MeshStandardMaterial).emissive.set('#5a4612'); }
+      if (on) { mesh.userData.em = mt.emissive.getHex(); mesh.material = mt.clone(); (mesh.material as THREE.MeshStandardMaterial).emissive.copy(lin('#5a4612')); }
       else if (mesh.userData.em != null) mt.emissive.setHex(mesh.userData.em);
     });
   }

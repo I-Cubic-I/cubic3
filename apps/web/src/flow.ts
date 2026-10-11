@@ -43,10 +43,10 @@ let lastFx: number | null = null, choosing = false, clubBusy = false, prevPhase:
 const clubQ: Fx[] = [];
 export function rulesReady(): void { choosing = false; st().set({ rulesShown: true }); }
 async function runClub(f: Fx): Promise<void> {
-  clubBusy = true; st().set({ clubPlaying: true });
+  clubBusy = true;
   try {
-    // ♣: 모니터가 빨간 X → 모니터와 별개인 컷신
-    st().set({ screenAlert: true });
+    // ♣: 모니터가 빨간 X → 모니터와 별개인 컷신. 규칙 화면이 꺼졌다 켜지지 않게 한 번에 바꾼다
+    st().set({ clubPlaying: true, screenAlert: true });
     await new Promise(r => setTimeout(r, 900));
     st().set({ cutin: f });
     await new Promise(r => setTimeout(r, 1900));

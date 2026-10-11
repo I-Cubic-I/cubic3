@@ -45,7 +45,7 @@ export function SceneView() {
     <Canvas id="gl" ref={ref} aria-label="게임 테이블" shadows dpr={[1, 2]} style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', touchAction: 'none' }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 50, near: 1, far: 4000, position: [0, 150, 128] }}
-      onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0; gl.shadowMap.type = THREE.PCFSoftShadowMap; }}>
+      onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0; }}>
       <Director />
     </Canvas>
   );

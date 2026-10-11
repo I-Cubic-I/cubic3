@@ -151,7 +151,7 @@ export function Hud() {
           <button className="iconbtn" aria-label="위에서 보기" onClick={() => cmd('viewtop')}>{ICON.top}</button>
           <button className="iconbtn" aria-label="기본 시점" onClick={() => cmd('viewseat')}>{ICON.eye}</button>
         </div>
-        {ph !== 'clubs' && <div className="prompt"><div className={`pill${pillWait ? ' wait' : ''}`}>{pill}</div>
+        {ph !== 'clubs' && <div className="prompt">{pill && <div className={`pill${pillWait ? ' wait' : ''}`}>{pill}</div>}
           {sub && <div className="subchips">{sub.map(([t, on]) => <span key={t} className={`chip${on ? ' on' : ''}`}>{t}</span>)}</div>}</div>}
         {flash && <div className="notice" role="alert">{flash}</div>}
         {extra}
