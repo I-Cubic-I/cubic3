@@ -60,7 +60,7 @@ const errs=[];const W=ms=>new Promise(r=>setTimeout(r,ms));
            if(id==='rps'){if(m.step==='save')A('onosave');else A('rps',{hand:'RPS'[Math.floor(Math.random()*3)]})}
            if(id==='vault'){if(m.step==='save')A('onosave');else if(m.step==='hide')A('vhide',{z:1+Math.floor(Math.random()*3)});else{ui.vz=m.armL?[1,2]:[1+Math.floor(Math.random()*3)];A('vgo')}}
            if(id==='count')A('cans',{n:2});if(id==='race'){if(m.step==='bet')A('rbet',{s:'SHDC'[Math.floor(Math.random()*4)]});else A('rflip')}return {ph,id}}return {ph}});
-       const key=info.ph==='mg'?'mg_'+info.id:info.ph;if(key&&!seen.has(key)&&!info.wait){seen.add(key);await W(800);await shot(p,'auto_'+key)}
+       const key=info.ph==='mg'?'mg_'+info.id:info.ph;if(key&&key!=='ended'&&!seen.has(key)&&!info.wait){seen.add(key);await W(800);await shot(p,'auto_'+key)}
        if(info.ph==='ended'){console.log('끝까지 진행함 (단계',s,')');await W(800);await shot(p,'auto_ended');break}await W(info.wait?300:120)}}}
  }catch(e){errs.push('시험 스크립트: '+e.message)}
  fs.writeFileSync(path.join(OUT,'errors.txt'),errs.join('\n'));console.log('오류',errs.length,'개',errs.slice(0,5));await b.close();srv.close();process.exit(errs.length?1:0)})();
