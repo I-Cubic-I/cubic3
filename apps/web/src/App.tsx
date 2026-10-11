@@ -8,6 +8,8 @@ import { SceneView } from './scene/Scene';
 import { Hud } from './ui/Hud';
 import { Start } from './ui/Start';
 import { bindTips } from './ui/tip';
+import { startBrand } from './ui/brand';
+import { LogoHost } from './ui/CubicLogo';
 
 const LS = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -27,7 +29,7 @@ export function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [fontsOk, setFontsOk] = useState(false);
   useEffect(() => {
-    bindTips();
+    bindTips(); startBrand();
     // 캔버스 글자(카드·디스크)가 대체 글꼴로 그려지지 않게 글꼴을 먼저 받는다
     Promise.race([
       Promise.all(["24px 'Black Han Sans'", "24px 'VT323'", "16px 'IBM Plex Sans KR'"].map(f => document.fonts.load(f))),
@@ -69,6 +71,8 @@ export function App() {
     <>
       {fontsOk && <SceneView />}
       {room ? <Hud /> : <Start msg={msg} busy={busy} onPick={connect} />}
+      {/* 로고는 하나만: 시작 화면·로비의 자리를 따라다녀 화면이 바뀌어도 끊기지 않는다 */}
+      {fontsOk && <LogoHost />}
     </>
   );
 }

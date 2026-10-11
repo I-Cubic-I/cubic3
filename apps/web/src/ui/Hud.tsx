@@ -10,6 +10,7 @@ import { Cutin, FxView, RulesScreen } from './Screens';
 import { type TurnView, turnActs } from './Turn';
 import { ICON, MCard, names } from './bits';
 import { refreshTip } from './tip';
+import { LogoSlot } from './CubicLogo';
 
 /* ---------- 이름표: 아바타 머리 위를 따라다닌다 ---------- */
 function Plates({ S }: { S: GameState }) {
@@ -50,7 +51,7 @@ function Lobby({ S }: { S: GameState }) {
   const sitting = S.seats.some(p => p.uid === me);
   return (
     <div className="panel lobby">
-      <h1>Cubic³</h1>
+      <h1 className="logo3d"><LogoSlot /><sup>3</sup></h1>
       <p>방 코드 <strong style={{ color: 'var(--brass)', fontSize: 18 }}>{room?.code}</strong>{room?.role === 'host' ? ' · 내가 방장' : ''} · 개인전 2~5인. 친구에게 링크를 보내면 같은 테이블에 앉을 수 있어요.</p>
       <div className="btnrow" style={{ marginBottom: 6 }}><button className="btn sm" onClick={() => cmd('copylink')}>링크 복사</button></div>
       {flash && <div className="notice" style={{ position: 'static', transform: 'none', margin: '8px 0' }}>{flash}</div>}
@@ -82,7 +83,7 @@ export function Hud() {
   const [, setTick] = useState(0);
   useEffect(() => { if (S?.phase !== 'defense') return; const t = setInterval(() => setTick(x => x + 1), 250); return () => clearInterval(t); }, [S?.phase]);
 
-  if (fatal) return <div id="hud"><div id="mainui"><div className="panel lobby"><h1>Cubic³</h1><p>{fatal}</p></div></div></div>;
+  if (fatal) return <div id="hud"><div id="mainui"><div className="panel lobby"><h1 className="logo3d" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><sup aria-hidden="true">3</sup></h1><p>{fatal}</p></div></div></div>;
   if (!S) return <div id="hud" />;
   const ms = mySeats(S, me);
   if (S.phase === 'lobby') return <div id="hud"><Plates S={S} /><div id="mainui"><Lobby S={S} /></div><Toast m={toast} /></div>;
@@ -144,7 +145,7 @@ export function Hud() {
       <Plates S={S} />
       <div id="mainui">
         {ph === 'main' && i != null && S.turn!.seat === i && S.turn!.picked && <div className="dz" data-dz="table"><span>테이블에 놓기</span></div>}
-        <div className="topl"><span className="logo">Cubic³</span><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span>
+        <div className="topl"><span className="logo" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></span><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span>
           {ms.length > 1 && ms.map(k => <button key={k} className={`chip ${k === i ? 'on' : ''}`} onClick={() => cmd('ctl', { i: k })}>자리 {k + 1}</button>)}</div>
         <div className="topr">
           <button className="iconbtn" aria-label="기록 보기" onClick={() => cmd('log')}>{ICON.list}</button>

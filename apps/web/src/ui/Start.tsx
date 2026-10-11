@@ -1,5 +1,6 @@
 /* 시작 화면: 이름, 방 만들기 / 들어가기 */
 import { useState } from 'react';
+import { LogoSlot } from './CubicLogo';
 
 const LS = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -15,7 +16,7 @@ export function Start({ msg, busy, onPick }: { msg: string; busy: string | null;
   const [name, setName] = useState(myName());
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
-  if (busy) return <div className="p2pstart"><div className="panel lobby"><h1>Cubic³</h1><p>{busy}</p></div></div>;
+  if (busy) return <div className="p2pstart"><div className="panel lobby"><h1 className="logo3d"><LogoSlot /><sup>3</sup></h1><p>{busy}</p></div></div>;
   const go = (create: boolean, c: string) => {
     const nm = name.trim(); if (!nm) { setErr('이름을 적어 주세요'); return; }
     LS.set('c3-name', nm);
@@ -27,7 +28,7 @@ export function Start({ msg, busy, onPick }: { msg: string; busy: string | null;
   return (
     <div className="p2pstart">
       <div className="panel lobby">
-        <h1>Cubic³</h1>
+        <h1 className="logo3d"><LogoSlot /><sup>3</sup></h1>
         <p>방을 만들면 링크가 생겨요. 친구에게 링크를 보내면 같은 테이블에 앉을 수 있어요.</p>
         <label className="fld"><span>내 이름</span><input maxLength={12} value={name} onChange={e => setName(e.target.value)} placeholder="이름" autoComplete="nickname" /></label>
         {notice && <div className="notice" style={{ position: 'static', transform: 'none', margin: '8px 0' }}>{notice}</div>}

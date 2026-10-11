@@ -273,3 +273,14 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .fld span{font-size:13px;color:var(--muted)}
 .p2pstart input{height:44px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);font:inherit;font-size:16px}
 .p2pstart input:focus-visible{outline:3px solid var(--cyan);outline-offset:1px}
+
+/* 3D 큐빅 로고 */
+.lobby h1.logo3d{display:flex;justify-content:center;align-items:flex-start;gap:2px;margin:0 0 8px;line-height:1}
+.lobby h1.logo3d sup{font-size:32px;margin-top:2px;margin-left:-4px}
+.cubiclogo{display:inline-block;flex:none}
+.logo .sq,.logo3d .sq{color:var(--brand,#2f5fc8)}
+.logo .sq{margin-right:1px}
+.lobby h1.logo3d .sq{font-size:52px;line-height:1}
+/* ³: 큐빅과 같은 시계로 문양 4색이 바뀐다 */
+.lobby h1.logo3d sup{color:var(--brand,#2f5fc8)}
+.logohost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;will-change:transform}

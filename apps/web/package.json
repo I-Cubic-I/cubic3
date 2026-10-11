@@ -18,13 +18,15 @@
     "vite": "^8.3.4"
   },
   "dependencies": {
+    "@cubic3/engine": "*",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
     "peerjs": "^1.5.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.186.1",
-    "zustand": "^5.0.15",
-    "@cubic3/engine": "*"
+    "three-bvh-csg": "^0.0.18",
+    "three-mesh-bvh": "^0.9.16",
+    "zustand": "^5.0.15"
   }
 }
