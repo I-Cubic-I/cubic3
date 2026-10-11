@@ -3,3 +3,6 @@ __pycache__/
 game/dist/local.html
 tools/test/out/
 tools/test/.cache/
+node_modules/
+dist/
+!game/dist/
