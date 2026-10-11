@@ -45,6 +45,8 @@
 
 ## 3D 디지털판 (game/)
 
+> 2026-10-12부터 배포는 새 웹판(`apps/web`)으로 바뀌었다. 아래는 예전 시험판 기록이다.
+
 시험판 UI를 쓰지 않고 새로 만든 3D 클라이언트. 엔진은 `proto/web/index.html`의 첫 `<script>`를 그대로 가져온다.
 
 - 소스: `game/src/` (net.js 공유 상태, scene.js 3D 장면, ui.js 화면 위 UI, main.js 흐름, style.css)
@@ -55,7 +57,7 @@
 
 ### GitHub Pages판 (P2P)
 
-- 빌드: `python3 tools/buildgame.py --pages` → `game/dist/pages/index.html`. main에 푸시하면 `.github/workflows/pages.yml`이 자동으로 빌드·배포한다.
+- 빌드: `python3 tools/buildgame.py --pages` → `game/dist/pages/index.html`. (예전) main에 푸시하면 자동 배포했으나 지금 워크플로는 `apps/web`을 배포한다.
 - 주소: https://i-cubic-i.github.io/cubic3/ (저장소 공개, Pages Source = GitHub Actions 설정 완료 2026-10-11).
 - 방 만들기 → 링크(`?room=코드`)를 친구에게 보낸다. 방장 브라우저가 테이블을 들고 있고(새로고침해도 이어짐), 나머지는 PeerJS로 방장에게 직접 연결한다.
 - 같은 브라우저 두 탭으로 시험: 주소 끝에 `?local=1`을 붙이면 인터넷 중개 없이 탭끼리 연결된다.

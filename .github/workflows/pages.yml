@@ -1,10 +1,11 @@
-# 3D 디지털판(P2P)을 GitHub Pages에 올린다. main에 푸시하면 빌드해서 배포.
+# 웹판(apps/web, TypeScript + React + R3F, P2P)을 GitHub Pages에 올린다. main에 푸시하면 시험·빌드해서 배포.
 # 저장소 Settings → Pages → Source = "GitHub Actions" (설정 완료). 주소: https://i-cubic-i.github.io/cubic3/
+# 예전 3D 시험판(game/)은 저장소에만 남아 있고 배포하지 않는다(2026-10-12 전환).
 name: Pages
 on:
   push:
     branches: [main]
-    paths: ['game/src/**', 'proto/web/index.html', 'tools/buildgame.py', '.github/workflows/pages.yml']
+    paths: ['apps/web/**', 'packages/engine/**', 'package.json', 'package-lock.json', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,13 +22,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-      - run: python3 tools/buildgame.py --pages
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test -w @cubic3/engine
+      - run: npm run build -w @cubic3/web
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: game/dist/pages
+          path: apps/web/dist
       - id: deployment
         uses: actions/deploy-pages@v4
