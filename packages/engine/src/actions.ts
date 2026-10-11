@@ -138,7 +138,7 @@ function check(S: GameState, uid: string, a: Action): string | null {
       if (!myTurn(a.seat)) return '내 차례가 아니에요.';
       const t = S.turn!;
       if (!t.picked) return '줍기를 먼저 하세요.';
-      // [임시] 버릴 카드가 없으면(손패를 모두 토큰에 쓰거나 빼앗김) 버리기를 건너뛴다 — 규칙 미정
+      // 버릴 카드가 없으면(손패를 모두 토큰에 쓰거나 빼앗김) 버리기를 건너뛴다 (사용자 2026-10-12)
       if (t.mustDiscard && S.seats[a.seat].hand.length) return '주운 뒤 1장을 버리세요.';
       if (t.peek) return '♦J로 본 카드에서 1장을 고르세요.';
       return null;
