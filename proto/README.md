@@ -52,3 +52,11 @@
 - 넓은 홀 가운데 메인 테이블, 둘레에 미니게임별 전용 테이블 8개. 미니게임이 시작되면 아바타가 그 테이블로 옮겨 앉고 카메라가 이동한다.
 - 미니게임 뽑기: 디스크 상자 → 6장 줄 세우기 → 탑뷰 주사위 → 뽑힌 디스크만 남기 → 모니터 드라이브 → 줌인 → 전체 화면 규칙. ♣는 모니터 빨간 X → 별도 컷신 → 다시 고르기.
 - 게시: https://claude.ai/artifact/9fbsLfqmWtXGHR5USv4hnU
+
+### GitHub Pages판 (P2P)
+
+- 빌드: `python3 tools/buildgame.py --pages` → `game/dist/pages/index.html`. main에 푸시하면 `.github/workflows/pages.yml`이 자동으로 빌드·배포한다.
+- 처음 한 번: 저장소를 공개로 바꾸고, Settings → Pages → Source를 "GitHub Actions"로.
+- 방 만들기 → 링크(`?room=코드`)를 친구에게 보낸다. 방장 브라우저가 테이블을 들고 있고(새로고침해도 이어짐), 나머지는 PeerJS로 방장에게 직접 연결한다.
+- 같은 브라우저 두 탭으로 시험: 주소 끝에 `?local=1`을 붙이면 인터넷 중개 없이 탭끼리 연결된다.
+- 코드: `game/src/p2p.js`. claude.ai에서 열면 기존 공유 저장소를, 그 밖에서 열면 P2P를 쓴다(`net.js`의 `boot`).

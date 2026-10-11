@@ -177,7 +177,8 @@ function render(){if(fatalMsg||!S)return;renderPlates();if(tipFor&&tipFor!=="3d"
   else if(!Main.clubPlaying()){screenEl.classList.remove('show','alerting')}
 }
 function lobbyHTML(){const sitting=S.seats.some(p=>p.uid===me);
-  return `<div class="panel lobby"><h1>큐빅 파티</h1><p>개인전 2~5인. 친구는 이 페이지에 편집자로 초대받아 들어오면 자리에 앉을 수 있어요. 혼자 시험할 때는 "내 자리 하나 더"로 여러 자리를 한 기기에서 조종하세요.</p>
+  const intro=P2PMODE?`<p>방 코드 <strong style="color:var(--brass);font-size:18px">${esc(roomInfo?roomInfo.code:'')}</strong>${roomInfo&&roomInfo.role==='host'?' · 내가 방장':''} · 개인전 2~5인. 친구에게 링크를 보내면 같은 테이블에 앉을 수 있어요.</p><div class="btnrow" style="margin-bottom:6px"><button class="btn sm" data-a="copylink">링크 복사</button></div>`:`<p>개인전 2~5인. 친구는 이 페이지에 편집자로 초대받아 들어오면 자리에 앉을 수 있어요. 혼자 시험할 때는 "내 자리 하나 더"로 여러 자리를 한 기기에서 조종하세요.</p>`;
+  return `<div class="panel lobby"><h1>큐빅 파티</h1>${intro}
    ${flashMsg?`<div class="notice" style="position:static;transform:none;margin:8px 0">${esc(flashMsg)}</div>`:''}
    <div class="seatlist">${S.seats.map((p,k)=>`<div class="seatrow"><span class="who"><span class="cube" style="width:18px;height:18px;background:${SEATCOL[k%5]}"></span>${nm(k)}</span>${mine(k)?`<button class="btn sm" data-a="leave" data-i="${k}">일어나기</button>`:''}</div>`).join('')||'<div class="seatrow" style="justify-content:center;color:var(--muted)">아직 아무도 앉지 않았어요</div>'}</div>
    <div class="btnrow">${!sitting?`<button class="btn primary" data-a="sit">자리에 앉기</button>`:''}${sitting&&S.seats.length<5?`<button class="btn" data-a="sit">내 자리 하나 더</button>`:''}<button class="btn primary" data-a="start" ${S.seats.length>=2&&S.seats.length<=5&&sitting?'':'disabled'}>게임 시작 (${S.seats.length}명)</button></div>
@@ -258,5 +259,6 @@ let fpsEl=null;
 function fpsHint(ok,locked){if(!fpsEl){fpsEl=document.createElement('div');fpsEl.id='fpshint';hud.appendChild(fpsEl)}
   fpsEl.className=locked?'fps on':ok?'fps':'fps off';
   fpsEl.innerHTML=locked?'<div class="xh" aria-hidden="true"></div><div class="fpstip">Esc · 커서 꺼내기</div>':ok?'<div class="fpstip">화면을 클릭하면 1인칭 시점 (마우스로 둘러보기)</div>':''}
-return {tip3d,dropZone,fpsHint,init,render,fatal,placePlates,queueFx,toast,clubShow,shake};
+let roomInfo=null;function room(c){roomInfo=c}
+return {room,tip3d,dropZone,fpsHint,init,render,fatal,placePlates,queueFx,toast,clubShow,shake};
 })();

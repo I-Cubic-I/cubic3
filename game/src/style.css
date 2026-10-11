@@ -265,3 +265,11 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .tip .tt-b{font-weight:700}
 .tip .tt-mg{font-weight:700}.tip .tt-mg b{color:var(--brass);margin-right:4px}
 .tip .tt-sub{margin-top:4px;font-size:12px;color:var(--muted)}
+
+/* P2P 시작 화면 */
+.p2pstart{position:fixed;inset:0;z-index:40;background:radial-gradient(ellipse at 50% 40%,rgba(20,17,14,.6),rgba(10,8,6,.92))}
+.p2pstart .lobby{pointer-events:auto}
+.fld{display:flex;flex-direction:column;gap:6px;align-items:stretch;text-align:left;margin-top:10px}
+.fld span{font-size:13px;color:var(--muted)}
+.p2pstart input{height:44px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);font:inherit;font-size:16px}
+.p2pstart input:focus-visible{outline:3px solid var(--cyan);outline-offset:1px}

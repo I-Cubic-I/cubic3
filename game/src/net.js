@@ -56,16 +56,22 @@ function autoCtl(){
 /* 화면 기준 자리: 내가 앉은 첫 자리(관전이면 0) */
 function viewSeat(){const ms=mySeats();if(!ms.length)return 0;return ctl!=null&&ms.includes(ctl)?ctl:ms[0]}
 
+let P2PMODE=false,myDisplayName='';
 async function boot(){
+  if(!(window.claude&&claude.use)){return bootP2P()}
   try{[db,user]=await Promise.all([claude.use('db'),claude.use('user')])}catch(e){}
   if(!db||!user){UI.fatal('공유 테이블에 연결할 수 없어요. claude.ai에 로그인한 상태에서 이 페이지를 열어 주세요.');return}
   me=await user.id();
   if(!me){UI.fatal('로그인 정보를 확인할 수 없어 자리에 앉을 수 없어요.');return}
-  REF=db.doc('games/table');
+  REF=db.doc('games/table');listen()}
+async function bootP2P(){P2PMODE=true;
+  try{const c=await P2P.connect();REF=c.REF;me=c.me;myDisplayName=c.name;UI.room(c)}catch(e){UI.fatal(e.message||'연결하지 못했어요.');return}
+  listen()}
+function listen(){
   REF.onSnapshot(async snap=>{
     S=snap.exists?snap.data():newLobby();
     const ids=[...new Set((S.seats||[]).map(p=>p.uid))];
-    try{names=await user.profiles(ids)}catch(e){}
+    if(P2PMODE)names=Object.fromEntries(Object.entries(S.names||{}).map(([k,v])=>[k,{name:v}]));else{try{names=await user.profiles(ids)}catch(e){}}
     const key=S.phase+'|'+(S.turn?S.turn.seat+':'+S.ti:'')+'|'+(S.mg?S.mg.id+(S.mg.ci||0)+(S.mg.step||'')+(S.mg.round||'')+(S.mg.pan||''):'')+'|'+S.round;
     if(key!==lastKey){sel.clear();ui={};lastKey=key}
     autoCtl();Main.onState();

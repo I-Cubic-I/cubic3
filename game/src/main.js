@@ -83,13 +83,14 @@ function dropCard(c,z){const i=ctl;if(i==null||!S)return;const ph=S.phase;
   UI.toast(su==='H'?'♥J·♥K는 남의 공격을 막을 때 써요':'♣는 미니게임을 정할 때 써요')}
 function action(a,d){const i=ctl,s=selArr();const guard=(st,ph)=>st.phase===ph;
   switch(a){
-    case 'sit':act(st=>{if(st.phase!=='lobby'||st.seats.length>=5)return false;st.seats.push({uid:me});log(st,'자리에 한 명 앉았다.')});break;
+    case 'sit':act(st=>{if(st.phase!=='lobby'||st.seats.length>=5)return false;st.seats.push({uid:me});if(myDisplayName){st.names=st.names||{};st.names[me]=myDisplayName}log(st,'자리에 한 명 앉았다.')});break;
     case 'leave':{const k=+d.i;act(st=>{if(st.phase!=='lobby'||!st.seats[k]||st.seats[k].uid!==me)return false;st.seats.splice(k,1)})}break;
     case 'start':act(st=>{if(st.phase!=='lobby'||st.seats.length<2)return false;startGame(st)});break;
     case 'restart':act(st=>{if(st.phase!=='ended')return false;startGame(st)});break;
-    case 'tolobby':act(st=>{const seats=st.seats.map(p=>({uid:p.uid}));for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby());st.seats=seats});break;
+    case 'tolobby':act(st=>{const seats=st.seats.map(p=>({uid:p.uid}));const nm=st.names;for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby());st.seats=seats;if(nm)st.names=nm});break;
     case 'reset1':ui.confirmReset=true;UI.render();break;
-    case 'reset2':ui.log=false;act(st=>{for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby())});break;
+    case 'reset2':ui.log=false;act(st=>{const nm=st.names;for(const k of Object.keys(st))delete st[k];Object.assign(st,newLobby());if(nm)st.names=nm});break;
+    case 'copylink':{const u=location.href;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>UI.toast('링크를 복사했어요'),()=>UI.toast(u))}break;
     case 'log':ui.log=!ui.log;UI.render();break;
     case 'viewtop':SC.shot(SC.camShot==='top'?'seat':'top');break;
     case 'viewseat':SC.resetLook();SC.shot(S.phase==='reward'?'reward':S.phase==='main'&&S.turn&&mine(S.turn.seat)?'myturn':'seat');break;

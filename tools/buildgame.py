@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """3D 디지털판(game/) 빌드: 엔진은 proto/web/index.html 첫 <script>에서 가져와 한 파일로 묶는다.
 
-사용: python3 tools/buildgame.py            -> game/dist/index.html (three.js는 cdnjs)
+사용: python3 tools/buildgame.py            -> game/dist/index.html (claude.ai 페이지용, 공유 저장소)
+      python3 tools/buildgame.py --pages    -> game/dist/pages/index.html (GitHub Pages용, P2P)
       python3 tools/buildgame.py --local P  -> three.js를 로컬 파일 P에서 읽는 테스트용 game/dist/local.html
 """
 import re, sys, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 THREE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+PEER_CDN = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'
 
 def engine_src():
     html = (ROOT / 'proto/web/index.html').read_text(encoding='utf-8')
@@ -16,10 +18,11 @@ def engine_src():
         sys.exit('엔진 블록을 찾지 못했습니다')
     return m.group(1)
 
-def build(three_src, out):
+def build(three_src, out, peer=False):
     src = ROOT / 'game/src'
-    js = '\n'.join([engine_src()] + [(src / f).read_text(encoding='utf-8') for f in ('net.js', 'scene.js', 'ui.js', 'main.js')])
+    js = '\n'.join([engine_src()] + [(src / f).read_text(encoding='utf-8') for f in ('net.js', 'p2p.js', 'scene.js', 'ui.js', 'main.js')])
     css = (src / 'style.css').read_text(encoding='utf-8')
+    peer_tag = f'\n<script src="{PEER_CDN}"></script>' if peer else ''
     page = f'''<!doctype html>
 <html lang="ko">
 <head>
@@ -35,7 +38,7 @@ def build(three_src, out):
 <body>
 <canvas id="gl" aria-label="게임 테이블"></canvas>
 <div id="hud"></div>
-<script src="{three_src}"></script>
+<script src="{three_src}"></script>{peer_tag}
 <script>
 {js}
 </script>
@@ -47,7 +50,9 @@ def build(three_src, out):
     print('wrote', out, len(page), 'bytes')
 
 if __name__ == '__main__':
-    if len(sys.argv) > 2 and sys.argv[1] == '--local':
+    if len(sys.argv) > 1 and sys.argv[1] == '--pages':
+        build(THREE_CDN, ROOT / 'game/dist/pages/index.html', peer=True)
+    elif len(sys.argv) > 2 and sys.argv[1] == '--local':
         build('file://' + str(pathlib.Path(sys.argv[2]).resolve()), ROOT / 'game/dist/local.html')
     else:
         build(THREE_CDN, ROOT / 'game/dist/index.html')
