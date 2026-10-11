@@ -44,8 +44,14 @@ export function App() {
     setBusy(host ? '방을 여는 중…' : '방에 연결하는 중…');
     try {
       let r: Room;
-      if (host) r = await hostRoom(net, code, me);
-      else r = await joinRoom(net, code, me, () => useStore.getState().setFatal('방장과 연결이 끊겼어요. 방장이 창을 닫았을 수 있어요. 새로고침해서 다시 들어와 주세요.'));
+      const join = () => joinRoom(net, code, me, () => useStore.getState().setFatal('방장과 연결이 끊겼어요. 방장이 창을 닫았을 수 있어요. 새로고침해서 다시 들어와 주세요.'));
+      if (host) {
+        try { r = await hostRoom(net, code, me); }
+        catch (e) {
+          // 예전에 방장이었던 방을 다른 탭에서 이미 열고 있으면 참가자로 들어간다
+          if (!p.create && e instanceof NetError && e.kind === 'taken') r = await join(); else throw e;
+        }
+      } else r = await join();
       if (r.clockOffset) { const off = r.clockOffset; setClock(() => Date.now() + off); }
       const u = new URL(location.href); u.searchParams.set('room', code); history.replaceState(null, '', u);
       useStore.getState().setRoom(r, me, p.name);
@@ -53,7 +59,7 @@ export function App() {
       setBusy(null);
     } catch (e) {
       console.error(e);
-      if (host) LS.set('c3-hosting', '');
+      if (p.create) LS.set('c3-hosting', '');
       setMsg(e instanceof NetError ? e.message : '연결하지 못했어요. 다시 시도해 주세요.');
       setBusy(null);
     }
