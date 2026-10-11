@@ -66,7 +66,7 @@ function screen(html){let el=document.getElementById('p2pstart');if(!el){el=docu
 function closeScreen(){const el=document.getElementById('p2pstart');if(el)el.remove()}
 function startUI(msg0){return new Promise(resolve=>{
   const q=new URLSearchParams(location.search);const code=(q.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-  const draw=(msg)=>{const el=screen(`<div class="panel lobby"><h1>큐빅 파티</h1>
+  const draw=(msg)=>{const el=screen(`<div class="panel lobby"><h1>Cubic³</h1>
     <p>방을 만들면 링크가 생겨요. 친구에게 링크를 보내면 같은 테이블에 앉을 수 있어요.</p>
     <label class="fld"><span>내 이름</span><input id="p2pname" maxlength="12" value="${esc(myName())}" placeholder="이름" autocomplete="nickname"></label>
     ${msg?`<div class="notice" style="position:static;transform:none;margin:8px 0">${esc(msg)}</div>`:''}
@@ -83,7 +83,7 @@ function startUI(msg0){return new Promise(resolve=>{
 /* ---------- 연결해서 REF·me·이름 돌려주기 ---------- */
 async function connect(){const useLocal=new URLSearchParams(location.search).get('local')==='1';const NET=useLocal?LocalNet:PeerNet;
   if(!useLocal&&typeof Peer==='undefined')throw new Error('연결 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.');
-  let msg='';for(;;){const pick=await startUI(msg);msg='';screen(`<div class="panel lobby"><h1>큐빅 파티</h1><p>${pick.host?'방을 여는 중…':'방에 연결하는 중…'}</p></div>`);
+  let msg='';for(;;){const pick=await startUI(msg);msg='';screen(`<div class="panel lobby"><h1>Cubic³</h1><p>${pick.host?'방을 여는 중…':'방에 연결하는 중…'}</p></div>`);
     try{let REF_,role;
       if(pick.host){const H={};const net=await NET.host(pick.code,{onJoin:c=>H.onJoin&&H.onJoin(c),onMsg:(c,m)=>H.onMsg&&H.onMsg(c,m),onLeave:()=>{}});
         REF_=makeHost(pick.code,net,H);role='host';LS.set('cp-hosting',pick.code)}

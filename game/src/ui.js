@@ -36,7 +36,7 @@ let fatalMsg=null;
 function init(){hud=$('#hud');hud.innerHTML=`<div id="plates"></div><div id="mainui"></div><div id="screen" class="screen" aria-live="polite"></div><div id="cutin" class="cutin"></div><div id="fxl"></div><div id="toast" class="toast" role="status"></div>`;
   platesEl=$('#plates');mainEl=$('#mainui');screenEl=$('#screen');cutEl=$('#cutin');fxEl=$('#fxl');toastEl=$('#toast');
   hud.addEventListener('click',onClick);hud.addEventListener('pointerdown',dragStart);window.addEventListener('pointermove',dragMove,{passive:false});window.addEventListener('pointerup',dragEnd);hud.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.hcard,.mcard.click')){e.preventDefault();e.target.click()}})}
-function fatal(m){fatalMsg=m;mainEl.innerHTML=`<div class="panel lobby"><h1>큐빅 파티</h1><p>${esc(m)}</p></div>`}
+function fatal(m){fatalMsg=m;mainEl.innerHTML=`<div class="panel lobby"><h1>Cubic³</h1><p>${esc(m)}</p></div>`}
 
 /* ---------- 이름표 ---------- */
 let plateHTMLKey='';
@@ -149,7 +149,7 @@ function render(){if(fatalMsg||!S)return;renderPlates();if(tipFor&&tipFor!=="3d"
   if(S.phase==='lobby'){screenEl.classList.remove('show');mainEl.innerHTML=lobbyHTML();return}
   const i=ctl;const actor=whoActs();const ph=S.phase;
   let pill='',pillWait=false,sub=null,acts='',note='',center='',extra='';
-  const topl=`<div class="topl"><span class="logo">큐빅 파티</span><span class="chip">${S.round}라운드</span><span class="chip">${S.ot?'연장전 · 4색':'목표 3색'}</span>${mySeats().length>1?mySeats().map(k=>`<button class="chip ${k===ctl?'on':''}" data-a="ctl" data-i="${k}">자리 ${k+1}</button>`).join(''):''}</div>`;
+  const topl=`<div class="topl"><span class="logo">Cubic³</span><span class="chip">${S.round}라운드</span><span class="chip">${S.ot?'연장전 · 4색':'목표 3색'}</span>${mySeats().length>1?mySeats().map(k=>`<button class="chip ${k===ctl?'on':''}" data-a="ctl" data-i="${k}">자리 ${k+1}</button>`).join(''):''}</div>`;
   const topr=`<div class="topr"><button class="iconbtn" data-a="log" aria-label="기록 보기">${ICON.list}</button><button class="iconbtn" data-a="viewtop" aria-label="위에서 보기">${ICON.top}</button><button class="iconbtn" data-a="viewseat" aria-label="기본 시점">${ICON.eye}</button></div>`;
   let handTuck=false,itemTray='';
   if(ph==='main'){if(i!=null&&S.turn.seat===i){const r=turnActs(i);pill=r.pill;sub=r.sub;acts=r.acts||'';note=r.note||'';center=r.center||''}else{pill=`${nm(S.turn.seat)}의 차례`;pillWait=true}}
@@ -178,7 +178,7 @@ function render(){if(fatalMsg||!S)return;renderPlates();if(tipFor&&tipFor!=="3d"
 }
 function lobbyHTML(){const sitting=S.seats.some(p=>p.uid===me);
   const intro=P2PMODE?`<p>방 코드 <strong style="color:var(--brass);font-size:18px">${esc(roomInfo?roomInfo.code:'')}</strong>${roomInfo&&roomInfo.role==='host'?' · 내가 방장':''} · 개인전 2~5인. 친구에게 링크를 보내면 같은 테이블에 앉을 수 있어요.</p><div class="btnrow" style="margin-bottom:6px"><button class="btn sm" data-a="copylink">링크 복사</button></div>`:`<p>개인전 2~5인. 친구는 이 페이지에 편집자로 초대받아 들어오면 자리에 앉을 수 있어요. 혼자 시험할 때는 "내 자리 하나 더"로 여러 자리를 한 기기에서 조종하세요.</p>`;
-  return `<div class="panel lobby"><h1>큐빅 파티</h1>${intro}
+  return `<div class="panel lobby"><h1>Cubic³</h1>${intro}
    ${flashMsg?`<div class="notice" style="position:static;transform:none;margin:8px 0">${esc(flashMsg)}</div>`:''}
    <div class="seatlist">${S.seats.map((p,k)=>`<div class="seatrow"><span class="who"><span class="cube" style="width:18px;height:18px;background:${SEATCOL[k%5]}"></span>${nm(k)}</span>${mine(k)?`<button class="btn sm" data-a="leave" data-i="${k}">일어나기</button>`:''}</div>`).join('')||'<div class="seatrow" style="justify-content:center;color:var(--muted)">아직 아무도 앉지 않았어요</div>'}</div>
    <div class="btnrow">${!sitting?`<button class="btn primary" data-a="sit">자리에 앉기</button>`:''}${sitting&&S.seats.length<5?`<button class="btn" data-a="sit">내 자리 하나 더</button>`:''}<button class="btn primary" data-a="start" ${S.seats.length>=2&&S.seats.length<=5&&sitting?'':'disabled'}>게임 시작 (${S.seats.length}명)</button></div>
