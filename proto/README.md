@@ -60,3 +60,7 @@
 - 방 만들기 → 링크(`?room=코드`)를 친구에게 보낸다. 방장 브라우저가 테이블을 들고 있고(새로고침해도 이어짐), 나머지는 PeerJS로 방장에게 직접 연결한다.
 - 같은 브라우저 두 탭으로 시험: 주소 끝에 `?local=1`을 붙이면 인터넷 중개 없이 탭끼리 연결된다.
 - 코드: `game/src/p2p.js`. claude.ai에서 열면 기존 공유 저장소를, 그 밖에서 열면 P2P를 쓴다(`net.js`의 `boot`).
+
+### 화면 시험
+
+`tools/test/` 참고. `node tools/test/play.js flow|minigames|auto|p2p` → `tools/test/out/`에 스크린샷과 오류.
