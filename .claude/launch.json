@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "C:/PROGRA~1/nodejs/node.exe",
+      "runtimeArgs": ["D:/cubic3/node_modules/vite/bin/vite.js", "D:/cubic3/apps/web", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}

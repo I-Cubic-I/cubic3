@@ -58,7 +58,7 @@ function candidates(S: GameState, seat: number): Action[] {
       for (const it of its) for (const col of ['S', 'H', 'D', 'C'] as const) c.push({ type: 'token', seat, cards: [...nums.slice(0, n), it], color: col });
     }
   }
-  if (hand.length > 6) c.push({ type: 'trim', seat, cards: hand.slice(0, hand.length - 6) });
+  if (hand.length > 6) c.push({ type: 'trim', seat, cards: hand.slice(0, hand.length - 6) }, { type: 'trimOne', seat, card: hand[0] });
   const m = S.mg;
   for (const it of [...its, null]) {
     c.push({ type: 'holdRoll', seat, item: it }, { type: 'ovnSave', seat, item: it });

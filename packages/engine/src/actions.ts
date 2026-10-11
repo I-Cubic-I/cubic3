@@ -1,6 +1,6 @@
 /* 행동 판정: 플레이어가 보낸 행동이 지금 가능한지 확인하고 상태에 적용한다.
    방장(P2P) 또는 서버가 이 함수 하나로 판정한다. 화면은 같은 함수로 미리 가능 여부를 볼 수 있다. */
-import { R, U, isItem, now } from './cards';
+import { R, U, cname, isItem, now } from './cards';
 import {
   canMakeToken, defend, discardCard, endTurn, log, makeToken, newLobby, pickDJ, pickup, pickupDiscard,
   readyUp, resolveAttack, rewardPick, rollBoard, startAttack, startGame, useClub, useDJ, useHQ,
@@ -36,6 +36,7 @@ export type Action =
   | { type: 'diamondJPick'; seat: number; card: Card }
   | { type: 'endTurn'; seat: number }
   | { type: 'trim'; seat: number; cards: Card[] }
+  | { type: 'trimOne'; seat: number; card: Card }
   | { type: 'reward'; seat: number; card: Card }
   | { type: 'holdRoll'; seat: number; item?: Card | null }
   | { type: 'holdStop'; seat: number }
@@ -151,6 +152,13 @@ function check(S: GameState, uid: string, a: Action): string | null {
       if (p.hand.length - HAND_LIMIT !== a.cards.length) return `${p.hand.length - HAND_LIMIT}장을 골라 버리세요.`;
       return a.cards.every(c => holds(a.seat, c)) && new Set(a.cards).size === a.cards.length ? null : '손패에 없는 카드예요.';
     }
+    case 'trimOne': {
+      if (!myTurn(a.seat)) return '내 차례가 아니에요.';
+      const t = S.turn!;
+      if (!t.picked || t.mustDiscard || t.peek) return '줍기와 ♦J 고르기를 먼저 마치세요.';
+      if (S.seats[a.seat].hand.length <= HAND_LIMIT) return '손패가 6장을 넘지 않아요.';
+      return holds(a.seat, a.card) ? null : '손패에 없는 카드예요.';
+    }
     case 'reward': return S.phase === 'reward' && S.reward && S.reward.order[S.reward.pi] === a.seat && S.reward.disp.includes(a.card) ? null : '지금은 고를 수 없어요.';
     case 'holdRoll': return S.phase === 'mg' && mg?.id === 'hold' && mg.ord[mg.ci] === a.seat && (!a.item || (holds(a.seat, a.item) && isItem(a.item))) ? null : '지금은 굴릴 수 없어요.';
     case 'holdStop': return S.phase === 'mg' && mg?.id === 'hold' && mg.ord[mg.ci] === a.seat && mg.k ? null : '지금은 멈출 수 없어요.';
@@ -221,6 +229,13 @@ function run(S: GameState, uid: string, a: Action): false | void {
       const p = S.seats[a.seat];
       a.cards.forEach(c => { p.hand.splice(p.hand.indexOf(c), 1); discardCard(S, a.seat, c); });
       log(S, `자리 ${a.seat + 1}: 손패 정리 ${a.cards.length}장.`); endTurn(S); return;
+    }
+    case 'trimOne': {
+      const p = S.seats[a.seat];
+      p.hand.splice(p.hand.indexOf(a.card), 1); discardCard(S, a.seat, a.card);
+      log(S, `자리 ${a.seat + 1}: 손패 정리 ${cname(a.card)}.`);
+      if (p.hand.length <= HAND_LIMIT) endTurn(S);
+      return;
     }
     case 'reward': rewardPick(S, a.seat, a.card); return;
     case 'holdRoll': holdRoll(S, a.seat, a.item ?? null); return;

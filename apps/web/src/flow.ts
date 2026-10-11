@@ -1,0 +1,267 @@
+/* 흐름: 상태·연출 이벤트 → 3D 연출과 화면. 버튼·테이블 조작을 행동으로 바꾼다. */
+import {
+  type Action, type Card, type Fx, type GameState, type Hand, R, SNAME, type Suit, U, canMakeToken, cname, costFor, isItem,
+} from '@cubic3/engine';
+import { mine, mySeats, seatName, whoActs } from './game';
+import { useStore, viewSeat } from './store';
+import type { Pick, World } from './scene/World';
+
+let world: World | null = null;
+export const getWorld = () => world;
+export function setWorld(w: World | null): void { world = w; }
+
+const st = () => useStore.getState();
+const S = () => st().S;
+const toast = (m: string) => st().showToast(m);
+const act = (a: Action) => st().act(a);
+
+/* ---------------- 연출 이벤트 큐 ---------------- */
+let fxq: Fx[] = [], fxBusy = false;
+function queueFx(f: Fx): void { fxq.push(f); while (fxq.length > 4) fxq.shift(); if (!fxBusy) nextFx(); }
+function nextFx(): void {
+  const f = fxq.shift();
+  if (!f) { fxBusy = false; st().set({ fxShow: null }); return; }
+  fxBusy = true;
+  const dur = fxDuration(f);
+  st().set({ fxShow: { f, out: false } });
+  if (shakes(f)) setTimeout(shake, f.t === 'rps' ? 500 : f.t === 'vault' ? 600 : 0);
+  setTimeout(() => { st().set({ fxShow: { f, out: true } }); setTimeout(nextFx, 260); }, dur);
+}
+function fxDuration(f: Fx): number {
+  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200 } as Record<string, number>)[f.t] || 1300;
+}
+function shakes(f: Fx): boolean {
+  if (f.t === 'dice') return !!f.bust;
+  if (f.t === 'pop' || f.t === 'attack') return true;
+  if (f.t === 'rps' || f.t === 'vault') return !!(f.losers as number[])?.length;
+  return false;
+}
+export function shake(): void { st().set({ shakeN: st().shakeN + 1 }); }
+
+/* ---------------- 상태가 바뀌면 ---------------- */
+let lastFx: number | null = null, choosing = false, clubBusy = false, prevPhase: string | null = null, introKey = '', lastActor: string | null = null;
+const clubQ: Fx[] = [];
+export function rulesReady(): void { choosing = false; st().set({ rulesShown: true }); }
+async function runClub(f: Fx): Promise<void> {
+  clubBusy = true; st().set({ clubPlaying: true });
+  try {
+    // ♣: 모니터가 빨간 X → 모니터와 별개인 컷신
+    st().set({ screenAlert: true });
+    await new Promise(r => setTimeout(r, 900));
+    st().set({ cutin: f });
+    await new Promise(r => setTimeout(r, 1900));
+    st().set({ cutin: null, screenAlert: false, rulesShown: false });
+    choosing = true;
+    await world?.playChoose(f.v as number, { restore: true, roll: R(f.club as Card) === 11 });
+  } finally { clubBusy = false; st().set({ clubPlaying: false }); }
+  const nx = clubQ.shift(); if (nx) runClub(nx);
+}
+function pumpFx(s: GameState): Fx[] {
+  const list = s.fx || [];
+  if (lastFx === null) { lastFx = s.fxn || 0; return []; }
+  const nw = list.filter(f => f.id > lastFx!); if (nw.length) lastFx = nw[nw.length - 1].id; return nw;
+}
+
+export function onState(s: GameState): void {
+  const W = world; if (!W) return;
+  const me = st().me;
+  W.sync(); const ph = s.phase; const nw = pumpFx(s);
+  // 장면 전환
+  if (ph !== prevPhase) {
+    if (ph === 'main' || ph === 'defense') { if (prevPhase !== 'main' && prevPhase !== 'defense') { W.cut(); W.shot('seat', 2); } st().set({ rulesShown: false }); choosing = false; }
+    if (ph === 'mg') { W.cut(); if (!W.goStation(s.mg!.id)) W.shot('seat', 2); st().set({ rulesShown: false }); choosing = false; st().patchUi({ showHand: false }); }
+    if (ph !== 'mg' && prevPhase === 'mg') W.lightsMain();
+    if (ph === 'reward') W.shot('reward', 2);
+    if (ph === 'ended') W.shot('seat', 1.5);
+    if (ph === 'lobby') W.shot('seat');
+  }
+  if (ph === 'roll') {
+    const k = 'r' + s.round + s.board!.join();
+    if (introKey !== k) { introKey = k; st().set({ rulesShown: false }); if (prevPhase === 'main' || prevPhase === 'defense') W.playIntro(); else { W.settleLined(); W.shot('top'); } }
+  }
+  // 연출 이벤트
+  for (const f of nw) {
+    if (f.club) { if (clubBusy) clubQ.push(f); else runClub(f); continue; }
+    if (f.t === 'dice' && f.mg) { choosing = true; st().set({ rulesShown: false }); W.playChoose(f.v as number, { roll: true }); continue; }
+    queueFx(f);
+  }
+  // 다시 들어왔거나 연출을 놓친 경우 바로 규칙 화면
+  if (ph === 'clubs' && !st().rulesShown && !choosing && !clubBusy) { W.settleLined(); W.jumpChosen(s.die!); W.shot('zoom', 8); st().set({ rulesShown: true }); }
+  // 내 차례 알림
+  const a = whoActs(s, me); const key = a + '|' + ph + '|' + (s.mg ? s.mg.id : '');
+  if (key !== lastActor) { lastActor = key; if (a != null && mine(s, me, a) && !['lobby', 'clubs', 'ended'].includes(ph)) toast(mySeats(s, me).length > 1 ? `${seatName(s, a)} 차례!` : '내 차례!'); }
+  // 시점: 내 메인 턴이면 덱·버림 줄 쪽으로 확대, 남의 차례면 테이블 전체
+  if (ph === 'main' || ph === 'defense') {
+    const want = s.turn && mine(s, me, s.turn.seat) && ph === 'main' ? 'myturn' : 'seat';
+    if (W.camShot !== want && (W.camShot === 'seat' || W.camShot === 'myturn')) { W.resetLook(); W.shot(want, 2.2); }
+  }
+  // FPS: 메인 턴에서 내 차례가 아닐 때만(내가 막아야 하는 공격도 제외)
+  const myAct = a != null && mine(s, me, a); const fps = (ph === 'main' || ph === 'defense') && mySeats(s, me).length > 0 && !myAct;
+  if (!fps && W.isLocked()) W.resetLook(); W.setFps(fps);
+  prevPhase = ph;
+}
+
+/* ---------------- 테이블 위 물건 ---------------- */
+export function canPick(p: Pick): boolean {
+  const s = S(); if (!s) return false; const i = st().ctl; const ui = st().ui;
+  if (p.kind === 'deck') return s.phase === 'main' && !!s.turn && s.turn.seat === i && !s.turn.picked && !ui.mode;
+  if (p.kind === 'row') return s.phase === 'main' && !!s.turn && s.turn.seat === i && ((!s.turn.picked && !ui.mode) || (ui.mode === 'HQ' && !isItem(p.c)));
+  if (p.kind === 'reward') return s.phase === 'reward' && !!s.reward && s.reward.order[s.reward.pi] === i;
+  if (p.kind === 'die') return s.phase === 'roll' && s.first === i;
+  if (p.kind === 'seat') return ui.mode === 'target' && p.i !== i;
+  if (p.kind === 'slot') return s.phase === 'clubs' && ui.mode === 'clubK';
+  const m = s.mg;
+  if (p.kind === 'bomb') return s.phase === 'mg' && m?.id === 'bomb' && m.alive[m.ci] === i;
+  if (p.kind === 'door') return s.phase === 'mg' && m?.id === 'vault' && i != null && ((m.step === 'hide' && m.alive.includes(i) && !m.picks[i]) || (m.step === 'guard' && m.lead === i));
+  return false;
+}
+export function pick(p: Pick): void {
+  if (!canPick(p)) return; const ui = st().ui; const s = S()!;
+  if (p.kind === 'deck') cmd('pdeck');
+  if (p.kind === 'row') {
+    if (ui.mode === 'HQ') { const hq = ui.hq || []; st().patchUi({ hq: hq.includes(p.c) ? hq.filter(x => x !== p.c) : hq.length < 2 ? [...hq, p.c] : hq }); return; }
+    cmd('prow', { c: p.c });
+  }
+  if (p.kind === 'reward') cmd('rpick', { c: p.c });
+  if (p.kind === 'die') cmd('roll');
+  if (p.kind === 'bomb') cmd('bflip', { k: p.k });
+  if (p.kind === 'slot') cmd('clubKgo', { k: p.k });
+  if (p.kind === 'door') { if (s.mg?.id === 'vault' && s.mg.step === 'hide') cmd('vhide', { z: p.z }); else cmd('vz', { z: p.z }); }
+  if (p.kind === 'seat') { const it = ui.card!; if (R(it) === 11) cmd('atk', { t: p.i }); else toast('아래 버튼에서 대상을 골라 주세요'); }
+}
+
+/* ---------------- 손패 카드를 끌어 놓았을 때 ---------------- */
+export type Drop = { kind: 'hand' } | { kind: 'table' } | { kind: 'tray' } | { kind: 'seat'; i: number };
+export function dropCard(c: Card, z: Drop): void {
+  const s = S(); const i = st().ctl; if (i == null || !s) return;
+  if (s.phase !== 'main' || !s.turn || s.turn.seat !== i) { toast('지금은 내 차례가 아니에요'); return; }
+  const t = s.turn, p = s.seats[i]; if (z.kind === 'hand') return;
+  if (t.peek) { toast('먼저 ♦J로 본 카드 중 1장을 고르세요'); return; }
+  if (!t.picked) { toast('먼저 덱이나 버림 줄에서 1장을 주우세요'); return; }
+  if (t.mustDiscard) { if (z.kind !== 'table') { toast('버릴 카드는 테이블에 놓으세요'); return; } act({ type: 'discard', seat: i, card: c }); return; }
+  if (t.trim) { if (z.kind !== 'table') return; act({ type: 'trimOne', seat: i, card: c }); return; }
+  if (z.kind === 'tray') {
+    if (isItem(c) && !(U(c) === 'D' && R(c) >= 12)) { toast('토큰 칸에는 숫자 카드(또는 ♦Q·♦K)를 놓으세요'); return; }
+    if (isItem(c)) { st().set({ sel: [c] }); toast(`${cname(c)}를 골랐어요 · 같은 문양 숫자 카드를 토큰 칸에 놓으세요`); return; }
+    if (t.token) { toast('이번 턴에 이미 토큰을 만들었어요'); return; }
+    const su = U(c), cost = costFor(s, i); const it = st().sel.find(x => isItem(x) && U(x) === 'D');
+    if (it) {
+      const nums = p.hand.filter(x => U(x) === su && !isItem(x)).sort((a, b) => R(a) - R(b)); const need = R(it) === 13 ? 3 : cost;
+      const cards = [...[c, ...nums.filter(x => x !== c)].slice(0, need), it];
+      const err = canMakeToken(s, i, cards); if (err) { toast(err); return; }
+      st().clearSel(); if (R(it) === 12) { st().setUi({ mode: 'DQ', cards }); return; }
+      act({ type: 'token', seat: i, cards }); return;
+    }
+    const nums = p.hand.filter(x => U(x) === su && !isItem(x)).sort((a, b) => R(a) - R(b));
+    if (nums.length < cost) { toast(`${SNAME[su]} 숫자 카드가 ${cost}장 필요해요 (지금 ${nums.length}장)`); return; }
+    const e = canMakeToken(s, i, nums.slice(0, cost)); if (e) { toast(e); return; }
+    cmd('qtoken', { s: su }); return;
+  }
+  if (!isItem(c)) { toast('숫자 카드는 토큰 칸에 놓아 토큰을 만들어요'); return; }
+  if (t.item) { toast('이번 턴에 이미 아이템을 썼어요'); return; }
+  const su = U(c), r = R(c);
+  if (su === 'S') {
+    if (z.kind !== 'seat') { toast('♠ 공격 카드는 공격할 상대에게 끌어 놓으세요'); return; }
+    if (z.i === i) return;
+    if (r === 11) { act({ type: 'attack', seat: i, card: c, target: z.i }); return; }
+    st().set({ ui: { mode: 'target', card: c, only: z.i }, sel: [c] }); toast(r === 12 ? '받을 문양을 고르세요' : '뺏을 토큰을 고르세요'); return;
+  }
+  if (su === 'H' && r === 12) { st().set({ ui: { mode: 'HQ', card: c, hq: [] }, sel: [] }); return; }
+  if (su === 'D' && r === 11) { act({ type: 'diamondJ', seat: i, card: c }); return; }
+  if (su === 'D') { st().set({ sel: [c] }); toast(`${cname(c)}는 토큰 칸에 숫자 카드와 함께 써요`); return; }
+  toast(su === 'H' ? '♥J·♥K는 남의 공격을 막을 때 써요' : '♣는 미니게임을 정할 때 써요');
+}
+
+/* ---------------- 버튼 → 행동 ---------------- */
+type D = Record<string, string | number | undefined>;
+export function cmd(a: string, d: D = {}): void {
+  const store = st(); const s = S(); const i = store.ctl!; const sel = store.sel; const ui = store.ui;
+  const W = world;
+  switch (a) {
+    case 'sit': act({ type: 'sit', name: store.name }); break;
+    case 'leave': act({ type: 'leave', seat: +d.i! }); break;
+    case 'start': act({ type: 'start' }); break;
+    case 'restart': act({ type: 'restart' }); break;
+    case 'tolobby': act({ type: 'toLobby' }); break;
+    case 'reset1': store.patchUi({ confirmReset: true }); break;
+    case 'reset2': store.patchUi({ log: false }); act({ type: 'reset' }); break;
+    case 'copylink': { const u = location.href; (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => toast('링크를 복사했어요'), () => toast(u)); break; }
+    case 'log': store.patchUi({ log: !ui.log }); break;
+    case 'viewtop': W?.shot(W.camShot === 'top' ? 'seat' : 'top'); break;
+    case 'viewseat': W?.resetLook(); W?.shot(s?.phase === 'reward' ? 'reward' : s?.phase === 'main' && s.turn && mine(s, store.me, s.turn.seat) ? 'myturn' : 'seat'); break;
+    case 'ctl': store.setCtl(+d.i!); break;
+    case 'togglehand': store.patchUi({ showHand: !ui.showHand }); break;
+    case 'rulesagain': store.patchUi({ rulesAgain: !ui.rulesAgain }); break;
+    case 'roll': act({ type: 'roll', seat: i }); break;
+    case 'ready': act({ type: 'ready' }); break;
+    case 'club': act({ type: 'club', seat: i, card: String(d.c), arg: +(d.x || 0) }); break;
+    case 'clubK': store.setUi({ mode: 'clubK', card: String(d.c) }); break;
+    case 'clubKgo': { const c = ui.card!; store.setUi({}); act({ type: 'club', seat: i, card: c, arg: +d.k! }); break; }
+    case 'defend': act({ type: 'defend', seat: i, card: String(d.c) }); break;
+    case 'nodef': act({ type: 'noDefend', seat: i }); break;
+    case 'pdeck': act({ type: 'pickDeck', seat: i }); break;
+    case 'prow': act({ type: 'pickRow', seat: i, card: String(d.c) }); break;
+    case 'pdisc': if (sel.length === 1) act({ type: 'discard', seat: i, card: sel[0] }); break;
+    case 'token': {
+      const it = sel.find(isItem); if (it && R(it) === 12) { store.setUi({ mode: 'DQ', cards: sel }); break; }
+      act({ type: 'token', seat: i, cards: sel }); break;
+    }
+    case 'qtoken': {
+      if (!s) break; const su = d.s as Suit; const cost = costFor(s, i);
+      const nums = s.seats[i].hand.filter(c => U(c) === su && !isItem(c)).sort((x, y) => R(x) - R(y)).slice(0, cost);
+      act({ type: 'token', seat: i, cards: nums }); break;
+    }
+    case 'dqcol': { const cards = ui.cards || []; store.setUi({}); act({ type: 'token', seat: i, cards, color: d.s as Suit }); break; }
+    case 'item': {
+      const c = sel[0]; const su = U(c), r = R(c);
+      if (su === 'S') store.setUi({ mode: 'target', card: c });
+      else if (su === 'H' && r === 12) store.set({ ui: { mode: 'HQ', card: c, hq: [] }, sel: [] });
+      else if (su === 'D' && r === 11) act({ type: 'diamondJ', seat: i, card: c });
+      break;
+    }
+    case 'tsuit': store.patchUi({ suit: d.s as Suit }); break;
+    case 'atk': {
+      const c = ui.card!; const tg = +d.t!; const arg = R(c) === 12 ? ui.suit : R(c) === 13 ? (d.s as Suit) : null;
+      if (R(c) === 12 && !arg) return; store.setUi({});
+      act({ type: 'attack', seat: i, card: c, target: tg, arg: arg ?? null }); break;
+    }
+    case 'hq': { const c = ui.card!; const picks = (ui.hq || []).filter(x => s?.row.includes(x)); store.setUi({}); act({ type: 'heartQ', seat: i, card: c, picks }); break; }
+    case 'dj': act({ type: 'diamondJPick', seat: i, card: String(d.c) }); break;
+    case 'cancel': store.set({ ui: {}, sel: [] }); break;
+    case 'end': act({ type: 'endTurn', seat: i }); break;
+    case 'trim': act({ type: 'trim', seat: i, cards: sel }); break;
+    case 'hroll': act({ type: 'holdRoll', seat: i, item: null }); break;
+    case 'hroll2': act({ type: 'holdRoll', seat: i, item: sel[0] }); break;
+    case 'hstop': act({ type: 'holdStop', seat: i }); break;
+    case 'barm': act({ type: 'bombArm', seat: i, item: sel[0] }); break;
+    case 'bflip': act({ type: 'bombFlip', seat: i, k: +d.k! }); break;
+    case 'aitem': act({ type: 'auctionItem', seat: i, item: sel[0] }); break;
+    case 'aready': act({ type: 'auctionReady', seat: i }); break;
+    case 'abid': act({ type: 'auctionBid', seat: i, card: String(d.c) }); break;
+    case 'rpick': act({ type: 'reward', seat: i, card: String(d.c) }); break;
+    case 'rps': act({ type: 'rps', seat: i, hand: d.hand as Hand }); break;
+    case 'blp': {
+      const it = ui.bsub ? sel.find(isItem) : null;
+      if (ui.bsub && !it) { store.showFlash('빼기 모드: 왼쪽 아래 아이템 J·Q·K를 먼저 고르세요.'); break; }
+      store.patchUi({ bsub: false }); act({ type: 'balloon', seat: i, card: String(d.c), item: it ?? null }); break;
+    }
+    case 'bsub': store.patchUi({ bsub: !ui.bsub }); break;
+    case 'osave': act({ type: 'ovnSave', seat: i, item: sel[0] }); break;
+    case 'onosave': act({ type: 'ovnSave', seat: i, item: null }); break;
+    case 'rarm': act({ type: 'rpsArm', seat: i, item: sel[0] }); break;
+    case 'vhide': act({ type: 'vaultHide', seat: i, zone: +d.z! }); break;
+    case 'varm': act({ type: 'vaultArm', seat: i, item: sel[0] }); break;
+    case 'vz': {
+      if (s?.mg?.id !== 'vault') break; const need = s.mg.armL ? 2 : 1; const z = +d.z!;
+      let zs = (ui.vz || []).slice(); zs = zs.includes(z) ? zs.filter(x => x !== z) : [...zs, z].slice(-need); store.patchUi({ vz: zs }); break;
+    }
+    case 'vgo': { const zs = (ui.vz || []).slice(); store.patchUi({ vz: [] }); act({ type: 'vaultGuard', seat: i, zones: zs }); break; }
+    case 'cans': act({ type: 'countAnswer', seat: i, n: +d.n! }); break;
+    case 'carm': act({ type: 'countArm', seat: i, item: sel[0] }); break;
+    case 'rbet': act({ type: 'raceBet', seat: i, suit: d.s as Suit }); break;
+    case 'rswap': act({ type: 'raceSwap', seat: i, item: sel[0], suit: d.s as Suit }); break;
+    case 'rflip': act({ type: 'raceFlip', seat: i }); break;
+  }
+}
+
+export { viewSeat };
