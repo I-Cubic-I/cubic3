@@ -1,5 +1,5 @@
 # 3D 디지털판(P2P)을 GitHub Pages에 올린다. main에 푸시하면 빌드해서 배포.
-# 처음 한 번: 저장소 Settings → Pages → Source를 "GitHub Actions"로.
+# 저장소 Settings → Pages → Source = "GitHub Actions" (설정 완료). 주소: https://i-cubic-i.github.io/cubic3/
 name: Pages
 on:
   push:
