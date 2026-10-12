@@ -17,7 +17,7 @@ export function turnActs(S: GameState, i: number, sel: string[], ui: UiMode): Tu
       <div className="mini-cards">{t.peek.map(c => <MCard key={c} c={c} cls="click" onClick={() => cmd('dj', { c })} />)}</div></div>,
   };
   if (t.mustDiscard) return {
-    pill: `${cname(t.justTook!)}을 주웠어요 · 버릴 카드를 테이블로 끌어 놓으세요`,
+    pill: `${cname(t.justTook!)}을 주웠어요 · 버릴 카드를 테이블로 끌어 놓으세요 (그 전에 토큰을 만들어도 돼요)`,
     acts: sel.length === 1 ? <button className="btn sm" onClick={() => cmd('pdisc')}>고른 카드 버리기</button> : null,
   };
   if (t.trim) {
@@ -49,7 +49,7 @@ export function turnActs(S: GameState, i: number, sel: string[], ui: UiMode): Tu
   };
   const tokErr = sel.length ? canMakeToken(S, i, sel) : '카드를 고르세요.'; const one = sel.length === 1 && isItem(sel[0]) ? sel[0] : null;
   const acts: ReactNode[] = []; let note = '';
-  if (!t.picked) acts.push(<button key="pd" className="btn primary" onClick={() => cmd('pdeck')}>덱에서 줍기</button>);
+  // 덱에서 줍기는 테이블의 덱을 눌러서(줍기 전엔 덱·버림 줄이 금빛 테두리로 빛난다)
   if (!t.token) {
     const cost = costFor(S, i);
     for (const su of SUITS) {

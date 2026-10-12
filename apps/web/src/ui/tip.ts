@@ -19,13 +19,13 @@ const ITEM_FX: Record<string, [string, string, string]> = {
 };
 const esc = (s: string) => s.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]!));
 
-function itemTip(c: Card): string | null {
+function itemTip(c: Card, note = ''): string | null {
   const base = c.replace(/b$/, ''); const f = ITEM_FX[base]; if (!f) return null;
   const S = useStore.getState().S;
   let mgLine = '';
   if (S && S.phase === 'mg' && S.mg && MG[S.mg.id]) { const l = MG[S.mg.id].text.split('\n').find(x => x.startsWith('아이템')); if (l) mgLine = l.slice(l.indexOf(':') + 1).trim(); }
   return `<div class="tt-h"><span class="tt-c ${U(base)}">${cname(base)}</span><span class="tt-k">${f[0]}</span></div>` +
-    (mgLine ? `<div class="tt-mg"><b>이번 미니게임</b> ${esc(mgLine)}</div><div class="tt-sub">메인 턴 효과: ${esc(f[1])}</div>` : `<div class="tt-b">${esc(f[1])}</div><div class="tt-sub">${esc(f[2])}</div>`);
+    (mgLine ? `<div class="tt-mg"><b>이번 미니게임</b> ${esc(mgLine)}</div>${note ? `<div class="tt-note">${esc(note)}</div>` : ''}<div class="tt-sub">메인 턴 효과: ${esc(f[1])}</div>` : `<div class="tt-b">${esc(f[1])}</div><div class="tt-sub">${esc(f[2])}</div>`);
 }
 
 let tipEl: HTMLDivElement | null = null;
@@ -39,7 +39,7 @@ function ensure(): HTMLDivElement {
   return tipEl;
 }
 function showTip(el: Element, pin: boolean): void {
-  const c = cardOf(el); if (!c || !isItem(c)) return; const html = itemTip(c); if (!html) return;
+  const c = cardOf(el); if (!c || !isItem(c)) return; const html = itemTip(c, (el as HTMLElement).dataset.note || ''); if (!html) return;
   const t = ensure(); t.innerHTML = html; t.dataset.c = ''; tipFor = el; tipPinned = pin; t.classList.add('show');
   const r = el.getBoundingClientRect(); const w = Math.min(300, window.innerWidth - 24); t.style.width = w + 'px';
   let x = r.left + r.width / 2 - w / 2; x = Math.max(12, Math.min(window.innerWidth - w - 12, x)); t.style.left = x + 'px';

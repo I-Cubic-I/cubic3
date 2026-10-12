@@ -2,12 +2,12 @@
    방장(P2P) 또는 서버가 이 함수 하나로 판정한다. 화면은 같은 함수로 미리 가능 여부를 볼 수 있다. */
 import { R, U, cname, isItem, now } from './cards';
 import {
-  canMakeToken, defend, discardCard, endTurn, log, makeToken, newLobby, pickDJ, pickup, pickupDiscard,
-  readyUp, resolveAttack, rewardPick, rollBoard, startAttack, startGame, useClub, useDJ, useHQ,
+  canMakeToken, clubChoices, clubPick, defend, discardCard, endTurn, log, makeToken, newLobby, pickDJ, pickup, pickupDiscard,
+  readyUp, resolveAttack, rewardPick, rollBoard, startAttack, startGame, stealPick, useClub, useDJ, useHQ,
 } from './core';
 import {
   auctionBid, auctionItem, auctionReady, balloonPlay, bombArm, bombFlip, countAnswer, countArm, countOpenAt, holdRoll, holdStop,
-  ovnSave, raceBet, raceFlip, raceSwap, rpsArm, rpsPick, vaultArm, vaultGuard, vaultHide,
+  ovnSave, raceBet, raceFlip, raceSwap, rpsArm, rpsPass, rpsPick, vaultArm, vaultGuard, vaultHide,
 } from './minigames';
 import type { Card, GameState, Hand, Suit } from './types';
 
@@ -15,7 +15,8 @@ export const MAX_SEATS = 5;
 export const HAND_LIMIT = 6;
 
 export type Action =
-  | { type: 'sit'; name?: string }
+  | { type: 'sit'; name?: string; chair?: number }
+  | { type: 'move'; seat: number; chair: number }
   | { type: 'leave'; seat: number }
   | { type: 'start' }
   | { type: 'restart' }
@@ -24,6 +25,7 @@ export type Action =
   | { type: 'roll'; seat: number }
   | { type: 'ready' }
   | { type: 'club'; seat: number; card: Card; arg?: number }
+  | { type: 'clubPick'; seat: number; k: number }
   | { type: 'defend'; seat: number; card: Card }
   | { type: 'noDefend'; seat: number }
   | { type: 'pickDeck'; seat: number }
@@ -48,6 +50,8 @@ export type Action =
   | { type: 'balloon'; seat: number; card: Card; item?: Card | null }
   | { type: 'rps'; seat: number; hand: Hand }
   | { type: 'rpsArm'; seat: number; item: Card }
+  | { type: 'rpsPass'; seat: number; item: Card }
+  | { type: 'stealPick'; seat: number; k: number }
   | { type: 'ovnSave'; seat: number; item: Card | null }
   | { type: 'vaultHide'; seat: number; zone: number }
   | { type: 'vaultArm'; seat: number; item: Card }
@@ -84,23 +88,29 @@ function check(S: GameState, uid: string, a: Action): string | null {
   const myTurn = (i: number) => S.phase === 'main' && !!S.turn && S.turn.seat === i;
   const mg = S.mg;
   if ('seat' in a && !seatOk(a.seat)) return '내 자리가 아니에요.';
+  // ♠J로 카드를 고르는 동안에는 그것만
+  if (S.steal && a.type !== 'stealPick' && !['reset', 'toLobby', 'leave', 'sit'].includes(a.type)) return '♠J로 카드를 고르는 중이에요.';
   switch (a.type) {
-    case 'sit': return S.phase !== 'lobby' ? '게임 중이에요.' : S.seats.length >= MAX_SEATS ? '자리가 다 찼어요.' : null;
+    case 'sit': return S.phase !== 'lobby' ? '게임 중이에요.' : S.seats.length >= MAX_SEATS ? '자리가 다 찼어요.' : a.chair != null && !chairFree(S, a.chair) ? '빈 자리가 아니에요.' : null;
+    case 'move': return S.phase !== 'lobby' ? '게임 중이에요.' : !chairFree(S, a.chair) ? '빈 자리가 아니에요.' : null;
     case 'leave': return S.phase !== 'lobby' ? '게임 중이에요.' : null;
     case 'start': return S.phase !== 'lobby' ? '이미 시작했어요.' : S.seats.length < 2 ? '2명 이상 앉아야 해요.' : null;
     case 'restart': return S.phase !== 'ended' ? '게임이 끝나지 않았어요.' : null;
     case 'toLobby': case 'reset': return S.seats.some(p => p.uid === uid) || S.phase === 'lobby' ? null : '자리에 앉은 사람만 할 수 있어요.';
     case 'roll': return S.phase === 'roll' && S.first === a.seat ? null : '선 플레이어가 굴릴 차례가 아니에요.';
-    case 'ready': return S.phase !== 'clubs' ? '규칙 설명 시간이 아니에요.' : S.seats.some((p, k) => p.uid === uid && !(S.ready || {})[k]) ? null : '이미 준비했어요.';
+    case 'ready': return S.phase !== 'clubs' ? '규칙 설명 시간이 아니에요.' : S.clubChoose ? '♣로 미니게임을 고르는 중이에요.' : S.seats.some((p, k) => p.uid === uid && !(S.ready || {})[k]) ? null : '이미 준비했어요.';
     case 'club': {
       if (S.phase !== 'clubs') return '규칙 설명 시간에만 쓸 수 있어요.';
       if (!holds(a.seat, a.card) || U(a.card) !== 'C' || !isItem(a.card)) return '♣ 아이템이 아니에요.';
       if (S.seats[a.seat].front.length) return '이번 라운드에 아이템을 써서 ♣를 쓸 수 없어요.';
+      if (S.clubChoose) return '다른 ♣로 미니게임을 고르는 중이에요.';
       const r = R(a.card);
-      if (r === 12 && a.arg !== 1 && a.arg !== -1) return '♣Q는 +1 또는 -1을 고르세요.';
-      if (r === 13 && !(Number.isInteger(a.arg) && a.arg! >= 1 && a.arg! <= 6)) return '♣K는 1~6번 칸을 고르세요.';
+      // 값 없이 쓰면 쓰고 나서 고른다(clubPick)
+      if (r === 12 && a.arg && a.arg !== 1 && a.arg !== -1) return '♣Q는 +1 또는 -1을 고르세요.';
+      if (r === 13 && a.arg && !(Number.isInteger(a.arg) && a.arg >= 1 && a.arg <= 6)) return '♣K는 1~6번 칸을 고르세요.';
       return null;
     }
+    case 'clubPick': return S.phase === 'clubs' && S.clubChoose?.seat === a.seat && clubChoices(S).includes(a.k) ? null : '고를 수 있는 칸이 아니에요.';
     case 'defend': {
       if (S.phase !== 'defense' || !S.pending || S.pending.target !== a.seat) return '막을 공격이 없어요.';
       if (!holds(a.seat, a.card) || U(a.card) !== 'H' || !(R(a.card) === 11 || R(a.card) === 13)) return '♥J·♥K로만 막을 수 있어요.';
@@ -169,6 +179,8 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'auctionBid': return S.phase === 'mg' && mg?.id === 'auction' && mg.step === 'bid' && !(a.seat in mg.bids) && mg.hands[a.seat]?.includes(a.card) ? null : '지금은 낼 수 없어요.';
     case 'balloon': return S.phase === 'mg' && mg?.id === 'balloon' && mg.alive[mg.ci] === a.seat && mg.hands[a.seat]?.includes(a.card) && (!a.item || (holds(a.seat, a.item) && isItem(a.item))) ? null : '지금은 낼 수 없어요.';
     case 'rps': return S.phase === 'mg' && mg?.id === 'rps' && mg.step === 'pick' && !mg.picks[a.seat] && (a.seat === mg.lead || mg.alive.includes(a.seat)) && ['R', 'P', 'S'].includes(a.hand) ? null : '지금은 낼 수 없어요.';
+    case 'stealPick': return S.steal && a.seat === S.steal.from && Number.isInteger(a.k) && a.k >= 0 && a.k < S.seats[S.steal.to].hand.length ? null : '고를 카드가 없어요.';
+    case 'rpsPass': return S.phase === 'mg' && mg?.id === 'rps' && mg.step === 'pick' && a.seat !== mg.lead && mg.alive.includes(a.seat) && !mg.picks[a.seat] && !mg.pass?.[a.seat] && holds(a.seat, a.item) && isItem(a.item) ? null : '지금은 아이템을 쓸 수 없어요.';
     case 'rpsArm': return S.phase === 'mg' && mg?.id === 'rps' && mg.step === 'pick' && a.seat === mg.lead && !mg.picks[mg.lead] && !mg.armL && holds(a.seat, a.item) && isItem(a.item) ? null : '지금은 아이템을 쓸 수 없어요.';
     case 'ovnSave': return S.phase === 'mg' && (mg?.id === 'rps' || mg?.id === 'vault') && mg.step === 'save' && mg.saveq.includes(a.seat) && (!a.item || (holds(a.seat, a.item) && isItem(a.item))) ? null : '지금은 쓸 수 없어요.';
     case 'vaultHide': return S.phase === 'mg' && mg?.id === 'vault' && mg.step === 'hide' && mg.alive.includes(a.seat) && !mg.picks[a.seat] && [1, 2, 3].includes(a.zone) ? null : '지금은 숨을 수 없어요.';
@@ -186,8 +198,21 @@ function check(S: GameState, uid: string, a: Action): string | null {
   }
 }
 
+/* ---------- 대기실 의자 ---------- */
+/** 자리 k의 의자 번호 (의자 번호가 없던 예전 상태는 자리 순서대로) */
+export function chairOf(S: GameState, k: number): number { return S.seats[k].chair ?? k; }
+function chairFree(S: GameState, c: number): boolean {
+  return Number.isInteger(c) && c >= 0 && c < MAX_SEATS && !S.seats.some((_, k) => chairOf(S, k) === c);
+}
+function firstFreeChair(S: GameState): number { for (let c = 0; c < MAX_SEATS; c++) if (chairFree(S, c)) return c; return 0; }
+/** 자리 순서(= 차례 순서)를 의자 순서에 맞춘다. 대기실에서만 부르므로 손패·토큰은 아직 없다 */
+function sortSeats(S: GameState): void {
+  S.seats.forEach((p, k) => { p.chair = chairOf(S, k); });
+  S.seats.sort((a, b) => a.chair! - b.chair!);
+}
+
 function resetTo(S: GameState, keepSeats: boolean): void {
-  const seats = keepSeats ? S.seats.map(p => ({ uid: p.uid, hand: [], tokens: [], front: [] })) : [];
+  const seats = keepSeats ? S.seats.map((p, k) => ({ uid: p.uid, chair: chairOf(S, k), hand: [], tokens: [], front: [] })) : [];
   const nm = S.names; const v = S.v;
   for (const k of Object.keys(S)) delete (S as unknown as Record<string, unknown>)[k];
   Object.assign(S, newLobby());
@@ -197,10 +222,11 @@ function resetTo(S: GameState, keepSeats: boolean): void {
 function run(S: GameState, uid: string, a: Action): false | void {
   switch (a.type) {
     case 'sit':
-      S.seats.push({ uid, hand: [], tokens: [], front: [] });
+      S.seats.push({ uid, chair: a.chair ?? firstFreeChair(S), hand: [], tokens: [], front: [] }); sortSeats(S);
       if (a.name) { S.names = S.names || {}; S.names[uid] = a.name.slice(0, 20); }
       log(S, '자리에 한 명 앉았다.'); return;
     case 'leave': S.seats.splice(a.seat, 1); return;
+    case 'move': S.seats[a.seat].chair = a.chair; sortSeats(S); return;
     case 'start': case 'restart': startGame(S); return;
     case 'toLobby': resetTo(S, true); return;
     case 'reset': resetTo(S, false); return;
@@ -211,7 +237,8 @@ function run(S: GameState, uid: string, a: Action): false | void {
         if (S.seats[k].uid === uid && !(S.ready || {})[k]) readyUp(S, k);
       }
       return;
-    case 'club': useClub(S, a.seat, a.card, a.arg ?? 0); return;
+    case 'club': useClub(S, a.seat, a.card, a.arg); return;
+    case 'clubPick': clubPick(S, a.k); return;
     case 'defend': defend(S, a.seat, a.card); return;
     case 'noDefend': resolveAttack(S); return;
     case 'pickDeck': return pickup(S, a.seat, false) === 'none' ? false : undefined;
@@ -248,6 +275,8 @@ function run(S: GameState, uid: string, a: Action): false | void {
     case 'balloon': return balloonPlay(S, a.seat, a.card, a.item ?? null);
     case 'rps': return rpsPick(S, a.seat, a.hand);
     case 'rpsArm': return rpsArm(S, a.seat, a.item);
+    case 'rpsPass': return rpsPass(S, a.seat, a.item);
+    case 'stealPick': stealPick(S, a.seat, a.k); return;
     case 'ovnSave': return ovnSave(S, a.seat, a.item);
     case 'vaultHide': return vaultHide(S, a.seat, a.zone);
     case 'vaultArm': return vaultArm(S, a.seat, a.item);

@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
 import { brandColor } from './brand';
+import { type Quality, prefs, usePrefs } from '../prefs';
 import { envRotation, prismMaterial, studioEnv } from './prismMaterial';
 
 type V3 = [number, number, number];
@@ -134,7 +135,9 @@ function Cube() {
   useFrame((_, dt) => {
     const g = ref.current; if (!g) return;
     if (import.meta.env.DEV && (window as unknown as { __freezeLogo?: boolean }).__freezeLogo) return;
-    g.rotation.y += dt * .35; g.rotation.x += dt * .14;
+    // 움직임 줄이기: 회전과 조명 흐름을 4분의 1로
+    const k = prefs().reduceMotion ? .25 : 1;
+    g.rotation.y += dt * .35 * k; g.rotation.x += dt * .14 * k;
     // 색은 문양 4색을 천천히 돈다(탭 제목·화면 로고와 같은 시계)
     brandColor(bodyMat.color); bodyMat.emissive.copy(bodyMat.color); bevelMat.color.copy(bodyMat.color); bevelMat.emissive.copy(bodyMat.color);
     pocketMat.color.copy(bodyMat.color).lerp(PALE, .3); backMat.color.copy(pocketMat.color);
@@ -167,11 +170,13 @@ export function CubePrism({ envSpin = true }: { envSpin?: boolean }) {
   if (import.meta.env.DEV) (window as unknown as { __prism: unknown }).__prism = { glass, bevel, frost };
   useFrame((_, dt) => {
     const g = ref.current; if (!g || frozen()) return;
-    g.rotation.y += dt * .35; g.rotation.x += dt * .14;
+    // 움직임 줄이기: 회전과 조명 흐름을 4분의 1로
+    const k = prefs().reduceMotion ? .25 : 1;
+    g.rotation.y += dt * .35 * k; g.rotation.x += dt * .14 * k;
     // 문양 색은 유리 속 빛깔(흡수)로 돈다
     for (const m of [glass, bevel, frost]) brandColor(m.uniforms.tint.value);
     // 조명 환경은 큐빅과 반대로 천천히 돌아, 빛줄기와 무지개가 큐빅 안을 흘러 지나간다
-    if (envSpin) envAngle.v += dt * .25;
+    if (envSpin) envAngle.v += dt * .25 * k;
     const pose = prismPose(); if (pose) { g.rotation.set(...pose.rot); envAngle.v = pose.env; }
     for (const m of [glass, bevel, frost]) envRotation(envAngle.v, m.uniforms.envRot.value as THREE.Matrix3);
   });
@@ -182,7 +187,9 @@ export function CubePrism({ envSpin = true }: { envSpin?: boolean }) {
   );
 }
 
-const SUPERSAMPLE = Math.min(4, (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1) * 3);
+/** 초과 샘플링 배율(그래픽 품질별): 작은 로고라 화면 해상도보다 크게 그려 줄인다(최대 4배) */
+const SS = { low: 1.5, mid: 2, high: 3 } as const;
+const supersample = (q: Quality) => Math.min(4, (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1) * SS[q]);
 
 /** 로고 표현: prism(분산·전반사·박막 간섭, 기본) · resin(뿌연 레진). 비교용으로 주소의 ?logo=resin 을 따른다 */
 const LOOK = new URLSearchParams(location.search).get('logo') === 'resin' ? 'resin' : 'prism';
@@ -192,11 +199,13 @@ export function LogoSlot({ size = 72, label = 'Cubic³' }: { size?: number; labe
   return <span className="cubiclogo" data-logo-slot role="img" aria-label={label} style={{ width: size, height: size }} />;
 }
 
-/** 앱 전체에 하나만 두는 로고. 화면이 바뀌어도 사라지지 않고, 화면의 LogoSlot 위치로 미끄러져 간다.
-    그래서 방을 만들거나 로비로 넘어가도 회전·색·반사 환경이 끊기지 않는다. 자리가 없으면 숨고 그리기도 멈춘다 */
-export function LogoHost({ size = 72, look = LOOK }: { size?: number; look?: 'resin' | 'prism' }) {
+/** 앱 전체에 하나만 두는 로고. 화면이 바뀌어도 사라지지 않고, 화면의 LogoSlot 위치·크기로 미끄러져 간다.
+    그래서 방을 만들거나 로비로 넘어가도 회전·색·반사 환경이 끊기지 않는다. 자리가 없으면 숨고 그리기도 멈춘다.
+    size는 그리는 크기(가장 큰 자리 기준). 작은 자리에서는 줄여 보인다 */
+export function LogoHost({ size = 120, look = LOOK }: { size?: number; look?: 'resin' | 'prism' }) {
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
+  const quality = usePrefs(s => s.quality);
   useEffect(() => {
     let raf = 0, was = false, first = true;
     const loop = () => {
@@ -206,10 +215,11 @@ export function LogoHost({ size = 72, look = LOOK }: { size?: number; look?: 're
           const r = slot.getBoundingClientRect();
           // 처음 나타날 때는 바로 그 자리에, 그 뒤 자리가 옮겨지면 미끄러지게
           el.style.transition = first ? 'none' : 'transform .45s cubic-bezier(.2,.8,.2,1), opacity .25s';
-          el.style.transform = `translate(${r.left + r.width / 2 - size / 2}px, ${r.top + r.height / 2 - size / 2}px)`;
+          el.style.transform = `translate(${r.left}px, ${r.top}px) scale(${r.width / size})`;
           first = false;
         }
-        if (!!slot !== was) { was = !!slot; setShown(was); el.style.opacity = was ? '1' : '0'; }
+        // 자리가 사라지면(방에 들어가는 등) 서서히 지우지 않고 바로 숨긴다
+        if (!!slot !== was) { was = !!slot; setShown(was); if (!was) el.style.transition = 'none'; el.style.opacity = was ? '1' : '0'; }
       }
       raf = requestAnimationFrame(loop);
     };
@@ -218,8 +228,7 @@ export function LogoHost({ size = 72, look = LOOK }: { size?: number; look?: 're
   const prism = look === 'prism';
   return (
     <div ref={ref} className="logohost" aria-hidden="true" style={{ width: size, height: size, opacity: 0 }}>
-      {/* 초과 샘플링: 작은 로고라 화면 해상도의 3배(최대 4배)로 그려 줄인다 */}
-      <Canvas dpr={SUPERSAMPLE} frameloop={shown ? 'always' : 'never'} gl={{ alpha: true, antialias: true }} camera={{ fov: 30, position: [0, 0, 3.4] }} style={{ width: size, height: size }}>
+      <Canvas dpr={supersample(quality)} frameloop={shown ? 'always' : 'never'} gl={{ alpha: true, antialias: true }} camera={{ fov: 30, position: [0, 0, 3.4] }} style={{ width: size, height: size }}>
         <ambientLight intensity={prism ? .2 : .4} />
         <directionalLight position={[2, 3, 4]} intensity={prism ? 1.2 : .7} />
         <Studio />

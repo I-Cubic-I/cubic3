@@ -78,12 +78,20 @@ export function rollBoard(S: GameState): void {
   log(S, `${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[boardMg(S)].name}`);
   fx(S, { t: 'dice', v: S.die, mg: boardMg(S) });
 }
-export function useClub(S: GameState, i: number, c: Card, arg: number): void {
+export function useClub(S: GameState, i: number, c: Card, arg?: number): void {
   const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c);
   const r = R(c);
+  // ♣Q·♣K를 고를 값 없이 쓰면: 먼저 쓰고(컷신), 미니게임 선택 화면에서 고른다
+  if ((r === 12 || r === 13) && !arg) {
+    S.clubChoose = { seat: i, card: c }; S.ready = {};
+    log(S, `자리 ${i + 1}: ${cname(c)} 사용 · 미니게임을 고르는 중`);
+    fx(S, { t: 'banner', text: `${cname(c)} → 미니게임 고르기`, seats: [i], club: c, v: S.die, choose: true });
+    return;
+  }
+  const v = arg ?? 0;
   if (r === 11) { S.die = d6(); log(S, `자리 ${i + 1}: ♣J로 다시 굴림 → ${S.die}`); }
-  else if (r === 12) { S.die = ((S.die! - 1 + arg + 6) % 6) + 1; log(S, `자리 ${i + 1}: ♣Q로 눈 ${arg > 0 ? '+1' : '-1'} → ${S.die}`); }
-  else { S.die = arg; log(S, `자리 ${i + 1}: ♣K로 칸 ${arg}을 직접 고름`); }
+  else if (r === 12) { S.die = ((S.die! - 1 + v + 6) % 6) + 1; log(S, `자리 ${i + 1}: ♣Q로 눈 ${v > 0 ? '+1' : '-1'} → ${S.die}`); }
+  else { S.die = v; log(S, `자리 ${i + 1}: ♣K로 칸 ${v}을 직접 고름`); }
   log(S, `이번 미니게임: ${MG[boardMg(S)].name}`); S.ready = {};
   if (r === 11) fx(S, { t: 'dice', v: S.die, mg: boardMg(S), seats: [i], club: c });
   else fx(S, { t: 'banner', text: `${cname(c)} → ${S.die}번 ${MG[boardMg(S)].name}`, seats: [i], club: c, v: S.die });
@@ -151,7 +159,8 @@ export function applyAttack(S: GameState, kind: number, from: number, to: number
   const A = S.seats[from], T = S.seats[to];
   if (kind === 11) {
     if (!T.hand.length) { log(S, `자리 ${to + 1}의 손패가 없어 아무것도 못 뺏었다.`); return; }
-    const c = T.hand.splice(rnd(T.hand.length), 1)[0]; A.hand.push(c); log(S, `자리 ${from + 1}이 자리 ${to + 1}의 손패 1장을 뺏었다.`);
+    // 대상이 손패를 뒷면으로 펼쳐 내밀고 가져가는 쪽이 1장을 고른다(디지털: 순서를 섞어 뒷면으로 보여 주고 고른 자리의 카드)
+    shuffle(T.hand); S.steal = { from, to }; log(S, `자리 ${from + 1}이 자리 ${to + 1}의 손패에서 1장을 고른다.`);
   } else if (kind === 12) {
     const m = T.hand.filter(c => U(c) === arg && !isItem(c));
     if (!m.length) { log(S, `자리 ${to + 1}: "${SNAME[arg as Suit]} 숫자 카드 없다."`); return; }
@@ -170,6 +179,10 @@ export function defend(S: GameState, i: number, c: Card): void {
   if (R(c) === 11) { log(S, `자리 ${i + 1}: ♥J로 공격을 막았다.`); fx(S, { t: 'banner', text: '막았다!', seats: [i], tone: 'good' }); }
   else { log(S, `자리 ${i + 1}: ♥K로 공격을 되돌렸다(막을 수 없음).`); fx(S, { t: 'banner', text: '되돌렸다!', seats: [i], tone: 'good' }); applyAttack(S, kind, P.target, P.attacker, null); }
   S.pending = null; S.phase = 'main';
+}
+export function stealPick(S: GameState, i: number, k: number): void {
+  const st = S.steal!; const T = S.seats[st.to]; const c = T.hand.splice(k, 1)[0]; S.seats[i].hand.push(c); S.steal = null;
+  log(S, `자리 ${i + 1}이 자리 ${st.to + 1}의 손패 1장을 뺏었다.`);
 }
 export function resolveAttack(S: GameState): void {
   const P = S.pending!; applyAttack(S, R(P.card), P.attacker, P.target, P.arg); S.pending = null; S.phase = 'main';
@@ -216,6 +229,18 @@ export function afterMain(S: GameState): void {
   S.rewardDisp = disp;
   S.phase = 'roll'; S.die = null;
   log(S, '메인 턴이 모두 끝났다. 미니게임 6장: ' + S.board.map(k => MG[k].name).join(', ') + ' / 보상 진열: ' + disp.map(cname).join(' '));
+}
+
+/** ♣Q·♣K로 미니게임 고르기: ♣Q는 지금 칸의 양옆, ♣K는 6칸 중 아무거나 */
+export function clubChoices(S: GameState): number[] {
+  const cc = S.clubChoose; if (!cc || !S.die) return [];
+  if (R(cc.card) === 13) return [1, 2, 3, 4, 5, 6];
+  return [((S.die - 2 + 6) % 6) + 1, (S.die % 6) + 1];
+}
+export function clubPick(S: GameState, k: number): void {
+  const cc = S.clubChoose!; S.clubChoose = null; S.die = k; S.ready = {};
+  log(S, `자리 ${cc.seat + 1}: ${cname(cc.card)}로 ${k}번 칸 → 이번 미니게임: ${MG[boardMg(S)].name}`);
+  fx(S, { t: 'pick', v: k, mg: boardMg(S), seats: [cc.seat] });
 }
 
 /* ---- 규칙 설명 시간: 모두 준비하면 시작 (♣는 그동안 언제든) ---- */
@@ -279,9 +304,15 @@ export function endMinigame(S: GameState, groups: number[][]): void {
     if (m.pile) back.push(...m.pile);
     S.deck.push(...back); shuffle(S.deck);
   }
-  // 동점은 디지털판에서 무작위 순서로 고른다
-  const order: number[] = []; groups.forEach(g => order.push(...shuffle(g.slice())));
-  S.lastRank = groups; fx(S, { t: 'rank', groups });
+  // 같은 순위끼리는 주사위를 굴려 높은 눈부터 보상을 고른다(같은 눈끼리만 다시). 굴린 눈은 결과 화면에서 보여 준다
+  const rolls: Record<number, number[]> = {}; const order: number[] = [];
+  const tie = (c: number[]): void => {
+    if (c.length < 2) { order.push(...c); return; }
+    const r = c.map(() => d6()); c.forEach((j, k) => (rolls[j] = rolls[j] || []).push(r[k]));
+    [...new Set(r)].sort((a, b) => b - a).forEach(v => tie(c.filter((_, k) => r[k] === v)));
+  };
+  groups.forEach(g => tie(g.slice()));
+  S.lastRank = groups; fx(S, { t: 'rank', groups, rolls, order });
   log(S, '미니게임 순위: ' + groups.map((g, k) => `${k + 1}위 ${g.map(i => '자리 ' + (i + 1)).join('·')}`).join(' / '));
   const disp = S.rewardDisp || []; S.rewardDisp = null;
   S.mg = null; S.phase = 'reward'; S.reward = { disp, order: order.concat(order), pi: 0 };
@@ -301,10 +332,12 @@ export function finishReward(S: GameState): void {
 /** 시간 지난 단계 넘기기 (방장 기기에서) */
 export function advanceTimers(S: GameState): boolean {
   const t = now();
-  if (S.phase === 'clubs' && S.deadline && t >= S.deadline) {
+  if (S.phase === 'clubs' && S.deadline && t >= S.deadline && !S.clubChoose) {
     S.deadline = null; reclaim(S); log(S, '버림 줄과 앞의 아이템을 거둬 덱에 섞었다.');
     startMinigame(S); return true;
   }
   if (S.phase === 'defense' && S.pending && t >= S.pending.deadline) { resolveAttack(S); return true; }
+  // 눈치 경매(디지털판): 아이템 낼 시간이 지나면 입찰로
+  if (S.phase === 'mg' && S.mg?.id === 'auction' && S.mg.step === 'pre' && S.mg.until && t >= S.mg.until) { S.mg.step = 'bid'; return true; }
   return false;
 }

@@ -1,6 +1,8 @@
 /* 캔버스로 그리는 텍스처 (카드 앞뒤, 디스크, 주사위 눈 등) */
 import * as THREE from 'three';
 import { type Card, type MgId, MG, R, RL, SYM, U } from '@cubic3/engine';
+import { prefs } from '../prefs';
+import { drawCardBack } from './cardBacks';
 
 const texCache = new Map<string, THREE.CanvasTexture>();
 export function ctex(key: string, w: number, h: number, draw: (g: CanvasRenderingContext2D, w: number, h: number) => void): THREE.CanvasTexture {
@@ -34,15 +36,22 @@ export function faceTex(c: Card): THREE.CanvasTexture {
     g.font = `150px ${FONT_D}`; g.fillText(it ? RL(r) : SYM[s], w / 2, h * 0.6);
   });
 }
+/** 카드 뒷면: 모든 카드가 텍스처 하나를 같이 쓴다. 꾸미기에서 무늬를 바꾸면 다시 그려 테이블의 카드가 한꺼번에 바뀐다 */
+let backT: THREE.CanvasTexture | null = null, backId = '';
 export function backTex(): THREE.CanvasTexture {
-  return ctex('back', 256, 358, (g, w, h) => {
-    g.fillStyle = '#24324f'; rr(g, 0, 0, w, h, 22); g.fill();
-    g.strokeStyle = '#e8b84a'; g.lineWidth = 10; rr(g, 16, 16, w - 32, h - 32, 14); g.stroke();
-    g.strokeStyle = 'rgba(232,184,74,.35)'; g.lineWidth = 3;
-    for (let k = -h; k < w; k += 22) { g.beginPath(); g.moveTo(k + 30, 30); g.lineTo(k + 30 + h, 30 + h); g.stroke(); }
-    g.fillStyle = '#24324f'; rr(g, w / 2 - 50, h / 2 - 50, 100, 100, 50); g.fill(); g.strokeStyle = '#e8b84a'; g.lineWidth = 6; g.stroke();
-    g.fillStyle = '#e8b84a'; g.font = `56px ${FONT_D}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('C', w / 2, h / 2 + 3);
-  });
+  if (!backT) {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 358;
+    backT = new THREE.CanvasTexture(c); backT.colorSpace = THREE.SRGBColorSpace; backT.anisotropy = 4;
+    setCardBack(prefs().cardBack);
+  }
+  return backT;
+}
+export function setCardBack(id: string): void {
+  if (!backT || id === backId) return;
+  backId = id;
+  const c = backT.image as HTMLCanvasElement, g = c.getContext('2d')!;
+  g.clearRect(0, 0, c.width, c.height); drawCardBack(id, g, c.width, c.height);
+  backT.needsUpdate = true;
 }
 const MGLOOK: Record<string, [string, string]> = {
   hold: ['#f0b48f', '#cf6f48'], bomb: ['#f7a3a3', '#c94242'], auction: ['#f2d27a', '#c79a1c'], balloon: ['#ffb35c', '#e8853a'],

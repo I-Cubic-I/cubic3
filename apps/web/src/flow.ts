@@ -1,10 +1,11 @@
 /* 흐름: 상태·연출 이벤트 → 3D 연출과 화면. 버튼·테이블 조작을 행동으로 바꾼다. */
 import {
-  type Action, type Card, type Fx, type GameState, type Hand, R, SNAME, type Suit, U, canMakeToken, cname, costFor, isItem,
+  type Action, type Card, type Fx, type GameState, type Hand, type MgId, R, SNAME, type Suit, U, canMakeToken, clubChoices, cname, costFor, isItem,
 } from '@cubic3/engine';
 import { mine, mySeats, seatName, whoActs } from './game';
 import { useStore, viewSeat } from './store';
 import type { Pick, World } from './scene/World';
+import { forgetHosting } from './net/room';
 
 let world: World | null = null;
 export const getWorld = () => world;
@@ -39,6 +40,7 @@ function shakes(f: Fx): boolean {
 export function shake(): void { st().set({ shakeN: st().shakeN + 1 }); }
 
 /* ---------------- 상태가 바뀌면 ---------------- */
+let lastMgId: MgId | null = null;
 let lastFx: number | null = null, choosing = false, clubBusy = false, prevPhase: string | null = null, introKey = '', lastActor: string | null = null;
 const clubQ: Fx[] = [];
 export function rulesReady(): void { choosing = false; st().set({ rulesShown: true }); }
@@ -52,10 +54,13 @@ async function runClub(f: Fx): Promise<void> {
     await new Promise(r => setTimeout(r, 1900));
     st().set({ cutin: null, screenAlert: false, rulesShown: false });
     choosing = true;
-    await world?.playChoose(f.v as number, { restore: true, roll: R(f.club as Card) === 11 });
+    // ♣Q·♣K: 쓰고 나면 미니게임 선택 화면(디스크가 늘어선 테이블)으로. 고르면 pick 연출이 이어진다
+    if (f.choose) world?.playSelect();
+    else await world?.playChoose(f.v as number, { restore: true, roll: R(f.club as Card) === 11 });
   } finally { clubBusy = false; st().set({ clubPlaying: false }); }
-  const nx = clubQ.shift(); if (nx) runClub(nx);
+  const nx = clubQ.shift(); if (nx) { if (nx.t === 'pick') runPick(nx); else runClub(nx); }
 }
+function runPick(f: Fx): void { choosing = true; st().set({ rulesShown: false }); void world?.playChoose(f.v as number, {}); }
 function pumpFx(s: GameState): Fx[] {
   const list = s.fx || [];
   if (lastFx === null) { lastFx = s.fxn || 0; return []; }
@@ -73,20 +78,26 @@ export function onState(s: GameState): void {
     if (ph !== 'mg' && prevPhase === 'mg') W.lightsMain();
     if (ph === 'reward') W.shot('reward', 2);
     if (ph === 'ended') W.shot('seat', 1.5);
-    if (ph === 'lobby') W.shot('seat');
+    if (ph === 'lobby') W.shot('lobby', 2);
   }
   if (ph === 'roll') {
     const k = 'r' + s.round + s.board!.join();
-    if (introKey !== k) { introKey = k; st().set({ rulesShown: false }); if (prevPhase === 'main' || prevPhase === 'defense') W.playIntro(); else { W.settleLined(); W.shot('top'); } }
+    if (introKey !== k) { introKey = k; st().set({ rulesShown: false }); if (prevPhase === 'main' || prevPhase === 'defense') W.playIntro(); else { W.settleLined(); W.shot('disks'); } }
   }
   // 연출 이벤트
+  if (s.mg) lastMgId = s.mg.id;
   for (const f of nw) {
-    if (f.club) { if (clubBusy) clubQ.push(f); else runClub(f); continue; }
+    // 미니게임이 끝나면 순위 결과 화면(잠깐 뜨는 알림 대신)
+    if (f.t === 'rank') { st().set({ results: { mg: lastMgId, groups: f.groups as number[][], rolls: (f.rolls || {}) as Record<number, number[]>, order: (f.order || []) as number[] } }); continue; }
+    if (f.club || f.t === 'pick') { if (clubBusy) clubQ.push(f); else if (f.t === 'pick') runPick(f); else runClub(f); continue; }
     if (f.t === 'dice' && f.mg) { choosing = true; st().set({ rulesShown: false }); W.playChoose(f.v as number, { roll: true }); continue; }
     queueFx(f);
   }
   // 다시 들어왔거나 연출을 놓친 경우 바로 규칙 화면
-  if (ph === 'clubs' && !st().rulesShown && !choosing && !clubBusy) { W.settleLined(); W.jumpChosen(s.die!); W.shot('zoom', 8); st().set({ rulesShown: true }); }
+  if (ph === 'clubs' && !st().rulesShown && !choosing && !clubBusy) {
+    if (s.clubChoose) { choosing = true; W.playSelect(); }
+    else { W.settleLined(); W.jumpChosen(s.die!); W.shot('zoom', 8); st().set({ rulesShown: true }); }
+  }
   // 내 차례 알림
   const a = whoActs(s, me); const key = a + '|' + ph + '|' + (s.mg ? s.mg.id : '');
   if (key !== lastActor) { lastActor = key; if (a != null && mine(s, me, a) && !['lobby', 'clubs', 'ended'].includes(ph)) toast(mySeats(s, me).length > 1 ? `${seatName(s, a)} 차례!` : '내 차례!'); }
@@ -109,7 +120,8 @@ export function canPick(p: Pick): boolean {
   if (p.kind === 'reward') return s.phase === 'reward' && !!s.reward && s.reward.order[s.reward.pi] === i;
   if (p.kind === 'die') return s.phase === 'roll' && s.first === i;
   if (p.kind === 'seat') return ui.mode === 'target' && p.i !== i;
-  if (p.kind === 'slot') return s.phase === 'clubs' && ui.mode === 'clubK';
+  if (p.kind === 'chair') return s.phase === 'lobby';
+  if (p.kind === 'slot') return s.phase === 'clubs' && !!s.clubChoose && mine(s, st().me, s.clubChoose.seat) && clubChoices(s).includes(p.k);
   const m = s.mg;
   if (p.kind === 'bomb') return s.phase === 'mg' && m?.id === 'bomb' && m.alive[m.ci] === i;
   if (p.kind === 'door') return s.phase === 'mg' && m?.id === 'vault' && i != null && ((m.step === 'hide' && m.alive.includes(i) && !m.picks[i]) || (m.step === 'guard' && m.lead === i));
@@ -127,6 +139,7 @@ export function pick(p: Pick): void {
   if (p.kind === 'bomb') cmd('bflip', { k: p.k });
   if (p.kind === 'slot') cmd('clubKgo', { k: p.k });
   if (p.kind === 'door') { if (s.mg?.id === 'vault' && s.mg.step === 'hide') cmd('vhide', { z: p.z }); else cmd('vz', { z: p.z }); }
+  if (p.kind === 'chair') cmd('chair', { c: p.c });
   if (p.kind === 'seat') { const it = ui.card!; if (R(it) === 11) cmd('atk', { t: p.i }); else toast('아래 버튼에서 대상을 골라 주세요'); }
 }
 
@@ -138,7 +151,8 @@ export function dropCard(c: Card, z: Drop): void {
   const t = s.turn, p = s.seats[i]; if (z.kind === 'hand') return;
   if (t.peek) { toast('먼저 ♦J로 본 카드 중 1장을 고르세요'); return; }
   if (!t.picked) { toast('먼저 덱이나 버림 줄에서 1장을 주우세요'); return; }
-  if (t.mustDiscard) { if (z.kind !== 'table') { toast('버릴 카드는 테이블에 놓으세요'); return; } act({ type: 'discard', seat: i, card: c }); return; }
+  // 줍고 나서 버리기 전: 테이블에 놓으면 버리기. 토큰 칸에 놓아 토큰을 먼저 만들거나 ♠로 공격해도 된다(방금 주운 카드로도)
+  if (t.mustDiscard && z.kind === 'table') { act({ type: 'discard', seat: i, card: c }); return; }
   if (t.trim) { if (z.kind !== 'table') return; act({ type: 'trimOne', seat: i, card: c }); return; }
   if (z.kind === 'tray') {
     if (isItem(c) && !(U(c) === 'D' && R(c) >= 12)) { toast('토큰 칸에는 숫자 카드(또는 ♦Q·♦K)를 놓으세요'); return; }
@@ -172,6 +186,19 @@ export function dropCard(c: Card, z: Drop): void {
   toast(su === 'H' ? '♥J·♥K는 남의 공격을 막을 때 써요' : '♣는 미니게임을 정할 때 써요');
 }
 
+/* ---------------- 방 나가기 ---------------- */
+/** 대기실에서 방을 나가 메인 화면으로. 내 자리를 비우고 연결을 끊는다. 방장이 나가면 방이 닫힌다 */
+export async function exitRoom(): Promise<void> {
+  const store = st(); const room = store.room; const s = S(); if (!room) return;
+  if (s?.phase === 'lobby') for (const k of mySeats(s, store.me).sort((a, b) => b - a)) await room.act({ type: 'leave', seat: k });
+  if (room.role === 'host') forgetHosting(room.code);
+  store.set({ room: null, S: null, ctl: null, sel: [], ui: {}, flash: '', autoSit: false });
+  room.close();
+  // 다음 방에서 지난 연출을 다시 틀지 않게
+  lastFx = null; prevPhase = null; introKey = ''; lastActor = null; fxq = []; fxBusy = false;
+  const u = new URL(location.href); u.searchParams.delete('room'); history.replaceState(null, '', u);
+}
+
 /* ---------------- 버튼 → 행동 ---------------- */
 type D = Record<string, string | number | undefined>;
 export function cmd(a: string, d: D = {}): void {
@@ -179,6 +206,8 @@ export function cmd(a: string, d: D = {}): void {
   const W = world;
   switch (a) {
     case 'sit': act({ type: 'sit', name: store.name }); break;
+    // 대기실 빈 의자: 앉아 있으면 옮겨 앉고, 아니면 그 의자에 앉는다
+    case 'chair': if (i != null) act({ type: 'move', seat: i, chair: +d.c! }); else act({ type: 'sit', name: store.name, chair: +d.c! }); break;
     case 'leave': act({ type: 'leave', seat: +d.i! }); break;
     case 'start': act({ type: 'start' }); break;
     case 'restart': act({ type: 'restart' }); break;
@@ -194,9 +223,10 @@ export function cmd(a: string, d: D = {}): void {
     case 'rulesagain': store.patchUi({ rulesAgain: !ui.rulesAgain }); break;
     case 'roll': act({ type: 'roll', seat: i }); break;
     case 'ready': act({ type: 'ready' }); break;
-    case 'club': act({ type: 'club', seat: i, card: String(d.c), arg: +(d.x || 0) }); break;
+    case 'club': act({ type: 'club', seat: i, card: String(d.c), arg: d.x != null ? +d.x : undefined }); break;
     case 'clubK': store.setUi({ mode: 'clubK', card: String(d.c) }); break;
-    case 'clubKgo': { const c = ui.card!; store.setUi({}); act({ type: 'club', seat: i, card: c, arg: +d.k! }); break; }
+    // ♣Q·♣K를 쓴 뒤 미니게임 선택 화면(테이블의 디스크)에서 고르기
+    case 'clubKgo': { const cc = s?.clubChoose; if (cc) act({ type: 'clubPick', seat: cc.seat, k: +d.k! }); break; }
     case 'defend': act({ type: 'defend', seat: i, card: String(d.c) }); break;
     case 'nodef': act({ type: 'noDefend', seat: i }); break;
     case 'pdeck': act({ type: 'pickDeck', seat: i }); break;
@@ -249,6 +279,9 @@ export function cmd(a: string, d: D = {}): void {
     case 'osave': act({ type: 'ovnSave', seat: i, item: sel[0] }); break;
     case 'onosave': act({ type: 'ovnSave', seat: i, item: null }); break;
     case 'rarm': act({ type: 'rpsArm', seat: i, item: sel[0] }); break;
+    case 'rpass': act({ type: 'rpsPass', seat: i, item: sel[0] }); break;
+    // ♠J: 뒷면으로 펼친 상대 손패에서 k번째를 고른다
+    case 'steal': { const stl = s?.steal; if (stl) act({ type: 'stealPick', seat: stl.from, k: +d.k! }); break; }
     case 'vhide': act({ type: 'vaultHide', seat: i, zone: +d.z! }); break;
     case 'varm': act({ type: 'vaultArm', seat: i, item: sel[0] }); break;
     case 'vz': {

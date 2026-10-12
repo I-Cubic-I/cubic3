@@ -1,12 +1,15 @@
 /* 앱: 방에 연결한 뒤 테이블 장면과 화면 UI를 띄운다 */
 import { useEffect, useState } from 'react';
 import { setClock } from '@cubic3/engine';
-import { type Room, hostRoom, joinRoom, wasHosting } from './net/room';
+import { type Room, clearHostMark, hostMarkPerTab, hostRoom, joinRoom, wasHosting } from './net/room';
 import { LocalNet, NetError, PeerNet, rid } from './net/transport';
 import { useStore } from './store';
+import { exitRoom } from './flow';
 import { SceneView } from './scene/Scene';
 import { Hud } from './ui/Hud';
-import { Start } from './ui/Start';
+import { Start, roomFromUrl } from './ui/Start';
+import { prefs } from './prefs';
+import type { MgId } from '@cubic3/engine';
 import { bindTips } from './ui/tip';
 import { startBrand } from './ui/brand';
 import { LogoHost } from './ui/CubicLogo';
@@ -16,10 +19,15 @@ const LS = {
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* 저장 못 해도 진행 */ } },
 };
 const useLocal = new URLSearchParams(location.search).get('local') === '1';
-let localUid: string | null = null;
-/** 이 브라우저의 플레이어 id (같은 브라우저 탭 시험이면 탭마다 따로) */
+if (useLocal) hostMarkPerTab();
+let autoJoined = false; // 개발 모드에서 효과가 두 번 돌아도 한 번만
+/** 이 브라우저의 플레이어 id (같은 브라우저 탭 시험이면 탭마다 따로, 새로고침해도 같은 id) */
 function myId(): string {
-  if (useLocal) return localUid || (localUid = 'p_' + rid(12));
+  if (useLocal) {
+    let u: string | null = null; try { u = sessionStorage.getItem('c3-uid'); } catch { /* 없으면 새로 */ }
+    if (!u) { u = 'p_' + rid(12); try { sessionStorage.setItem('c3-uid', u); } catch { /* 저장 못 해도 진행 */ } }
+    return u;
+  }
   let u = LS.get('c3-uid'); if (!u) { u = 'p_' + rid(12); LS.set('c3-uid', u); } return u;
 }
 
@@ -41,17 +49,24 @@ export function App() {
     const net = useLocal ? LocalNet : PeerNet;
     const me = myId();
     const code = p.create ? rid(5) : p.code;
-    // 같은 브라우저 시험(?local=1)은 탭끼리 저장소를 같이 써서, 방장 이어 하기를 쓰지 않는다
-    const host = p.create || (!useLocal && wasHosting(code));
+    // 새로고침한 방장은 이어서 방장으로 연다
+    const host = p.create || wasHosting(code);
     setBusy(host ? '방을 여는 중…' : '방에 연결하는 중…');
     try {
       let r: Room;
-      const join = () => joinRoom(net, code, me, () => useStore.getState().setFatal('방장과 연결이 끊겼어요. 방장이 창을 닫았을 수 있어요. 새로고침해서 다시 들어와 주세요.'));
+      // 내가 나간 뒤(또는 다른 방으로 옮긴 뒤) 끊긴 것은 알리지 않는다
+      const join = () => joinRoom(net, code, me, () => useStore.getState().room?.code === code && useStore.getState().setFatal('방장과 연결이 끊겼어요. 방장이 창을 닫았을 수 있어요. 새로고침해서 다시 들어와 주세요.'));
       if (host) {
-        try { r = await hostRoom(net, code, me); }
-        catch (e) {
-          // 예전에 방장이었던 방을 다른 탭에서 이미 열고 있으면 참가자로 들어간다
-          if (!p.create && e instanceof NetError && e.kind === 'taken') r = await join(); else throw e;
+        // 새로고침 직후에는 중계 서버가 예전 방장 연결을 아직 쥐고 있어 방 코드가 '쓰는 중'일 수 있다. 잠깐씩 기다려 다시 연다
+        let tries = p.create ? 1 : 5;
+        for (;;) {
+          try { r = await hostRoom(net, code, me); break; }
+          catch (e) {
+            if (p.create || !(e instanceof NetError && e.kind === 'taken')) throw e;
+            // 끝내 안 되면 다른 탭에서 이미 열고 있는 것: 참가자로 들어간다
+            if (--tries <= 0) { r = await join(); break; }
+            await new Promise(res => setTimeout(res, 1200));
+          }
         }
       } else r = await join();
       if (r.clockOffset) { const off = r.clockOffset; setClock(() => Date.now() + off); }
@@ -61,18 +76,56 @@ export function App() {
       setBusy(null);
     } catch (e) {
       console.error(e);
-      if (p.create) LS.set('c3-hosting', '');
+      if (p.create) clearHostMark();
       setMsg(e instanceof NetError ? e.message : '연결하지 못했어요. 다시 시도해 주세요.');
       setBusy(null);
     }
   };
 
+  // 개발 서버 전용: 미니게임 미리보기(시험 방을 내 자리 3개로 열어 고른 미니게임으로)
+  const devPreview = async (id: MgId) => {
+    const me = myId(); const name = prefs().name.trim() || '나';
+    setBusy('미리보기 준비 중…');
+    try {
+      const r = await hostRoom(LocalNet, rid(5), me);
+      useStore.getState().setRoom(r, me, name); useStore.getState().set({ autoSit: false, devPreview: true });
+      r.subscribe(S => useStore.getState().receive(S));
+      const { setupMgPreview } = await import('./devmg');
+      await setupMgPreview(r, id, name);
+    } catch (e) { console.error(e); setMsg('미리보기를 열지 못했어요.'); }
+    setBusy(null);
+  };
+
+  // 미리보기는 미니게임이 끝나면 보상 없이 바로 미니게임 선택 화면으로 돌아간다
+  // (순위 결과 화면이 뜨면 그걸 닫은 뒤에)
+  useEffect(() => {
+    let leaving = false;
+    const leave = () => { leaving = false; setTimeout(() => { void exitRoom().then(() => useStore.getState().set({ devBack: true })); }, 400); };
+    return useStore.subscribe((s, p) => {
+      if (s.devPreview && s.S && p.S?.phase === 'mg' && s.S.phase !== 'mg') {
+        useStore.getState().set({ devPreview: false }); leaving = true;
+        // 결과 화면이 뜰 틈을 조금 두고, 안 떴으면 바로 나간다
+        setTimeout(() => { if (leaving && !useStore.getState().results) leave(); }, 300);
+      } else if (leaving && p.results && !s.results) leave();
+    });
+  }, []);
+
+  // 방 링크(?room=코드)로 열면 바로 들어간다. 이름을 아직 안 정했으면 메인 화면에서 이름부터 정한다
+  useEffect(() => {
+    const code = roomFromUrl(), name = prefs().name.trim();
+    if (!code || !name || autoJoined) return;
+    autoJoined = true; void connect({ create: false, code, name });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       {fontsOk && <SceneView />}
-      {room ? <Hud /> : <Start msg={msg} busy={busy} onPick={connect} />}
+      {room ? <Hud /> : <Start msg={msg} busy={busy} onPick={connect} onDevMg={import.meta.env.DEV ? devPreview : undefined} />}
       {/* 로고는 하나만: 시작 화면·로비의 자리를 따라다녀 화면이 바뀌어도 끊기지 않는다 */}
       {fontsOk && <LogoHost />}
+      {/* 휴대폰은 가로 화면 전용: 세로로 들면 돌려 달라고 덮는다 */}
+      <div className="rotate" role="alert"><div className="rotphone" aria-hidden="true" /><p>휴대폰을 가로로 돌려 주세요</p><span>Cubic³는 가로 화면에서 즐길 수 있어요</span></div>
     </>
   );
 }

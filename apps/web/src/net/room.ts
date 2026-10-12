@@ -15,6 +15,8 @@ export interface Room {
   /** 방장과 내 시계 차이(ms). 참가자만 */
   clockOffset: number;
   close(): void;
+  /** 개발 서버 전용: 방장이 테이블 상태를 직접 고친다(미니게임 미리보기 등) */
+  dev?(f: (S: GameState) => void): void;
 }
 
 type CMsg = { t: 'hello'; uid: string } | { t: 'act'; id: number; a: Action } | { t: 'time'; id: number };
@@ -27,9 +29,25 @@ const LS = {
 const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o));
 const hostKey = (code: string) => 'c3-host-' + code;
 
+/* 방장 표시: 이 브라우저(탭)가 어느 방의 방장인지. 새로고침해도 이어서 방장으로 열 때 쓴다.
+   같은 브라우저 탭 시험(?local=1)은 탭끼리 localStorage를 같이 쓰므로 탭마다 따로(sessionStorage, 새로고침해도 남는다) */
+let markStore = (): Storage => localStorage;
+export function hostMarkPerTab(): void { markStore = () => sessionStorage; }
+const MARK = {
+  get: () => { try { return markStore().getItem('c3-hosting'); } catch { return null; } },
+  set: (v: string) => { try { markStore().setItem('c3-hosting', v); } catch { /* 저장 못 해도 진행 */ } },
+};
+export function clearHostMark(): void { MARK.set(''); }
+
+/** 방장이 방을 나갔다: 다시 열어도 이어 하지 않게 저장한 테이블을 지운다 */
+export function forgetHosting(code: string): void {
+  if (MARK.get() === code) MARK.set('');
+  try { localStorage.removeItem(hostKey(code)); } catch { /* 저장소를 못 쓰면 지울 것도 없다 */ }
+}
+
 /** 방장이었던 방인지 (새로고침해도 이어서 방장으로) */
 export function wasHosting(code: string): boolean {
-  return LS.get('c3-hosting') === code && !!LS.get(hostKey(code));
+  return MARK.get() === code && !!LS.get(hostKey(code));
 }
 
 export async function hostRoom(net: Transport, code: string, myUid: string): Promise<Room> {
@@ -67,13 +85,14 @@ export async function hostRoom(net: Transport, code: string, myUid: string): Pro
       }
     },
   });
-  LS.set('c3-hosting', code);
+  MARK.set(code);
 
   // 시간이 지난 단계(♠ 방어 유예 등)는 방장이 넘긴다
   const timer = setInterval(() => { if (advanceTimers(S)) { S.v = (S.v || 0) + 1; publish(); } }, 250);
 
   return {
     role: 'host', code, clockOffset: 0,
+    dev: import.meta.env.DEV ? f => { f(S); S.v = (S.v || 0) + 1; publish(); } : undefined,
     act: async a => judge(myUid, a),
     subscribe: f => { subs.add(f); setTimeout(() => f(clone(S)), 0); return () => subs.delete(f); },
     close: () => { clearInterval(timer); link?.close(); },

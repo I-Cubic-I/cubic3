@@ -1,6 +1,6 @@
 /* 화면 상태 (zustand). 테이블 상태 S는 방에서 받아 그대로 둔다. */
 import { create } from 'zustand';
-import type { Action, Card, Fx, GameState, Suit } from '@cubic3/engine';
+import { type Action, type Card, type Fx, type GameState, MAX_SEATS, type MgId, type Suit } from '@cubic3/engine';
 import type { Room } from './net/room';
 import { mine, mySeats, whoActs } from './game';
 
@@ -44,7 +44,14 @@ interface Store {
   screenAlert: boolean;
   /** ♣ 컷신 */
   cutin: Fx | null;
+  /** 미니게임이 끝나고 보여 주는 순위 결과 */
+  results: { mg: MgId | null; groups: number[][]; rolls: Record<number, number[]>; order: number[] } | null;
   fps: { ok: boolean; locked: boolean };
+  /** 방에 막 들어왔다: 첫 상태를 받으면 빈 의자에 자동으로 앉는다 */
+  autoSit: boolean;
+  /** 개발 서버 미니게임 미리보기 방인지 / 미리보기가 끝나 선택 화면으로 돌아가는지 */
+  devPreview: boolean;
+  devBack: boolean;
 
   setRoom(room: Room, me: string, name: string): void;
   receive(S: GameState): void;
@@ -64,9 +71,9 @@ let flashT = 0, toastT = 0;
 
 export const useStore = create<Store>((set, get) => ({
   S: null, room: null, me: '', name: '', ctl: null, sel: [], ui: {}, flash: '', toast: '', fatal: null,
-  rulesShown: false, clubPlaying: false, lastKey: '', fxShow: null, shakeN: 0, screenAlert: false, cutin: null, fps: { ok: false, locked: false },
+  rulesShown: false, clubPlaying: false, lastKey: '', fxShow: null, shakeN: 0, screenAlert: false, cutin: null, results: null, fps: { ok: false, locked: false }, autoSit: false, devPreview: false, devBack: false,
 
-  setRoom: (room, me, name) => set({ room, me, name }),
+  setRoom: (room, me, name) => set({ room, me, name, autoSit: true }),
   receive: S => {
     const { me, lastKey } = get();
     const m = S.mg as unknown as Record<string, unknown> | null;
@@ -80,6 +87,11 @@ export const useStore = create<Store>((set, get) => ({
     else { const a = whoActs(S, me); if (a != null && mine(S, me, a)) ctl = a; else if (ctl == null || !mine(S, me, ctl)) ctl = ms[0]; }
     patch.ctl = ctl;
     set(patch);
+    // 들어오자마자 빈 의자에 앉는다(대기실이고, 아직 안 앉았고, 자리가 남았으면). 자리가 다 찼거나 게임 중이면 구경
+    if (get().autoSit) {
+      set({ autoSit: false });
+      if (S.phase === 'lobby' && !ms.length && S.seats.length < MAX_SEATS) void get().act({ type: 'sit', name: get().name });
+    }
   },
   act: async a => {
     const room = get().room;

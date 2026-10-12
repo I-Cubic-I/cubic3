@@ -9,6 +9,8 @@ export type Hand = 'R' | 'P' | 'S';
 
 export interface Seat {
   uid: string;
+  /** 대기실 테이블의 의자 번호(0~4). 자리 순서(차례 순서)는 의자 순서를 따른다. 예전 상태에는 없을 수 있다 */
+  chair?: number;
   hand: Card[];
   tokens: Suit[];
   front: Card[];
@@ -64,6 +66,8 @@ export interface AuctionMg {
   bundle: Card[]; hands: Record<number, Card[]>; prizes: (Prize | null)[]; ai: number; pot: Prize[];
   step: 'pre' | 'bid'; ready: Record<number, boolean>; bids: Record<number, Card>;
   won: Record<number, Card[]>; spent: Card[]; lastBids?: Record<number, Card>;
+  /** 디지털판: 아이템을 낼 수 있는 시간이 끝나는 때(ms). 지나면 저절로 입찰 */
+  until?: number;
 }
 export interface BalloonMg {
   id: 'balloon';
@@ -75,6 +79,8 @@ export interface OvnMg {
   bundle: Card[]; lead: number; alive: number[]; round: number; max: number; out: number[][];
   picks: Record<number, Hand | number>; armL: boolean; saveq: number[]; losers: number[]; saved: number[];
   last: unknown; step: 'pick' | 'hide' | 'guard' | 'save'; zones?: number[] | null;
+  /** 선 가위바위보: 이번 판 '이기면 즉시 통과' 아이템을 낸 사람 / 그렇게 통과해 끝까지 남은 것으로 치는 사람 */
+  pass?: Record<number, boolean>; passed?: number[];
 }
 export interface CountMg {
   id: 'count';
@@ -117,6 +123,10 @@ export interface GameState {
   ti: number;
   deadline: number | null;
   ready?: Record<number, boolean>;
+  /** ♣Q·♣K를 쓰고 미니게임을 고르는 중(디지털판: 쓰고 나서 미니게임 선택 화면에서 고른다) */
+  clubChoose?: { seat: number; card: Card } | null;
+  /** ♠J: from이 to의 손패(뒷면으로 펼친 것)에서 1장을 고르는 중 */
+  steal?: { from: number; to: number } | null;
   rewardDisp?: Card[] | null;
   lastRank?: number[][];
   fx?: Fx[];

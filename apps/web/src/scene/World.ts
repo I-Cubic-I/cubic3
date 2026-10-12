@@ -2,15 +2,18 @@
    (시험판 game/src/scene.js를 옮긴 것. 부분별로 R3F 컴포넌트로 다듬어 간다) */
 import * as THREE from 'three';
 import {
-  BLIMIT, CFLIP, type Card, type GameState, MG, type MgId, R, SUITS, SYM, type Suit, U, countOpenAt, isItem, now,
+  BLIMIT, CFLIP, type Card, type GameState, MAX_SEATS, fullDeck, MG, type MgId, R, SUITS, SYM, type Suit, U, chairOf, countOpenAt, isItem, now,
 } from '@cubic3/engine';
 import { SEATCOL, SUITCOL } from '../game';
+import { feltColor, prefs } from '../prefs';
+import { type BurnU, Burns, burnable } from './burn';
 import { FONT_B, FONT_D, FONT_M, INKC, backTex, ctex, faceTex, floppyTex, mgLook, numTex, pipTex, rr } from './textures';
 
 const T = THREE;
 const PI = Math.PI;
 const TY = 75;            // 펠트 윗면 높이
 const TR = 70;            // 테이블 반지름
+const LOBBY_HALF_W = Math.tan(30 * Math.PI / 180) * 1.1; // 대기실 시점이 가로로 담아야 하는 폭(시야각 60°·가로세로 1.1 기준)
 const SEAT_D = 100;       // 의자 거리
 const MON = { x: 0, z: -38 };  // 모니터 자리
 const BOX = { x: -40, z: 12 }; // 디스크 상자
@@ -21,12 +24,16 @@ type E3 = [number, number, number];
 const fast = () => !!(window as unknown as { __fast?: number }).__fast;
 
 export type Pick =
-  | { kind: 'deck' } | { kind: 'row'; c: Card } | { kind: 'reward'; c: Card } | { kind: 'die' } | { kind: 'seat'; i: number }
+  | { kind: 'deck' } | { kind: 'row'; c: Card } | { kind: 'reward'; c: Card } | { kind: 'die' } | { kind: 'seat'; i: number } | { kind: 'chair'; c: number }
   | { kind: 'bomb'; k: number } | { kind: 'door'; z: number } | { kind: 'slot'; k: number };
 
 export interface WorldCtx {
   S(): GameState | null;
   viewSeat(): number;
+  /** 내가 자리에 앉아 있는지 (관전이 아닌지) */
+  seated(): boolean;
+  /** ♣Q·♣K로 내가 지금 고를 수 있는 칸(1~6). 내가 고르는 중이 아니면 빈 배열 */
+  clubSlots(): number[];
   whoActs(): number | null;
   uiMode(): string | undefined;
   canPick(p: Pick): boolean;
@@ -51,10 +58,84 @@ function makeCard(c: Card | null): THREE.Group {
   const b = new T.Mesh(gCard(), new T.MeshStandardMaterial({ map: backTex(), roughness: .6 })); b.rotation.y = PI;
   f.castShadow = true; grp.add(f, b); grp.userData.card = c; return grp;
 }
+/* 디스크 모양: 9 × 9.4, 두께 .34. 오른쪽 뒤(그림의 오른쪽 위) 모서리는 비스듬히 깎였고,
+   이름표 자리는 얕게(.05) 움푹 들어가 있다(바닥판 위에 이름표 자리가 뚫린 윗판을 겹친다).
+   윗면(위를 보는 면)은 그림(floppyTex)을, 나머지 면은 몸통 색을 쓴다: 그룹 0 = 윗면, 1 = 나머지 */
+const FW = 9, FD = 9.4, FT = .34, FPIT = .05;
+let floppyGeo: THREE.BufferGeometry | null = null;
+function diskGeometry(): THREE.BufferGeometry {
+  if (floppyGeo) return floppyGeo;
+  const cut = 24 / 256 * FW; // 깎인 모서리 크기(그림과 같은 비율)
+  // 모양은 xy 평면에 그리고 나중에 눕힌다(모양 y = -z)
+  const outline = () => {
+    const sh = new T.Shape(); const x0 = -FW / 2, x1 = FW / 2, y0 = -FD / 2, y1 = FD / 2;
+    sh.moveTo(x0, y0); sh.lineTo(x1, y0); sh.lineTo(x1, y1 - cut); sh.lineTo(x1 - cut, y1); sh.lineTo(x0, y1); sh.closePath(); return sh;
+  };
+  // 이름표 자리: 그림의 u 0.086~0.914, v 0.045~0.597 → x ±3.73, z -0.91~4.28 → 모양 y -4.28~0.91 (모서리 둥글게)
+  const lx0 = (.086 - .5) * FW, lx1 = (.914 - .5) * FW, ly0 = -(.5 - .045) * FD, ly1 = -(.5 - .597) * FD, r = .25;
+  const hole = new T.Path();
+  hole.moveTo(lx0 + r, ly0); hole.lineTo(lx1 - r, ly0); hole.quadraticCurveTo(lx1, ly0, lx1, ly0 + r); hole.lineTo(lx1, ly1 - r); hole.quadraticCurveTo(lx1, ly1, lx1 - r, ly1);
+  hole.lineTo(lx0 + r, ly1); hole.quadraticCurveTo(lx0, ly1, lx0, ly1 - r); hole.lineTo(lx0, ly0 + r); hole.quadraticCurveTo(lx0, ly0, lx0 + r, ly0);
+  const rimShape = outline(); rimShape.holes.push(hole);
+  const base = new T.ExtrudeGeometry(outline(), { depth: FT - FPIT, bevelEnabled: false, curveSegments: 4 });
+  const rim = new T.ExtrudeGeometry(rimShape, { depth: FPIT, bevelEnabled: false, curveSegments: 4 });
+  rim.translate(0, 0, FT - FPIT);
+  // 눕히기: (x, y, z) → (x, z, -y), 가운데 높이로
+  const parts = [base, rim].map(g => { g.rotateX(-Math.PI / 2); g.translate(0, -FT / 2, 0); return g; }); // 돌출 도형은 이미 꼭짓점을 공유하지 않는다
+  // 삼각형을 윗면 / 나머지로 나누고, 윗면은 위에서 내려다본 좌표로 그림을 입힌다
+  const top: number[] = [], rest: number[] = [];
+  const a = new T.Vector3(), b = new T.Vector3(), c = new T.Vector3(), n = new T.Vector3();
+  for (const g of parts) {
+    const P = g.attributes.position.array as ArrayLike<number>;
+    for (let i = 0; i < P.length; i += 9) {
+      a.set(P[i], P[i + 1], P[i + 2]); b.set(P[i + 3], P[i + 4], P[i + 5]); c.set(P[i + 6], P[i + 7], P[i + 8]);
+      n.subVectors(c, b).cross(a.clone().sub(b)).normalize();
+      (n.y > .5 ? top : rest).push(...Array.from({ length: 9 }, (_, k) => P[i + k]));
+    }
+  }
+  const pos = new Float32Array([...top, ...rest]); const uv = new Float32Array(pos.length / 3 * 2);
+  for (let i = 0, j = 0; i < pos.length; i += 3, j += 2) { uv[j] = pos[i] / FW + .5; uv[j + 1] = .5 - pos[i + 2] / FD; }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('uv', new T.BufferAttribute(uv, 2));
+  g.computeVertexNormals(); g.addGroup(0, top.length / 3, 0); g.addGroup(top.length / 3, rest.length / 3, 1);
+  return (floppyGeo = g);
+}
+/** 디스크 둘레의 테두리 띠(디스크 바깥 .6, 디스크 가운데 높이, 위에서 보면 액자처럼) */
+let frameGeo: THREE.BufferGeometry | null = null;
+function diskFrameGeometry(): THREE.BufferGeometry {
+  if (frameGeo) return frameGeo;
+  const cut = 24 / 256 * FW, pad = .6;
+  const out = (o: number, sh: THREE.Shape | THREE.Path) => {
+    const x0 = -FW / 2 - o, x1 = FW / 2 + o, y0 = -FD / 2 - o, y1 = FD / 2 + o, c = cut + o * .41;
+    sh.moveTo(x0, y0); sh.lineTo(x1, y0); sh.lineTo(x1, y1 - c); sh.lineTo(x1 - c, y1); sh.lineTo(x0, y1); sh.lineTo(x0, y0); return sh;
+  };
+  const sh = out(pad, new T.Shape()) as THREE.Shape; sh.holes.push(out(.08, new T.Path()) as THREE.Path);
+  const g = new T.ShapeGeometry(sh); g.rotateX(-Math.PI / 2); g.translate(0, FT / 2 + .02, 0);
+  return (frameGeo = g);
+}
+/** 지금 누를 수 있는 물건(덱·버림 줄 카드)에 두르는 금빛 테두리. flat: xz 평면(눕힌 것), 아니면 xy 평면 */
+const hiGeos = new Map<string, THREE.BufferGeometry>();
+function hiFrame(w: number, h: number, pad: number, flat: boolean): THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> {
+  const key = [w, h, pad, flat].join(); let g = hiGeos.get(key);
+  if (!g) {
+    const rect = (o: number, p: THREE.Shape | THREE.Path) => { p.moveTo(-w / 2 - o, -h / 2 - o); p.lineTo(w / 2 + o, -h / 2 - o); p.lineTo(w / 2 + o, h / 2 + o); p.lineTo(-w / 2 - o, h / 2 + o); p.lineTo(-w / 2 - o, -h / 2 - o); return p; };
+    const sh = rect(pad, new T.Shape()) as THREE.Shape; sh.holes.push(rect(.2, new T.Path()) as THREE.Path);
+    g = new T.ShapeGeometry(sh); if (flat) g.rotateX(-Math.PI / 2); hiGeos.set(key, g);
+  }
+  const m = new T.Mesh(g, new T.MeshBasicMaterial({ color: lin('#ffb320'), transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+  m.visible = false; m.renderOrder = 2; m.userData.hi = true; return m;
+}
 function makeFloppy(id: MgId): THREE.Mesh {
-  const geo = new T.BoxGeometry(9, .34, 9.4); const [, body] = mgLook(id); const side = mat(body);
-  const top = new T.MeshStandardMaterial({ map: floppyTex(id), roughness: .5 });
-  const m = new T.Mesh(geo, [side, side, top, side, side, side]); m.castShadow = true; return m;
+  const geo = diskGeometry(); const [, body] = mgLook(id);
+  // 디스크마다 따로 탈 수 있게 재질을 따로 만든다(태우기 셰이더, burn.ts)
+  const u: BurnU = { uBurn: { value: 0 }, uChar: { value: 0 }, uSeed: { value: Math.random() }, uBody: { value: new T.Color(body) } };
+  const side = burnable(new T.MeshStandardMaterial({ color: new T.Color(body), roughness: .8, metalness: 0 }), u);
+  const top = burnable(new T.MeshStandardMaterial({ map: floppyTex(id), roughness: .5 }), u);
+  const m = new T.Mesh(geo, [top, side]); m.castShadow = true; m.receiveShadow = true; m.userData.burn = u;
+  // 고를 수 있을 때 두르는 금빛 테두리(평소엔 숨김)
+  const frame = new T.Mesh(diskFrameGeometry(), new T.MeshBasicMaterial({ color: lin('#ffb320'), transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+  frame.visible = false; frame.renderOrder = 2; m.add(frame); m.userData.frame = frame;
+  return m;
 }
 function makeDie(): THREE.Mesh {
   const mats = [3, 4, 1, 6, 2, 5].map(n => new T.MeshStandardMaterial({ map: pipTex(n), roughness: .4 }));
@@ -77,11 +158,22 @@ function limb(a: THREE.Vector3, b: THREE.Vector3, r: number, m: THREE.Material):
   const mesh = new T.Mesh(g, m); mesh.position.copy(a); mesh.quaternion.setFromUnitVectors(V(0, 1, 0), d.normalize()); mesh.castShadow = true; return mesh;
 }
 interface AvatarData { head: THREE.Group; fan: THREE.Group; ring: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>; torso: THREE.Mesh; fanN: number; at: string; hop: { p: THREE.Vector3; l: THREE.Vector3; done?: boolean } | null; hopT: number }
-function buildAvatar(col: string, hairCol: string): THREE.Group {
-  const g = new T.Group(); const body = mat(col, { roughness: .7 }), skin = mat('#e3bd98', { roughness: .65 }), hair = mat(hairCol, { roughness: .9 }), woodm = mat('#3e2716', { roughness: .6 });
+/** 의자 (아바타와 대기실의 빈 의자가 같이 쓴다). 테이블 쪽이 +z */
+function addChair(g: THREE.Group): void {
+  const woodm = mat('#3e2716', { roughness: .6 });
   const seat = new T.Mesh(new T.BoxGeometry(44, 4, 42), woodm); seat.position.set(0, 45, -4);
   const back = new T.Mesh(new T.BoxGeometry(44, 56, 4), woodm); back.position.set(0, 75, -25);
+  g.add(seat, back);
   [[-19, -21], [19, -21], [-19, 14], [19, 14]].forEach(([x, z]) => { const l = new T.Mesh(new T.BoxGeometry(3, 44, 3), woodm); l.position.set(x, 22, z); g.add(l); });
+}
+function buildChair(): THREE.Group {
+  const g = new T.Group(); addChair(g);
+  g.traverse(o => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+function buildAvatar(col: string, hairCol: string): THREE.Group {
+  const g = new T.Group(); const body = mat(col, { roughness: .7 }), skin = mat('#e3bd98', { roughness: .65 }), hair = mat(hairCol, { roughness: .9 });
+  addChair(g);
   const torso = new T.Mesh(new T.CylinderGeometry(15, 17, 46, 18), body); torso.scale.z = .62; torso.position.set(0, 72, -6);
   const sh = new T.Mesh(new T.SphereGeometry(16.5, 20, 12), body); sh.scale.set(1.05, .46, .62); sh.position.set(0, 94, -6);
   const hips = new T.Mesh(new T.BoxGeometry(32, 12, 34), body); hips.position.set(0, 52, 2);
@@ -100,7 +192,7 @@ function buildAvatar(col: string, hairCol: string): THREE.Group {
   const fan = new T.Group(); fan.position.set(0, 86, 26); fan.rotation.set(-0.35, PI, 0);
   const ring = new T.Mesh(new T.TorusGeometry(30, 1.4, 8, 48), new T.MeshBasicMaterial({ color: new T.Color('#e8b84a'), transparent: true, opacity: 0 }));
   ring.rotation.x = PI / 2; ring.position.y = .6;
-  g.add(seat, back, torso, sh, hips, neck, head, ...L, fan, ring);
+  g.add(torso, sh, hips, neck, head, ...L, fan, ring);
   const ud: AvatarData = { head, fan, ring, torso, fanN: -1, at: 'main', hop: null, hopT: 0 };
   g.userData = ud;
   g.traverse(o => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
@@ -123,13 +215,14 @@ function stFrame(id: MgId) { const k = ST_IDS.indexOf(id); const a = k * 2 * PI 
 function stLocal(id: MgId, lx: number, ly: number, lz: number) { const f = stFrame(id); const c = Math.cos(f.ry), s = Math.sin(f.ry); return V(f.x + lx * c + lz * s, ly, f.z - lx * s + lz * c); }
 const HALL = 900;
 const SLOTX = (k: number) => -27.5 + k * 11;
+const BURN_T = 1.1; // 디스크가 다 타는 데 걸리는 초
 const onTable = (x: number, z: number, h = 0) => V(x, TY + .1 + h, z);
 
 interface PoolEntry { obj: THREE.Object3D; tp: THREE.Vector3; tq: THREE.Quaternion; ts: number; speed: number; lift: number; alive: boolean; dying?: boolean }
 interface WantOpt { from?: THREE.Vector3 | null; fromEuler?: E3; fromScale?: number; speed?: number; lift?: number; pick?: Pick | null }
 type FlopMode = 'box' | 'pop' | 'slot' | 'lift' | 'away' | 'fly' | 'in';
 
-type ShotName = 'seat' | 'myturn' | 'top' | 'monitor' | 'zoom' | 'reward' | 'station';
+type ShotName = 'seat' | 'myturn' | 'top' | 'monitor' | 'zoom' | 'reward' | 'station' | 'menu' | 'lobby' | 'disks';
 interface Shot { p: THREE.Vector3; l: THREE.Vector3; fov: number }
 
 export class World {
@@ -142,6 +235,7 @@ export class World {
   private picks = new Set<THREE.Object3D>();
   private hatch!: THREE.Mesh;
   private avatars = new Map<number, THREE.Group>();
+  private chairs = new Map<number, THREE.Group>(); // 대기실의 빈 의자 (의자 번호 → 의자)
   private seatKey = '';
   private stations = new Map<MgId, { g: THREE.Group; props: THREE.Group; parts: Record<string, any> }>();
   private mgSpot!: THREE.SpotLight;
@@ -150,15 +244,22 @@ export class World {
   private screenTex!: THREE.CanvasTexture;
   private screenState: { mode: string; name?: string; p?: number } = { mode: 'off' };
   private dbox!: THREE.Group;
+  private feltMat!: THREE.MeshStandardMaterial;
   private die!: THREE.Mesh;
   private SHOTS: Record<ShotName, Shot> = {
     seat: { p: V(0, 150, 128), l: V(0, 66, -24), fov: 52 },
     myturn: { p: V(-8, 124, 44), l: V(-8, TY, -12), fov: 48 },
     top: { p: V(0, 250, 34), l: V(0, TY, 6), fov: 40 },
+    // 미니게임 선택 화면: 디스크 6장·상자·주사위가 꽉 차게 가까이
+    disks: { p: V(0, TY + 105, 70), l: V(0, TY, -2), fov: 36 },
     monitor: { p: V(MON.x, TY + 30, MON.z + 70), l: V(MON.x, TY + 22, MON.z + 14), fov: 42 },
     zoom: { p: V(MON.x, TY + 26, MON.z + 30), l: V(MON.x, TY + 26, MON.z + 15.8), fov: 42 },
     reward: { p: V(0, 150, 82), l: V(0, TY, 8), fov: 48 },
     station: { p: V(0, 150, 128), l: V(0, 66, -24), fov: 50 },
+    // 메인 화면: 왼쪽은 메뉴 자리로 비우고, 테이블은 화면 오른쪽에 비스듬히
+    menu: { p: V(-60, 185, 235), l: V(-60, 62, 0), fov: 50 },
+    // 대기실: 고정 시점. 테이블 이쪽에서 건너편 반원의 의자 5개(앉은 사람 얼굴)를 본다
+    lobby: { p: V(0, 138, 145), l: V(0, 88, -60), fov: 60 },
   };
   private camS = { p: V(0, 150, 128), l: V(0, 66, -24), fov: 52, shot: 'seat' as ShotName, speed: 2.6 };
   private yaw = 0; private pitch = 0;
@@ -168,7 +269,12 @@ export class World {
   private down: { x: number; y: number; yaw: number; pitch: number; moved: boolean } | null = null;
   private hover: THREE.Object3D | null = null;
   private ray = new T.Raycaster(); private mv = new T.Vector2();
-  private flop: { round: string | null; ids: MgId[]; mode: Record<number, FlopMode>; chosen: number | null; introDone: boolean; boxGone?: boolean } = { round: null, ids: [], mode: {}, chosen: null, introDone: false };
+  /** burn: 디스크마다 이번 라운드에 탄 횟수(n), 지금 타는 중/탄 상태인지(on), 탄 지 몇 초(t) */
+  private flop: { round: string | null; ids: MgId[]; mode: Record<number, FlopMode>; chosen: number | null; introDone: boolean; boxGone?: boolean; burn: Record<number, { n: number; on: boolean; t: number }> } = { round: null, ids: [], mode: {}, chosen: null, introDone: false, burn: {} };
+  private burns!: Burns;
+  private dieFrame!: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  /** 라운드 시작 연출에서 지금까지 뽑아 놓은 보상 카드 수 */
+  private rewardShown = 99;
   private lastActorSeat: number | null = null;
   private lastMG: MgId | null = null;
   private gen = 0;
@@ -183,18 +289,34 @@ export class World {
   attach(scene: THREE.Scene, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement): void {
     this.scene = scene; this.camera = camera; this.canvas = canvas;
     this.buildRoom(); this.buildHall(); this.buildStations(); this.buildMonitor(); this.buildBox(); this.buildDie();
+    this.burns = new Burns(scene);
     this.mgSpot = new T.SpotLight(lin('#ffe4bf'), 0, 0, .6, .5, 0); scene.add(this.mgSpot, this.mgSpot.target);
     this.bindInput();
   }
+  /** 미리 데워 두기: 처음 등장할 때 멈칫하지 않게, 카드 앞뒤·디스크·주사위·큐빅 그림을 그래픽 카드에 미리 올리고
+      그것들을 그리는 셰이더도 미리 만든다(눈에 안 보이는 바닥 아래에 잠깐 두었다가 치운다) */
+  warmup(gl: THREE.WebGLRenderer): void {
+    const g = new T.Group(); g.position.set(0, -400, 0);
+    const deck = fullDeck(1);
+    deck.forEach((c, k) => { if (k < 4) g.add(makeCard(c)); gl.initTexture(faceTex(c)); });
+    gl.initTexture(backTex());
+    ST_IDS.forEach(id => { g.add(makeFloppy(id)); gl.initTexture(floppyTex(id)); });
+    for (let n = 1; n <= 6; n++) { gl.initTexture(pipTex(n)); gl.initTexture(numTex(n)); }
+    g.add(makeDie()); SUITS.forEach(s => g.add(makeCube(s)));
+    this.scene.add(g);
+    try { gl.compile(this.scene, this.camera); } finally { this.scene.remove(g); }
+  }
   dispose(): void {
-    this.cleanup.forEach(f => f()); this.cleanup = [];
+    this.cleanup.forEach(f => f()); this.cleanup = []; this.burns?.clear();
     if (this.locked) { try { document.exitPointerLock(); } catch { /* 이미 풀림 */ } }
   }
   resize(w: number, h: number): void {
     this.W = w; this.H = h;
     const narrow = w / h < 1.1; const S = this.SHOTS;
     S.myturn.p.set(-8, narrow ? 150 : 124, narrow ? 66 : 44); S.seat.p.set(0, narrow ? 190 : 150, narrow ? 170 : 128);
-    S.top.p.set(0, narrow ? 330 : 250, narrow ? 44 : 34); S.reward.p.set(0, narrow ? 190 : 150, narrow ? 110 : 82);
+    S.top.p.set(0, narrow ? 330 : 250, narrow ? 44 : 34); S.disks.p.set(0, TY + (narrow ? 150 : 105), narrow ? 100 : 70); S.reward.p.set(0, narrow ? 190 : 150, narrow ? 110 : 82);
+    // 대기실: 의자 5개가 가로로 꼭 차게 시야각을 맞춘다(좁은 화면은 넓게, 가로로 긴 휴대폰은 좁게 당겨서)
+    S.lobby.fov = Math.min(84, Math.max(38, 2 * Math.atan(LOBBY_HALF_W / (w / h)) * 180 / PI));
   }
 
   /* ---------------- 방과 테이블 ---------------- */
@@ -210,7 +332,8 @@ export class World {
     const wood = mat('#5b3b23', { roughness: .55 });
     const top = new T.Mesh(new T.CylinderGeometry(TR, TR - 1, 4, 72), wood); top.position.y = TY - 2; top.castShadow = true; top.receiveShadow = true; scene.add(top);
     const rim = new T.Mesh(new T.TorusGeometry(TR - 3.2, 3.2, 12, 96), wood); rim.rotation.x = PI / 2; rim.position.y = TY + .4; rim.castShadow = true; scene.add(rim);
-    const felt = new T.Mesh(new T.CircleGeometry(TR - 6, 72), mat('#1f4c3f', { roughness: .95 })); felt.rotation.x = -PI / 2; felt.position.y = TY + .05; felt.receiveShadow = true; scene.add(felt);
+    this.feltMat = new T.MeshStandardMaterial({ color: new T.Color(feltColor(prefs().felt)), roughness: .95, metalness: 0 });
+    const felt = new T.Mesh(new T.CircleGeometry(TR - 6, 72), this.feltMat); felt.rotation.x = -PI / 2; felt.position.y = TY + .05; felt.receiveShadow = true; scene.add(felt);
     const ped = new T.Mesh(new T.CylinderGeometry(9, 12, TY - 4, 24), wood); ped.position.y = (TY - 4) / 2; scene.add(ped);
     const foot = new T.Mesh(new T.CylinderGeometry(34, 38, 4, 48), wood); foot.position.y = 2; foot.receiveShadow = true; scene.add(foot);
     // 엘리베이터 해치(가운데가 내려갔다 올라오는 연출용)
@@ -310,8 +433,10 @@ export class World {
     return stLocal(id, Math.sin(phi) * d, 0, Math.cos(phi) * d);
   }
   private stationShot(id: MgId): void {
-    this.SHOTS.station = { p: stLocal(id, 0, 168, -178), l: stLocal(id, 0, TY - 4, 18), fov: 50 };
-    if (this.W / this.H < 1.1) this.SHOTS.station.p = stLocal(id, 0, 215, -220);
+    // 미니게임은 모두 테이블을 위에서 내려다보는 시점(탑뷰)으로. 아래 조작판에 가리지 않게 테이블을 화면 위쪽으로 조금 올린다
+    // (똑바로 위에서 보면 화면의 위아래 방향이 정해지지 않으니 아주 살짝만 기울인다)
+    const h = this.W / this.H < 1.1 ? 205 : 140;
+    this.SHOTS.station = { p: stLocal(id, 0, TY + h, -22), l: stLocal(id, 0, TY, -16), fov: 50 };
     this.mgSpot.position.copy(stLocal(id, 0, 320, -40)); this.mgSpot.target.position.copy(stLocal(id, 0, TY, 0)); this.mgSpot.intensity = 1.1 * PI;
   }
 
@@ -371,10 +496,10 @@ export class World {
       P.doors.forEach((d: THREE.Group, k: number) => { (d.userData.lamp.material as THREE.MeshBasicMaterial).color.copy(lin(hit.includes(k + 1) ? '#ff4d4d' : '#3a1010')); });
     }
     if (m.id === 'count') {
-      if (!P.stand) {
-        const s = new T.Group(); const bk = new T.Mesh(new T.BoxGeometry(24, 32, 2), mat('#2a1a12')); bk.position.y = TY + 18; const c = makeCard(null); c.scale.setScalar(3); c.position.set(0, TY + 18, -1.2); c.rotation.y = PI;
-        s.add(bk, c); st0.props.add(s); P.stand = s; P.card = c;
-      }
+      // 위에서 내려다보므로 넘기는 카드는 테이블 가운데에 크게 눕힌다(12장을 한 장씩 같은 자리에)
+      if (!P.stand) { const c = makeCard(null); c.scale.setScalar(3); c.rotation.set(-PI / 2, 0, PI); c.position.set(0, TY + .6, -4); st0.props.add(c); P.stand = c; P.card = c; }
+      // 12장을 다 넘긴 뒤 뒤집는 정답 문양 카드는 옆에 따로 놓아, 세는 카드와 헷갈리지 않게
+      if (now() >= countOpenAt(m) && m.dec) this.propCard(id, 'cdec' + m.dec, m.dec, 34, 0, -4, 0, 2.2);
     }
     if (m.id === 'race') {
       if (!P.board) {
@@ -399,9 +524,12 @@ export class World {
     if (P.horse) for (const s of SUITS) { const h = P.horse[s]; if (h.userData.tp) { h.position.lerp(h.userData.tp, a); h.position.y = h.userData.tp.y + Math.max(0, Math.sin(t * 6 + SUITS.indexOf(s))) * .6; } }
     if (P.card && m.id === 'count') {
       const nw = now(); let c: Card | null = null;
-      if (nw >= m.t0) { const k = Math.floor((nw - m.t0) / CFLIP); c = nw >= countOpenAt(m) ? m.dec : m.seq![Math.min(k, m.seq!.length - 1)]; }
-      if (P.card.userData.cur !== c) { P.card.userData.cur = c; const f = P.card.children[0] as THREE.Mesh; f.material = new T.MeshStandardMaterial({ map: c ? faceTex(c) : backTex(), roughness: .6 }); P.card.rotation.y = PI + .6; }
-      P.card.rotation.y += (PI - P.card.rotation.y) * Math.min(1, dt * 10);
+      // 넘기는 동안은 12장 중 지금 장, 다 넘기면 다시 뒷면(정답 문양 카드는 옆에 따로 나온다)
+      if (nw >= m.t0 && nw < countOpenAt(m)) { const k = Math.floor((nw - m.t0) / CFLIP); c = m.seq![Math.min(k, m.seq!.length - 1)]; }
+      if (P.card.userData.cur !== c) { P.card.userData.cur = c; const f = P.card.children[0] as THREE.Mesh; f.material = new T.MeshStandardMaterial({ map: c ? faceTex(c) : backTex(), roughness: .6 }); P.card.scale.x = .3; }
+      P.card.scale.x += (3 - P.card.scale.x) * Math.min(1, dt * 12); // 넘길 때 휙 뒤집히는 느낌
+      // 정답 문양 카드는 시간이 되면 나온다(상태가 바뀌지 않으므로 그때 한 번 다시 배치)
+      if (nw >= countOpenAt(m) && P.decAt !== m.dec) { P.decAt = m.dec; this.layout(); }
     }
   }
   private clearMG(): void {
@@ -458,13 +586,19 @@ export class World {
     front.position.set(7.05, 3.5, 0); front.rotation.y = PI / 2;
     const lid = new T.Mesh(new T.BoxGeometry(14, .4, 22), new T.MeshStandardMaterial({ color: new T.Color('#bcd4ee'), transparent: true, opacity: .22, roughness: .1 })); lid.position.set(-7, 13, 0); lid.rotation.z = 1.25;
     const ids = Object.keys(MG) as MgId[];
-    for (let k = 0; k < 12; k++) { const id = ids[k % ids.length]; const f = new T.Mesh(new T.BoxGeometry(9, 9.4, .34), mat(mgLook(id)[1])); f.rotation.y = PI / 2; f.position.set(0, 7 + ((k * 7) % 3) * .4, -9 + k * 1.6); dbox.add(f); }
+    for (let k = 0; k < 12; k++) { const id = ids[k % ids.length]; const f = new T.Mesh(new T.BoxGeometry(9, 9.4, .34), mat(mgLook(id)[1])); f.position.set(0, 7 + ((k * 7) % 3) * .4, -9 + k * 1.6); dbox.add(f); } // 상자 안에 세워 꽂은 디스크: 넓은 면이 상자 앞뒤(z)를 보고 줄지어 선다
     dbox.add(base, front, lid); dbox.position.set(BOX.x, TY - 30, BOX.z); dbox.rotation.y = -0.35; dbox.visible = false; dbox.userData = { ty: TY - 30 }; this.scene.add(dbox); this.dbox = dbox;
   }
   private boxUp(up: boolean): void { this.dbox.userData.ty = up ? TY : TY - 30; if (up) this.dbox.visible = true; }
 
   /* ---------------- 미니게임 주사위 ---------------- */
-  private buildDie(): void { this.die = makeDie(); this.die.position.set(DIE.x, TY - 10, DIE.z); this.die.visible = false; this.scene.add(this.die); this.setPick(this.die, { kind: 'die' }); }
+  private buildDie(): void {
+    this.die = makeDie(); this.die.position.set(DIE.x, TY - 10, DIE.z); this.die.visible = false; this.scene.add(this.die); this.setPick(this.die, { kind: 'die' });
+    // 손가락으로도 누르기 쉽게 주사위보다 넉넉한 보이지 않는 누르기 상자
+    this.die.add(new T.Mesh(new T.BoxGeometry(8, 8, 8), new T.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false })));
+    // 굴릴 수 있을 때 주사위 아래 테이블에 두르는 금빛 테두리
+    this.dieFrame = hiFrame(4.2, 4.2, 1.2, true); this.dieFrame.position.set(DIE.x, TY + .12, DIE.z); this.scene.add(this.dieFrame);
+  }
 
   /* ---------------- 풀: 키로 관리하고 목표로 미끄러진다 ---------------- */
   private want(key: string, make: () => THREE.Object3D, pos: THREE.Vector3, euler: E3, scale = 1, opt: WantOpt = {}): PoolEntry {
@@ -496,11 +630,41 @@ export class World {
   private buildSeats(): void {
     const S = this.ctx.S()!; const vs = this.ctx.viewSeat();
     const key = S.seats.length + ':' + vs + ':' + S.seats.map(p => p.uid).join(','); if (key === this.seatKey) return; this.seatKey = key;
-    for (const [, a] of this.avatars) this.scene.remove(a); this.avatars.clear();
+    this.clearSeats();
     S.seats.forEach((_, i) => {
       if (i === vs) return; const a = buildAvatar(SEATCOL[i % 5], HAIRS[i % 5]); const sp = this.seatPos(i); a.position.set(sp.x, 0, sp.z); a.lookAt(0, 0, 0);
       a.traverse(o => { if ((o as THREE.Mesh).isMesh) this.setPick(o, { kind: 'seat', i }); }); this.scene.add(a); this.avatars.set(i, a);
     });
+  }
+  private clearSeats(): void {
+    for (const g of [...this.avatars.values(), ...this.chairs.values()]) { g.traverse(o => this.clearPick(o)); this.scene.remove(g); }
+    this.avatars.clear(); this.chairs.clear();
+  }
+  /** 대기실: 테이블 건너편 반원에 의자 5개를 늘 둔다(반원을 5등분한 칸의 가운데, 왼쪽부터 의자 0~4).
+      카메라는 테이블 이쪽에 고정되어 앉은 사람들의 얼굴이 모두 보인다(나도). 앉은 사람은 아바타로, 빈 의자는 눌러서 앉거나 옮겨 앉는다.
+      게임을 시작하면 buildSeats가 인원수에 맞게 테이블 둘레에 고르게 다시 앉힌다 */
+  private chairSpot(c: number) {
+    const th = PI - (c + .5) * PI / MAX_SEATS; // 162° · 126° · 90° · 54° · 18°
+    return { x: Math.cos(th) * SEAT_D, z: -Math.sin(th) * SEAT_D };
+  }
+  private buildLobby(): void {
+    const S = this.ctx.S()!; const me = this.ctx.seated() ? this.ctx.viewSeat() : -1;
+    const key = 'L' + me + ':' + S.seats.map((p, k) => p.uid + '@' + chairOf(S, k)).join(','); if (key === this.seatKey) return; this.seatKey = key;
+    this.clearSeats();
+    const taken = new Map<number, number>(); S.seats.forEach((_, k) => taken.set(chairOf(S, k), k));
+    for (let c = 0; c < MAX_SEATS; c++) {
+      const { x, z } = this.chairSpot(c);
+      const k = taken.get(c);
+      if (k != null) {
+        const a = buildAvatar(SEATCOL[k % 5], HAIRS[k % 5]); a.position.set(x, 0, z); a.lookAt(0, 0, 0);
+        // 내 자리는 바닥에 금색 고리
+        if (k === me) (a.userData as AvatarData).ring.material.opacity = .85;
+        a.traverse(o => { if ((o as THREE.Mesh).isMesh) this.setPick(o, { kind: 'seat', i: k }); }); this.scene.add(a); this.avatars.set(k, a);
+      } else {
+        const ch = buildChair(); ch.position.set(x, 0, z); ch.lookAt(0, 0, 0);
+        ch.traverse(o => { if ((o as THREE.Mesh).isMesh) this.setPick(o, { kind: 'chair', c }); }); this.scene.add(ch); this.chairs.set(c, ch);
+      }
+    }
   }
   private lastSeatPos() { const S = this.ctx.S(); if (this.lastActorSeat == null || !S?.seats[this.lastActorSeat]) return null; return this.seatPos(this.lastActorSeat); }
 
@@ -513,16 +677,26 @@ export class World {
     const dn = S.deck ? S.deck.length : 0;
     this.want('deck', () => {
       const g = new T.Group(); const side = mat('#e8dfcf');
-      const box = new T.Mesh(new T.BoxGeometry(CARD_W, 1, CARD_H), [side, side, new T.MeshStandardMaterial({ map: backTex() }), side, side, side]); box.castShadow = true; g.add(box); g.userData.box = box; return g;
+      const box = new T.Mesh(new T.BoxGeometry(CARD_W, 1, CARD_H), [side, side, new T.MeshStandardMaterial({ map: backTex() }), side, side, side]); box.castShadow = true; g.add(box); g.userData.box = box;
+      // 누를 수 있을 때 두르는 테두리, 그리고 손가락으로도 누르기 쉽게 덱보다 넉넉한 보이지 않는 누르기 판
+      const fr = hiFrame(CARD_W, CARD_H, 1.1, true); fr.position.y = .08; g.add(fr); g.userData.frame = fr;
+      // 맨 위 카드 한 장: 마우스를 올리면 이 한 장만 들린다(덱과 테두리는 그대로)
+      const top = makeCard(null); top.rotation.x = -PI / 2; g.add(top); g.userData.top = top;
+      const hit = new T.Mesh(new T.PlaneGeometry(CARD_W + 8, CARD_H + 8), new T.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false })); hit.rotation.x = -PI / 2; hit.position.y = .1; g.add(hit);
+      return g;
     }, onTable(-38, -14), [0, .3, 0], 1, { pick: { kind: 'deck' } });
     const de = this.pool.get('deck')!; const hgt = Math.max(.2, dn * .035); de.obj.userData.box.scale.y = hgt; de.obj.userData.box.position.y = hgt / 2;
+    de.obj.userData.hgt = hgt; de.obj.userData.top.visible = dn > 0;
     // 버림 줄
     const gather = ['roll', 'clubs', 'mg', 'reward'].includes(phase);
     const row = S.row || []; const sp = Math.min(7.2, 92 / Math.max(1, row.length));
     row.forEach((c, k) => {
       const from = this.lastSeatPos();
       const pos = gather ? onTable(40, -16, k * .04) : onTable((k - (row.length - 1) / 2) * sp, 2, k * .02); const yawr = gather ? .15 + ((k * 37) % 9 - 4) * .02 : 0;
-      this.want('c:' + c, () => makeCard(c), pos, [-PI / 2, 0, yawr], 1, { from: from && V(from.x * .6, TY + 30, from.z * .6), lift: 8, pick: !gather ? { kind: 'row', c } : null });
+      const e = this.want('c:' + c, () => makeCard(c), pos, [-PI / 2, 0, yawr], 1, { from: from && V(from.x * .6, TY + 30, from.z * .6), lift: 8, pick: !gather ? { kind: 'row', c } : null });
+      // 버림 줄 카드도 주울 수 있을 때 테두리(카드는 xy 평면에 그려져 눕혀 있으므로 xy 테두리를 카드 뒤에 붙인다)
+      if (!e.obj.userData.frame) { const fr = hiFrame(CARD_W, CARD_H, .9, false); fr.position.z = -.03; e.obj.add(fr); e.obj.userData.frame = fr; }
+      e.obj.userData.baseY = pos.y;
     });
     // 자리별 토큰과 앞에 놓인 아이템
     S.seats.forEach((p, i) => {
@@ -544,7 +718,7 @@ export class World {
     const disp = phase === 'reward' ? (S.reward ? S.reward.disp : []) : (['roll', 'clubs', 'mg'].includes(phase) ? (S.rewardDisp || []) : []);
     const rsp = Math.min(7.4, 104 / Math.max(1, disp.length));
     disp.forEach((c, k) => {
-      if (phase === 'roll' && !this.flop.introDone) return;
+      if (phase === 'roll' && !this.flop.introDone && k >= this.rewardShown) return; // 라운드 시작 연출: 보상을 한 장씩 뽑은 뒤 디스크
       this.want('c:' + c, () => makeCard(c), onTable((k - (disp.length - 1) / 2) * rsp, phase === 'mg' ? -26 : 18, .05), [-PI / 2, 0, 0], phase === 'mg' ? .7 : 1, { from: onTable(-38, -14, 1), lift: 12, pick: phase === 'reward' ? { kind: 'reward', c } : null });
     });
     // 미니게임 디스크
@@ -554,7 +728,10 @@ export class World {
     // 상자·모니터·주사위
     const drawPhase = phase === 'roll' || phase === 'clubs';
     this.boxUp(drawPhase && !this.flop.boxGone); this.monitorUp(drawPhase);
-    this.die.visible = drawPhase;
+    // 라운드 시작 연출 중(보상·디스크가 다 나오기 전)에는 주사위를 숨긴다. 나타날 땐 작게 시작해 커진다
+    const dieOn = drawPhase && !(phase === 'roll' && !this.flop.introDone);
+    if (dieOn && !this.die.visible) this.die.scale.setScalar(.05);
+    this.die.visible = dieOn;
     this.hatch.scale.setScalar(drawPhase ? 1 : .001);
     this.sweep();
   }
@@ -562,19 +739,24 @@ export class World {
     const S = this.ctx.S()!; const flop = this.flop;
     if (!S.board || !['roll', 'clubs'].includes(S.phase)) { flop.round = null; return; }
     const rk = S.round + '|' + S.board.join(',');
-    if (flop.round !== rk) { this.flop = { round: rk, ids: S.board.slice(), mode: {}, chosen: null, introDone: false, boxGone: false }; S.board.forEach((_, k) => { this.flop.mode[k] = 'box'; }); }
+    if (flop.round !== rk) { this.flop = { round: rk, ids: S.board.slice(), mode: {}, chosen: null, introDone: false, boxGone: false, burn: {} }; S.board.forEach((_, k) => { this.flop.mode[k] = 'box'; }); }
     const f = this.flop;
     const bx = V(BOX.x, TY + 6, BOX.z);
     f.ids.forEach((id, k) => {
       const m = f.mode[k]; let pos = bx.clone(); let eu: E3 = [0, 0, 0]; let sc = 1; const opt: WantOpt = { speed: 7 };
+      if (m !== 'away' && f.burn[k]) f.burn[k].on = false; // 다시 불러오면 탄 자국만 남는다
       if (m === 'box') { pos = bx.clone().add(V(0, 0, -6 + k * 2)); eu = [PI / 2, -0.35 + PI / 2, 0]; sc = .001; }
       else if (m === 'pop') { pos = V(BOX.x + 6, TY + 26, BOX.z - 6); eu = [-1.1, 0, .4]; sc = 1.2; opt.speed = 9; }
-      else if (m === 'slot') { pos = onTable(SLOTX(k), -4, .2); eu = [0, 0, ((k * 53) % 7 - 3) * .03]; }
-      else if (m === 'lift') { pos = onTable(SLOTX(k), -2, 16); eu = [-.85, 0, 0]; sc = 1.35; opt.speed = 6; }
-      else if (m === 'away') { const sg = k < (f.chosen ?? 0) ? -1 : 1; pos = onTable(sg * (78 + Math.abs(k - (f.chosen ?? 0)) * 7), -10 + k * 3, -6); eu = [0, (k % 2 ? 1 : -1) * 1.2, sg * .6]; sc = .001; opt.speed = 3.2; }
+      else if (m === 'slot') { pos = onTable(SLOTX(k), -4, .2); eu = [0, ((k * 53) % 7 - 3) * .03, 0]; } // 바닥과 평행하게, 살짝 돌려 놓는다(고를 수 있는 디스크는 마우스를 올리면 떠오른다: stepBurn)
+      else if (m === 'lift') { pos = onTable(SLOTX(k), 2, 18); eu = [.68, 0, 0]; sc = 1.35; opt.speed = 6; } // 고른 디스크: 들어 올려 그림 면을 카메라(우리) 쪽으로 기울인다
+      else if (m === 'away') {
+        // 고르지 않은 디스크: 제자리에서 타 없어진다(frame에서 태운다)
+        pos = onTable(SLOTX(k), -4, .2); eu = [0, ((k * 53) % 7 - 3) * .03, 0];
+        const b = f.burn[k] || (f.burn[k] = { n: 0, on: false, t: 0 }); if (!b.on) { b.on = true; b.n++; b.t = 0; }
+      }
       else if (m === 'fly') { pos = this.slotW().add(V(0, 0, 6)); eu = [0, 0, 0]; sc = .95; opt.speed = 5; }
       else if (m === 'in') { pos = this.slotW().add(V(0, 0, -4)); eu = [0, 0, 0]; sc = .001; opt.speed = 6; }
-      this.want('fl:' + k, () => makeFloppy(id), pos, eu, sc, { ...opt, from: bx.clone().add(V(0, 2, 0)), fromScale: .2, pick: S.phase === 'clubs' && this.ctx.uiMode() === 'clubK' && m !== 'in' ? { kind: 'slot', k: k + 1 } : null });
+      this.want('fl:' + k, () => makeFloppy(id), pos, eu, sc, { ...opt, from: bx.clone().add(V(0, 2, 0)), fromScale: .2, pick: S.phase === 'clubs' && !!S.clubChoose && m !== 'in' ? { kind: 'slot', k: k + 1 } : null });
       this.want('sn:' + k, () => new T.Mesh(new T.CircleGeometry(1.9, 24), new T.MeshBasicMaterial({ map: numTex(k + 1) })), onTable(SLOTX(k), 5.5, .06), [-PI / 2, 0, 0], f.introDone ? 1 : .001);
     });
   }
@@ -585,11 +767,20 @@ export class World {
   async playIntro(): Promise<void> {
     const g = ++this.gen;
     try {
-      this.flop.introDone = false; this.setScreen({ mode: 'insert' }); this.shot('top', 1.8); this.layout(); await this.step(g, 700);
+      this.flop.introDone = false; this.setScreen({ mode: 'insert' }); this.shot('disks', 1.8);
+      // 먼저 이번 라운드 보상을 덱에서 한 장씩 뽑아 늘어놓고, 그다음 디스크 상자를 연다
+      const nR = (this.ctx.S()?.rewardDisp || []).length; this.rewardShown = 0; this.layout(); await this.step(g, 600);
+      for (let k = 0; k < nR; k++) { this.rewardShown = k + 1; this.layout(); await this.step(g, 230); }
+      await this.step(g, 450);
       this.flop.boxGone = false; this.layout(); await this.step(g, 500);
       for (let k = 0; k < this.flop.ids.length; k++) { this.flop.mode[k] = 'pop'; this.layout(); await this.step(g, 260); this.flop.mode[k] = 'slot'; this.layout(); await this.step(g, 180); }
       this.flop.introDone = true; this.layout(); await this.step(g, 400); this.flop.boxGone = true; this.layout();
-    } catch (e) { if (e !== 'cut') console.error(e); }
+    } catch (e) { if (e !== 'cut') console.error(e); } finally { this.rewardShown = 99; }
+  }
+  /** ♣Q·♣K를 쓴 뒤: 디스크 6장을 다시 늘어놓고 위에서 본다(미니게임 선택 화면). 고르면 playChoose가 이어진다 */
+  playSelect(): void {
+    ++this.gen; this.flop.ids.forEach((_, j) => { this.flop.mode[j] = 'slot'; }); this.flop.chosen = null; this.flop.introDone = true; this.flop.boxGone = true;
+    this.setScreen({ mode: 'insert' }); this.layout(); this.shot('disks', 2);
   }
   settleLined(): void { this.flop.introDone = true; this.flop.boxGone = true; this.flop.ids.forEach((_, k) => { this.flop.mode[k] = 'slot'; }); this.layout(); }
   private async rollDie(v: number, g: number): Promise<void> {
@@ -607,7 +798,7 @@ export class World {
     try {
       const k = v - 1; if (!this.flop.ids.length) return;
       if (opt.restore) { this.flop.ids.forEach((_, j) => { this.flop.mode[j] = 'slot'; }); this.flop.chosen = null; this.layout(); }
-      this.shot('top', 2); await this.step(g, opt.restore ? 900 : 300);
+      this.shot('disks', 2); await this.step(g, opt.restore ? 900 : 300);
       if (opt.roll) await this.rollDie(v, g); await this.step(g, 250);
       this.flop.chosen = k; this.flop.mode[k] = 'lift'; this.flop.ids.forEach((_, j) => { if (j !== k) this.flop.mode[j] = 'away'; }); this.layout(); await this.step(g, 1100);
       this.setScreen({ mode: 'insert' }); this.shot('monitor', 1.6); await this.step(g, 700);
@@ -618,7 +809,7 @@ export class World {
     } catch (e) { if (e !== 'cut') console.error(e); }
   }
   jumpChosen(v: number): void {
-    const k = v - 1; this.flop.chosen = k; this.flop.ids.forEach((_, j) => { this.flop.mode[j] = j === k ? 'in' : 'away'; }); this.flop.introDone = true; this.flop.boxGone = true;
+    const k = v - 1; this.flop.chosen = k; this.flop.ids.forEach((_, j) => { this.flop.mode[j] = j === k ? 'in' : 'away'; if (j !== k) this.flop.burn[j] = { n: (this.flop.burn[j]?.n ?? 0) + 1, on: true, t: BURN_T }; }); this.flop.introDone = true; this.flop.boxGone = true;
     if (this.flop.ids[k]) this.setScreen({ mode: 'loading', name: MG[this.flop.ids[k]].name, p: 1 });
     const e = dieEuler(v); this.die.position.set(DIE.x, TY + 1.3, DIE.z); this.die.rotation.set(...e); this.layout();
   }
@@ -627,6 +818,8 @@ export class World {
   /* ---------------- 카메라 ---------------- */
   shot(name: ShotName, speed = 2.6): void { this.camS.shot = name; this.camS.speed = speed; }
   goStation(id: MgId): boolean { if (!this.stations.has(id)) return false; this.stationShot(id); this.shot('station', 1.4); return true; }
+  /** 꾸미기: 가운데 테이블 천 색 (내 화면에만) */
+  setFelt(hex: string): void { this.feltMat?.color.set(hex); }
   lightsMain(): void { if (this.mgSpot) this.mgSpot.intensity = 0; }
   resetLook(): void { this.yaw = 0; this.pitch = 0; this.lookT.yaw = 0; this.lookT.pitch = 0; }
   private cursorLook(x: number, y: number): void {
@@ -730,17 +923,65 @@ export class World {
     for (const [i, a] of this.avatars) { const p = a.localToWorld(V(0, 64, 30)); const q = p.clone().project(this.camera); out.push({ i, x: (q.x * .5 + .5) * this.W, y: (-q.y * .5 + .5) * this.H, vis: q.z < 1 && q.z > -1 }); }
     return out;
   }
+  /** 대기실 빈 의자의 화면 위치 (이름표 자리) */
+  chairAnchors(): { c: number; x: number; y: number; vis: boolean }[] {
+    const out = [];
+    for (const [c, g] of this.chairs) { const p = g.localToWorld(V(0, 64, -4)); const q = p.clone().project(this.camera); out.push({ c, x: (q.x * .5 + .5) * this.W, y: (-q.y * .5 + .5) * this.H, vis: q.z < 1 && q.z > -1 }); }
+    return out;
+  }
 
   /* ---------------- 상태 반영과 루프 ---------------- */
   sync(): void {
-    const S = this.ctx.S(); if (!S) return;
-    if (S.seats && S.phase !== 'lobby') this.buildSeats(); else { for (const [, a] of this.avatars) this.scene.remove(a); this.avatars.clear(); this.seatKey = ''; }
+    const S = this.ctx.S();
+    // 방을 나가면 의자·아바타를 치운다
+    if (!S) { this.clearSeats(); this.seatKey = ''; this.sweep(); this.sweep(); this.lightsMain(); this.burns.clear(); return; } // 두 번: 살아 있던 것까지 모두 치운다
+    if (!S.seats) return;
+    if (S.phase === 'lobby') this.buildLobby(); else this.buildSeats();
     if (S.phase === 'main' && S.turn) this.lastActorSeat = S.turn.seat;
     this.layout();
   }
+  /** 지금 누를 수 있는 덱·버림 줄 카드: 금빛 테두리가 맥박치듯 빛나고, 마우스를 올리면 살짝 떠오른다 */
+  private stepPickHi(): void {
+    const pulse = .7 + .3 * Math.sin(performance.now() / 260);
+    for (const [key, e] of this.pool) {
+      if (key !== 'deck' && !key.startsWith('c:')) continue;
+      const fr = e.obj.userData.frame as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined; if (!fr) continue;
+      const pk = e.obj.userData.pick as Pick | undefined; const can = !!pk && !e.dying && this.ctx.canPick(pk);
+      fr.visible = can; fr.material.opacity = can ? pulse : 0;
+      const up = can && this.hover === e.obj;
+      if (key === 'deck') {
+        // 덱은 그대로 두고 맨 위 카드 한 장만 들어 올린다
+        const top = e.obj.userData.top as THREE.Object3D; const ty = (e.obj.userData.hgt ?? .2) + .02 + (up ? 2.2 : 0);
+        top.position.y += (ty - top.position.y) * .25; top.rotation.x = -PI / 2 + (up ? .12 : 0);
+      } else if (e.obj.userData.baseY != null) e.tp.y = e.obj.userData.baseY + (up ? 1.6 : 0);
+    }
+  }
+  /** 디스크 태우기: 타는 중이면 불길을 번지게 하고 불씨·연기를 뿜는다. 다시 불러온 디스크는 탄 횟수만큼 누렇게 그슬린다 */
+  private stepBurn(dt: number): void {
+    this.burns.step(dt);
+    // ♣로 고를 수 있는 디스크는 금빛 테두리가 맥박치듯 빛난다
+    const slots = this.ctx.clubSlots(); const pulse = .7 + .3 * Math.sin(performance.now() / 260);
+    this.flop.ids.forEach((_, k) => {
+      const fr = this.pool.get('fl:' + k)?.obj.userData.frame as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | undefined; if (!fr) return;
+      const on = this.flop.mode[k] === 'slot' && slots.includes(k + 1); fr.visible = on; fr.material.opacity = on ? pulse : 0;
+      // 고를 수 있는 디스크에 마우스를 올리면 떠오른다
+      const e = this.pool.get('fl:' + k)!; if (this.flop.mode[k] === 'slot') e.tp.y = TY + .3 + (on && this.hover === e.obj ? 3.2 : 0);
+    });
+    for (const [kk, b] of Object.entries(this.flop.burn)) {
+      const e = this.pool.get('fl:' + kk); const u = e?.obj.userData.burn as BurnU | undefined; if (!u || !e) continue;
+      if (b.on) {
+        b.t += dt; const p = Math.min(1, b.t / BURN_T); u.uBurn.value = p < 1 ? .02 + p * p * (3 - 2 * p) * .98 : 1; u.uChar.value = 0;
+        e.obj.castShadow = p < .5;
+        if (p < .95 && Math.random() < dt * 40) {
+          const at = e.obj.localToWorld(V((Math.random() - .5) * 8, .3, (Math.random() - .5) * 8));
+          this.burns.emit(at, Math.random() < .2);
+        }
+      } else { u.uBurn.value = 0; u.uChar.value = [0, .85, 1, 1.15][Math.min(3, b.n)]; e.obj.castShadow = true; }
+    }
+  }
   frame(dt: number): void {
     dt = Math.min(.12, dt); const t = (performance.now() - this.t0) / 1000;
-    this.stepPool(dt); this.stepCam(dt); this.tickMG(dt, t);
+    this.stepPool(dt); this.stepCam(dt); this.tickMG(dt, t); this.stepBurn(dt); this.stepPickHi();
     for (const [, a] of this.avatars) {
       const ud = a.userData as AvatarData; const h = ud.hop; if (!h) continue; ud.hopT += dt; const T_ = ud.hopT;
       if (T_ < .3) a.scale.setScalar(Math.max(.01, 1 - T_ / .3));
@@ -755,6 +996,9 @@ export class World {
       if (o.position.y < o.userData.ty + 0.01 && o.userData.ty < TY - 1 && Math.abs(o.position.y - o.userData.ty) < .5) o.visible = false;
     }
     const S = this.ctx.S();
-    if (this.die.visible && S && S.phase === 'roll') { this.die.position.y = TY + 1.3 + Math.abs(Math.sin(t * 2.4)) * 1.5; this.die.rotation.y = t * .8; }
+    if (this.die.visible && this.die.scale.x < 1) this.die.scale.setScalar(Math.min(1, this.die.scale.x + dt * 4));
+    const canRoll = this.die.visible && !!S && S.phase === 'roll' && this.ctx.canPick({ kind: 'die' });
+    if (this.die.visible && S && S.phase === 'roll') { this.die.position.y = TY + 1.3 + Math.abs(Math.sin(t * 2.4)) * 1.5 + (canRoll && this.hover === this.die ? 2 : 0); this.die.rotation.y = t * .8; }
+    this.dieFrame.visible = canRoll; this.dieFrame.material.opacity = .7 + .3 * Math.sin(performance.now() / 260);
   }
 }

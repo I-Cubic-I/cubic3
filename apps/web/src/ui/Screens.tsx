@@ -1,26 +1,28 @@
 /* 규칙 화면(모니터가 페이지 전체가 된다), ♣ 컷신, 연출 오버레이 */
-import { type Card, type Fx, type GameState, type Hand, MG, R, RL, SYM, cname, isItem, U } from '@cubic3/engine';
+import { type Card, type Fx, type GameState, type Hand, MG, type MgId, R, RL, SYM, cname, isItem, U } from '@cubic3/engine';
 import { SEATCOL, SUITCOL, mine, seatName } from '../game';
 import { cmd } from '../flow';
 import { useStore } from '../store';
-import { MCard, names } from './bits';
+import { MCard, handSort, names } from './bits';
+import { useEffect, useRef, useState } from 'react';
 import { mgLook } from '../scene/textures';
+import { digitalRules } from './mgtext';
 
 export function RulesScreen({ S }: { S: GameState }) {
   const me = useStore(s => s.me); const i = useStore(s => s.ctl); const ui = useStore(s => s.ui);
   const id = S.board![S.die! - 1], def = MG[id]; const rd = S.ready || {}; const [fld, body] = mgLook(id);
   const nm = (k: number) => seatName(S, k);
-  const rows = def.text.split('\n').map((l, k) => {
-    const c = l.indexOf(':'); if (c < 0) return null; const h = l.slice(0, c).replace(/\(.*\)/, '');
-    return <div key={k} className={`rrow${h === '아이템' ? ' it' : ''}`}><b>{h}</b><span>{l.slice(c + 1).trim()}</span></div>;
-  });
+  const rows = digitalRules(id).map(([h, t], k) => <div key={k} className={`rrow${h === '아이템' ? ' it' : ''}`}><b>{h}</b><span>{t}</span></div>);
   const mineLeft = S.seats.map((_, k) => k).filter(k => mine(S, me, k) && !rd[k]);
-  const p = i != null ? S.seats[i] : null; const clubs = p && !p.front.length ? p.hand.filter(c => U(c) === 'C' && isItem(c)) : [];
-  const clubTxt = p && p.front.length ? '이번 라운드에 아이템을 써서 ♣는 못 써요' : clubs.length ? '규칙 설명 중 언제든. 쓰면 디스크를 다시 골라요.' : '♣ 아이템이 있으면 여기서 미니게임을 바꿀 수 있어요';
   return (
     <>
       <div className="crt">
-        <div className="scr-top"><span className="mono">MINIGAME ▸ 규칙 설명</span><span className="scr-chip">{S.round}라운드 · 모두 준비되면 시작</span></div>
+        <div className="scr-top"><span className="mono">MINIGAME ▸ 규칙 설명</span>
+          <div className="scr-topr">
+            <div className="rewardrow"><span className="lbl">이번 보상</span>{(S.rewardDisp || []).map(c => <MCard key={c} c={c} />)}</div>
+            <span className="scr-chip">{S.round}라운드 · 모두 준비되면 시작</span>
+          </div>
+        </div>
         <div className="scr-body">
           <div className="scr-art" style={{ background: `linear-gradient(170deg,${fld},${body})` }}>
             <div className="ttl">{def.name}</div>
@@ -29,20 +31,9 @@ export function RulesScreen({ S }: { S: GameState }) {
           <div className="scr-rules">{rows}</div>
         </div>
         <div className="scr-foot">
-          <div className="scr-box clubbox"><MCard c="C11" />
-            <div className="txt"><strong>♣ · 미니게임 바꾸기</strong>{clubTxt}
-              {clubs.length > 0 && <div className="clubbtns">{clubs.map(c => R(c) === 11
-                ? <button key={c} className="btn sm" onClick={() => cmd('club', { c })}>♣J 다시 굴리기</button>
-                : R(c) === 12 ? <span key={c}><button className="btn sm" onClick={() => cmd('club', { c, x: 1 })}>♣Q 눈 +1</button><button className="btn sm" onClick={() => cmd('club', { c, x: -1 })}>♣Q 눈 -1</button></span>
-                  : <button key={c} className="btn sm" onClick={() => cmd('clubK', { c })}>♣K 직접 고르기</button>)}</div>}
-              {ui.mode === 'clubK' && <div className="clubbtns">{S.board!.map((b, k) => <button key={k} className="btn sm" onClick={() => cmd('clubKgo', { k: k + 1 })}>{k + 1} · {MG[b].name}</button>)}<button className="btn sm" onClick={() => cmd('cancel')}>취소</button></div>}
-            </div>
-          </div>
-          <div className="scr-box"><span className="lbl">준비 상태</span>
-            <div className="readys">{S.seats.map((_, k) => <span key={k} className={`ready${rd[k] ? ' ok' : ''}`}><i style={{ background: SEATCOL[k % 5] }} />{nm(k)} · {rd[k] ? '준비 완료' : '읽는 중'}</span>)}</div>
-          </div>
-          <div className="scr-box" style={{ padding: 10 }}>
-            <div className="rewardrow"><span style={{ fontSize: 12, color: 'var(--cyan-dim)' }}>보상</span>{(S.rewardDisp || []).map(c => <MCard key={c} c={c} />)}</div>
+          <div aria-hidden="true" />
+          <div className="scr-box readybox"><span className="lbl">준비 상태</span>
+            <div className="readys">{S.seats.map((_, k) => <span key={k} className={`ready${rd[k] ? ' ok' : ''}`} aria-label={`${nm(k)}${rd[k] ? ' 준비 완료' : ''}`}><i style={{ background: SEATCOL[k % 5] }} aria-hidden="true">{rd[k] ? '✓' : ''}</i>{nm(k)}</span>)}</div>
             {mineLeft.length ? <button className="readybtn" onClick={() => cmd('ready')}>준비 완료{mineLeft.length > 1 ? ` (내 자리 ${mineLeft.length}개)` : ''}</button>
               : <div style={{ textAlign: 'center', color: 'var(--cyan-dim)' }}>다른 사람을 기다리는 중…</div>}
           </div>
@@ -106,4 +97,86 @@ export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
   else if (f.t === 'win') { cls += ' win'; inner = <><div className="k">우승</div><div className="b">{names(S, f.seats!)}</div></>; }
   else inner = <><div className="b">{String(f.text || '')}</div>{who}</>;
   return <div className={cls + (out ? ' out' : '')}>{inner}</div>;
+}
+
+/** 규칙 설명 중 내 숫자 손패: 화면 아래에 살짝 나와 있다가, 커서를 가까이 가져가면(또는 누르면) 위로 올라와 펼쳐진다. 보기만 한다 */
+export function HandPeek({ S, seat }: { S: GameState; seat: number }) {
+  // 숫자(자원) 카드만. 아이템은 왼쪽 아래 아이템 손패에
+  const h = handSort(S.seats[seat].hand).filter(c => !isItem(c));
+  const [up, setUp] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // 손패가 있는 자리에만 반응: 내려가 있을 땐 화면에 나와 있는 손패 줄(맨 아래)에 닿아야 올라오고,
+    // 올라온 뒤에는 손패 위에 있는 동안만 머문다
+    const move = (e: PointerEvent) => {
+      const el = ref.current; if (!el || e.pointerType === 'touch') return;
+      const r = el.getBoundingClientRect(); const inX = e.clientX >= r.left && e.clientX <= r.right;
+      const near = up ? inX && e.clientY >= r.top - 8 : inX && e.clientY >= window.innerHeight - 40;
+      if (near !== up) setUp(near);
+    };
+    window.addEventListener('pointermove', move); return () => window.removeEventListener('pointermove', move);
+  }, [up]);
+  if (!h.length) return null;
+  return (
+    <div ref={ref} className={`peek${up ? ' up' : ''}`} onClick={() => setUp(u => !u)}>
+      <div className="peeklbl">내 손패 {h.length}장</div>
+      <div className="peekrow">
+        {h.map(c => <div key={c} className={`hcard pcard ${U(c)}${isItem(c) ? ' item' : ''}`} data-h={c} aria-label={cname(c)}>
+          <span className="rk">{RL(R(c))}</span><span className="su">{SYM[U(c)]}</span>{isItem(c) && <span className="tg">아이템</span>}
+        </div>)}
+      </div>
+    </div>
+  );
+}
+
+/** 미니게임 결과: 미니게임이 끝나면 순위를 한 줄씩 보여 준다. 누르거나 잠시 뒤 닫히고 보상 고르기로 */
+/* 주사위 눈: 3×3 칸 중 켜는 칸(0~8, 왼쪽 위부터) */
+const PIP_CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+const PIPS: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+/** 동점끼리 보상 순서를 가리는 작은 주사위: 잠깐 굴러가다가 나온 눈에서 멈춘다(같은 눈이라 다시 굴렸으면 차례로) */
+function TieDie({ vals, delay }: { vals: number[]; delay: number }) {
+  const [face, setFace] = useState<number | null>(null); const [done, setDone] = useState(false);
+  useEffect(() => {
+    let t = 0; const t0 = performance.now() + delay; let raf = 0;
+    const tick = () => {
+      const el = performance.now() - t0;
+      if (el < 0) { raf = requestAnimationFrame(tick); return; }
+      if (el < 1100) { if (++t % 4 === 0) setFace(1 + Math.floor(Math.random() * 6)); raf = requestAnimationFrame(tick); return; }
+      setFace(vals[vals.length - 1]); setDone(true);
+    };
+    raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf);
+  }, [vals, delay]);
+  return <span className={`tdie${done ? ' done' : ''}`} title={vals.join(' → ')} aria-label={`주사위 ${vals[vals.length - 1]}`}>
+    {done && vals.length > 1 ? <small>{vals.slice(0, -1).join('·')}→</small> : null}
+    <span className="dface">{PIP_CELLS.map(c => <i key={c} className={(PIPS[face ?? 1] || []).includes(c) ? 'on' : ''} />)}</span>
+  </span>;
+}
+
+export function ResultsView({ S, r }: { S: GameState; r: { mg: MgId | null; groups: number[][]; rolls: Record<number, number[]>; order: number[] } }) {
+  const me = useStore(s => s.me);
+  const close = () => useStore.getState().set({ results: null });
+  const tied = Object.keys(r.rolls).length > 0;
+  useEffect(() => { const t = setTimeout(close, tied ? 9000 : 6500); return () => clearTimeout(t); }, [r]);
+  let n = 0;
+  return (
+    <div className="results" role="dialog" aria-label="미니게임 결과" onClick={close}>
+      <div className="rcard" onClick={e => e.stopPropagation()}>
+        <div className="rk-k">미니게임 결과</div>
+        <div className="rk-t disp">{r.mg ? MG[r.mg].name : '미니게임'}</div>
+        <div className="rk-rows">
+          {/* 한 사람에 한 줄. 같은 순위끼리는 같은 순위 표시에 주사위가 굴러 보상 고르는 순서대로 놓인다 */}
+          {(r.order.length ? r.order : r.groups.flat()).map(i => {
+            const k = r.groups.findIndex(g => g.includes(i)); const shared = r.groups[k].length > 1;
+            return <div key={i} className={`rk-row${k === 0 ? ' first' : ''}`} style={{ animationDelay: `${.25 + (n++) * .28}s` }}>
+              <b className="disp">{k + 1}위</b>
+              <span className="who"><span className={`p${S.seats[i]?.uid === me ? ' me' : ''}`}><i style={{ background: SEATCOL[i % 5] }} />{seatName(S, i)}</span>{shared && <span className="tie">공동</span>}</span>
+              {r.rolls[i] && <TieDie vals={r.rolls[i]} delay={400 + n * 280} />}
+            </div>;
+          })}
+        </div>
+        <p className="rk-sub">{tied ? '같은 순위끼리는 주사위 눈이 높은 사람부터 · ' : ''}1위부터 차례로 보상 카드를 1장씩 골라요</p>
+        <button className="btn primary" onClick={close}>보상 고르러 가기</button>
+      </div>
+    </div>
+  );
 }

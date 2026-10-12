@@ -11,12 +11,14 @@ function candidates(S: GameState, seat: number): Action[] {
   ];
   for (const card of hand) c.push({ type: 'discard', seat, card }, { type: 'defend', seat, card });
   for (const card of S.row) c.push({ type: 'pickRow', seat, card });
+  if (S.steal) S.seats[S.steal.to].hand.forEach((_, k) => c.push({ type: 'stealPick', seat, k }));
   for (const card of S.turn?.peek || []) c.push({ type: 'diamondJPick', seat, card });
   for (const card of S.reward?.disp || []) c.push({ type: 'reward', seat, card });
   for (const su of ['S', 'H', 'D', 'C'] as const) { const nums = hand.filter(x => x[0] === su && !isItem(x)); for (const n of [3, 4, 5]) c.push({ type: 'token', seat, cards: nums.slice(0, n) }); }
   if (hand.length > 6) c.push({ type: 'trim', seat, cards: hand.slice(0, hand.length - 6) });
   const m = S.mg;
   for (const it of [...its, null]) { c.push({ type: 'holdRoll', seat, item: it }, { type: 'ovnSave', seat, item: it }); }
+  for (const it of its) c.push({ type: 'rpsPass', seat, item: it });
   if (m?.id === 'bomb') m.lay.forEach((_, k) => c.push({ type: 'bombFlip', seat, k }));
   if (m?.id === 'auction') (m.hands[seat] || []).forEach(card => c.push({ type: 'auctionBid', seat, card }));
   if (m?.id === 'balloon') (m.hands[seat] || []).forEach(card => c.push({ type: 'balloon', seat, card }));

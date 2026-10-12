@@ -1,7 +1,7 @@
 /* applyAction 시험: 판정이 허용한 행동만 실행해 무작위 대국을 끝까지 돌리고, 카드가 사라지거나 생기지 않는지 본다. */
 import { describe, expect, it } from 'vitest';
 import {
-  type Action, type Card, type GameState, applyAction, canAct, countOpenAt, isItem, newLobby, setClock, setRng,
+  type Action, type Card, type CountMg, type GameState, type HoldMg, U, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
 } from '../src/index';
 
 function mulberry32(seed: number) {
@@ -49,6 +49,7 @@ function candidates(S: GameState, seat: number): Action[] {
     for (let t = 0; t < S.seats.length; t++) c.push({ type: 'attack', seat, card, target: t, arg: 'S' }, { type: 'attack', seat, card, target: t, arg: 'H' });
   }
   for (const card of S.row) c.push({ type: 'pickRow', seat, card });
+  if (S.steal) S.seats[S.steal.to].hand.forEach((_, k) => c.push({ type: 'stealPick', seat, k }));
   for (const card of S.turn?.peek || []) c.push({ type: 'diamondJPick', seat, card });
   for (const card of S.reward?.disp || []) c.push({ type: 'reward', seat, card });
   for (const su of ['S', 'H', 'D', 'C'] as const) {
@@ -115,6 +116,82 @@ describe('applyAction', () => {
     expect(applyAction(S, S.seats[seat].uid, { type: 'endTurn', seat }).ok).toBe(false);
     expect(JSON.stringify(S)).toBe(before);
     expect(applyAction(S, S.seats[seat].uid, { type: 'pickDeck', seat }).ok).toBe(true);
+  });
+
+  it('대기실 의자: 빈 의자에만 앉거나 옮기고, 자리 순서는 의자 순서를 따른다', () => {
+    const S = newLobby();
+    expect(applyAction(S, 'a', { type: 'sit', chair: 3 }).ok).toBe(true);
+    expect(applyAction(S, 'b', { type: 'sit' }).ok).toBe(true);           // 첫 빈 의자 0
+    expect(S.seats.map(p => [p.uid, p.chair])).toEqual([['b', 0], ['a', 3]]);
+    expect(applyAction(S, 'c', { type: 'sit', chair: 3 }).ok).toBe(false); // 이미 앉은 의자
+    expect(applyAction(S, 'b', { type: 'move', seat: 0, chair: 3 }).ok).toBe(false);
+    expect(applyAction(S, 'b', { type: 'move', seat: 0, chair: 4 }).ok).toBe(true);
+    expect(S.seats.map(p => [p.uid, p.chair])).toEqual([['a', 3], ['b', 4]]);
+    expect(applyAction(S, 'a', { type: 'move', seat: 0, chair: 5 }).ok).toBe(false); // 없는 의자
+    applyAction(S, 'a', { type: 'start' });
+    expect(applyAction(S, 'a', { type: 'move', seat: 0, chair: 1 }).ok).toBe(false); // 게임 중
+  });
+
+  it('♣Q·♣K는 먼저 쓰고, 고르는 동안엔 준비할 수 없으며, 고를 수 있는 칸만 고른다', () => {
+    setRng(mulberry32(3));
+    const S = newLobby();
+    applyAction(S, 'a', { type: 'sit' }); applyAction(S, 'b', { type: 'sit' }); applyAction(S, 'a', { type: 'start' });
+    S.phase = 'clubs'; S.board = ['hold', 'bomb', 'auction', 'balloon', 'rps', 'vault']; S.die = 1; S.ready = {}; S.turn = null;
+    S.seats[0].hand.push('C12b');
+    expect(applyAction(S, 'a', { type: 'club', seat: 0, card: 'C12b' }).ok).toBe(true);
+    expect(S.clubChoose).toEqual({ seat: 0, card: 'C12b' });
+    expect(applyAction(S, 'b', { type: 'ready' }).ok).toBe(false);
+    expect(applyAction(S, 'a', { type: 'clubPick', seat: 0, k: 3 }).ok).toBe(false); // ♣Q는 양옆(6·2)만
+    expect(applyAction(S, 'a', { type: 'clubPick', seat: 0, k: 6 }).ok).toBe(true);
+    expect([S.die, S.clubChoose]).toEqual([6, null]);
+  });
+
+  it('몇 장이었지(디지털판): 정답 문양은 많아야 6장', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      setRng(mulberry32(seed));
+      const S = newLobby();
+      applyAction(S, 'a', { type: 'sit' }); applyAction(S, 'b', { type: 'sit' }); applyAction(S, 'a', { type: 'start' });
+      countStart(S, [0, 1]);
+      const m = S.mg as CountMg; const su = U(m.dec!);
+      expect(m.seq!.filter(c => U(c) === su).length).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('버티기(디지털판): 매 판 첫 굴림에는 1이 나오지 않는다', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      setRng(mulberry32(seed));
+      const S = newLobby();
+      applyAction(S, 'a', { type: 'sit' }); applyAction(S, 'b', { type: 'sit' }); applyAction(S, 'a', { type: 'start' });
+      S.board = ['hold', 'hold', 'hold', 'hold', 'hold', 'hold']; S.die = 1; startMinigame(S);
+      const i = (S.mg as HoldMg).ord[0];
+      applyAction(S, S.seats[i].uid, { type: 'holdRoll', seat: i, item: null });
+      expect((S.mg as HoldMg).last!.d).toBeGreaterThan(1);
+    }
+  });
+
+  it('선 가위바위보: 선이 아닌 사람의 아이템은 이기면 즉시 통과', () => {
+    setRng(mulberry32(5));
+    const S = newLobby();
+    ['a', 'b', 'c'].forEach(u => applyAction(S, u, { type: 'sit' })); applyAction(S, 'a', { type: 'start' });
+    S.first = 0; S.board = ['rps', 'rps', 'rps', 'rps', 'rps', 'rps']; S.die = 1; startMinigame(S);
+    S.seats[1].hand.push('S11b');
+    expect(applyAction(S, 'a', { type: 'rpsPass', seat: 0, item: 'S11b' }).ok).toBe(false);       // 선은 못 씀
+    expect(applyAction(S, 'b', { type: 'rpsPass', seat: 1, item: 'S11b' }).ok).toBe(true);
+    applyAction(S, 'a', { type: 'rps', seat: 0, hand: 'R' });
+    applyAction(S, 'b', { type: 'rps', seat: 1, hand: 'P' });  // 선을 이김 → 통과
+    applyAction(S, 'c', { type: 'rps', seat: 2, hand: 'S' });  // 선에게 짐 → 탈락
+    expect(S.lastRank).toEqual([[1], [2], [0]]); // 통과한 사람 1위, 탈락한 사람, 선 꼴찌
+  });
+
+  it('줍고 나서 버리기 전에 바로 토큰을 만들 수 있다', () => {
+    setRng(mulberry32(7));
+    const S = newLobby();
+    applyAction(S, 'a', { type: 'sit' }); applyAction(S, 'b', { type: 'sit' }); applyAction(S, 'a', { type: 'start' });
+    const i = S.turn!.seat; const uid = S.seats[i].uid;
+    S.seats[i].hand = ['H2', 'H3', 'H4', 'S5'];
+    S.turn = { ...S.turn!, picked: true, mustDiscard: true };
+    expect(applyAction(S, uid, { type: 'token', seat: i, cards: ['H2', 'H3', 'H4'] }).ok).toBe(true);
+    expect(S.seats[i].tokens).toEqual(['H']);
   });
 
   it('판정이 허용한 행동만으로 2~5인 대국이 오류 없이 끝나고 카드 수가 보존된다', () => {

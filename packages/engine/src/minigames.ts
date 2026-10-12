@@ -11,7 +11,9 @@ const mgOf = <T>(S: GameState) => S.mg as unknown as T;
 export function holdRoll(S: GameState, i: number, item: Card | null): void {
   const m = mgOf<HoldMg>(S); const p = S.seats[i];
   if (item) { p.hand.splice(p.hand.indexOf(item), 1); p.front.push(item); }
-  m.k++; const a = d6(), b = item ? d6() : null; const d = item ? Math.max(a, b!) : a;
+  // 디지털판 보정(몰래): 매 판 첫 굴림에는 1이 나오지 않는다
+  m.k++; let a = d6(); while (m.k === 1 && a === 1) a = d6();
+  const b = item ? d6() : null; const d = item ? Math.max(a, b!) : a;
   m.last = { i, a, b, d, th: m.k }; fx(S, { t: 'dice', v: d, both: b != null ? [a, b] : null, bust: d <= m.k, th: m.k, seats: [i] });
   if (d <= m.k) { log(S, `버티기: 자리 ${i + 1} ${item ? `[${a},${b}]→` : ''}${d} (기준 ${m.k} 이하) 이번 판 ${m.s}점을 잃었다.`); m.s = 0; holdNext(S); }
   else { m.s += d; log(S, `버티기: 자리 ${i + 1} ${item ? `[${a},${b}]→` : ''}${d}. 이번 판 ${m.s}점.`); }
@@ -72,7 +74,10 @@ export function auctionOpen(S: GameState): void {
   if (m.ai >= m.prizes.length) { auctionEnd(S); return; }
   const p = m.prizes[m.ai]!; p.up = true; m.pot.push(p); m.prizes[m.ai] = null; m.ai++;
   m.step = 'pre'; m.ready = {}; m.bids = {};
+  // 디지털판: '입찰하기'를 누르는 대신 시간제. 아이템을 낼 시간(AUC_PRE)이 지나면 저절로 입찰. 아이템 가진 사람이 없으면 바로 입찰
+  if (!Object.keys(m.hands).some(k => hasItem(S, +k))) m.step = 'bid'; else m.until = now() + AUC_PRE;
 }
+export const AUC_PRE = 4000;
 export function auctionItem(S: GameState, i: number, item: Card): 'no' | undefined {
   const m = mgOf<AuctionMg>(S); const p = S.seats[i];
   while (m.ai < m.prizes.length && !m.prizes[m.ai]) m.ai++;
@@ -136,7 +141,8 @@ export function ovnStart(S: GameState, id: 'rps' | 'vault'): void {
   S.mg = { id, bundle: [], lead, alive: others, round: 1, max: others.length + 1, out: [], picks: {}, armL: false, saveq: [], losers: [], saved: [], last: null, step: id === 'rps' ? 'pick' : 'hide' };
 }
 function ovnLosers(S: GameState, losers: number[]): void {
-  const m = mgOf<OvnMg>(S); m.losers = losers; m.saved = []; m.saveq = losers.filter(j => hasItem(S, j));
+  // 졌을 때 아이템으로 버티기는 금고 털기만(선 가위바위보의 아이템은 '이기면 즉시 통과')
+  const m = mgOf<OvnMg>(S); m.losers = losers; m.saved = []; m.saveq = m.id === 'rps' ? [] : losers.filter(j => hasItem(S, j));
   if (m.saveq.length) { m.step = 'save'; return; }
   ovnApply(S);
 }
@@ -149,6 +155,12 @@ function ovnApply(S: GameState): void {
   const m = mgOf<OvnMg>(S); const dead = m.losers.filter(j => !m.saved.includes(j));
   if (dead.length) { m.out.push(dead); m.alive = m.alive.filter(j => !dead.includes(j)); log(S, `탈락: ${dead.map(j => '자리 ' + (j + 1)).join('·')}`); }
   m.losers = []; m.saved = []; m.saveq = [];
+  const passed = m.passed || [];
+  if (!m.alive.length && passed.length) {
+    // 남은 사람이 모두 아이템으로 통과했다: 통과한 사람이 공동 1위, 선 꼴찌
+    log(S, `살아남은 사람: ${passed.map(j => '자리 ' + (j + 1)).join('·')}`); fx(S, { t: 'banner', text: '살아남았다!', seats: passed.slice(), tone: 'win' });
+    endMinigame(S, [...outGroups(m, passed), [m.lead]]); return;
+  }
   if (!m.alive.length) {
     log(S, `자리 ${m.lead + 1}(${m.id === 'rps' ? '선' : '경비원'})이 모두 탈락시켰다!`);
     fx(S, { t: 'banner', text: m.id === 'rps' ? '선 승리!' : '경비원 승리!', seats: [m.lead], tone: 'win' });
@@ -156,10 +168,11 @@ function ovnApply(S: GameState): void {
   }
   m.round++;
   if (m.round > m.max) {
-    log(S, `살아남은 사람: ${m.alive.map(j => '자리 ' + (j + 1)).join('·')}`); fx(S, { t: 'banner', text: '살아남았다!', seats: m.alive.slice(), tone: 'win' });
-    endMinigame(S, [...outGroups(m, m.alive), [m.lead]]); return;
+    const live = [...m.alive, ...passed];
+    log(S, `살아남은 사람: ${live.map(j => '자리 ' + (j + 1)).join('·')}`); fx(S, { t: 'banner', text: '살아남았다!', seats: live.slice(), tone: 'win' });
+    endMinigame(S, [...outGroups(m, live), [m.lead]]); return;
   }
-  m.picks = {}; m.armL = false; m.zones = null; m.step = m.id === 'rps' ? 'pick' : 'hide';
+  m.picks = {}; m.armL = false; m.zones = null; if (m.pass) m.pass = {}; m.step = m.id === 'rps' ? 'pick' : 'hide';
 }
 
 /* ---- 선 가위바위보 ---- */
@@ -170,11 +183,20 @@ export function rpsPick(S: GameState, i: number, h: Hand): false | undefined {
   m.picks[i] = h; const need = [m.lead, ...m.alive];
   if (!need.every(j => m.picks[j])) return;
   const L = m.picks[m.lead] as Hand;
+  // 아이템('이기면 즉시 통과')을 낸 사람이 선을 이기면 바로 통과: 남은 판을 하지 않고 끝까지 남은 것으로 친다
+  const passNow = m.alive.filter(j => m.pass?.[j] && BEATS[m.picks[j] as Hand] === L);
+  if (passNow.length) { m.alive = m.alive.filter(j => !passNow.includes(j)); m.passed = [...(m.passed || []), ...passNow]; log(S, `통과: ${passNow.map(j => '자리 ' + (j + 1)).join('·')}`); fx(S, { t: 'banner', text: '선을 이겨 통과!', seats: passNow.slice(), tone: 'good' }); }
   const losers = m.alive.filter(j => BEATS[L] === m.picks[j] || (m.armL && m.picks[j] === L));
   m.last = { picks: { ...m.picks }, armL: m.armL, round: m.round, losers };
   log(S, `선 가위바위보 ${m.round}판: ${need.map(j => `자리 ${j + 1} ${RPSN[m.picks[j] as Hand]}`).join(', ')}`);
   fx(S, { t: 'rps', picks: { ...m.picks }, lead: m.lead, losers, armL: m.armL });
   ovnLosers(S, losers);
+}
+/** 선이 아닌 사람의 아이템: 내기 전에 낸다. 이번에 선을 이기면 바로 통과 */
+export function rpsPass(S: GameState, i: number, item: Card): false | undefined {
+  const m = mgOf<OvnMg>(S); if (m.step !== 'pick' || i === m.lead || !m.alive.includes(i) || m.picks[i] || m.pass?.[i]) return false;
+  if (!useItem(S, i, item)) return false;
+  m.pass = { ...(m.pass || {}), [i]: true }; log(S, `자리 ${i + 1}: 아이템 → 이번에 선을 이기면 바로 통과.`); fx(S, { t: 'banner', text: '이기면 통과!', seats: [i], tone: 'good' });
 }
 export function rpsArm(S: GameState, i: number, item: Card): false | undefined {
   const m = mgOf<OvnMg>(S); if (m.step !== 'pick' || i !== m.lead || m.picks[m.lead] || m.armL) return false;
@@ -213,6 +235,15 @@ function countPan(S: GameState): void {
   const m = mgOf<CountMg>(S);
   if (m.seq) { S.deck.push(...m.seq); if (m.dec) S.deck.push(m.dec); shuffle(S.deck); }
   m.seq = buildBundle(S, 12); m.dec = draw(S); m.t0 = now() + CLEAD; m.ans = {}; m.arm = {}; m.step = 'flip';
+  // 디지털판 보정: 정답 문양이 7장 이상 나오지 않게 한다(답은 0~6). 넘치는 만큼 그 문양 카드를 덱의 다른 문양 카드와 바꾼다
+  if (m.dec) {
+    const su = U(m.dec); let extra = m.seq.filter(c => U(c) === su).length - 6; let swapped = false;
+    while (extra > 0) {
+      const k = m.seq.findIndex(c => U(c) === su), j = S.deck.findIndex(c => U(c) !== su); if (k < 0 || j < 0) break;
+      const out = m.seq[k]; m.seq[k] = S.deck.splice(j, 1)[0]; S.deck.push(out); extra--; swapped = true;
+    }
+    if (swapped) shuffle(S.deck);
+  }
 }
 export function countOpenAt(m: CountMg): number { return m.t0 + m.seq!.length * CFLIP; }
 export function countArm(S: GameState, i: number, item: Card): false | undefined {

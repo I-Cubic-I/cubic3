@@ -12,8 +12,28 @@ function loadOld(): Eng {
   const html = readFileSync(new URL('../../../proto/web/index.html', import.meta.url), 'utf-8');
   const m = html.replace(/\r\n/g, '\n').match(/<script>\n(\/\* =+ 엔진[\s\S]*?\nif\(typeof module[^\n]*)/);
   if (!m) throw new Error('엔진 블록을 찾지 못했습니다');
+  // 시험판 이후 의도적으로 바꾼 규칙을 시험판 쪽에도 똑같이 덧대어 비교한다
+  let src = m[1];
+  const patches: [string, string][] = [
+    // 몇 장이었지(디지털판): 정답 문양이 7장 이상 나오지 않게 다른 문양 카드와 바꾼다 (minigames.ts countPan)
+    ["m.ans={};m.arm={};m.step='flip'}", "m.ans={};m.arm={};m.step='flip';if(m.dec){const su=U(m.dec);let ex=m.seq.filter(c=>U(c)===su).length-6,sw=false;while(ex>0){const k=m.seq.findIndex(c=>U(c)===su),j=S.deck.findIndex(c=>U(c)!==su);if(k<0||j<0)break;const o=m.seq[k];m.seq[k]=S.deck.splice(j,1)[0];S.deck.push(o);ex--;sw=true}if(sw)shuffle(S.deck)}}"],
+    // 버티기(디지털판): 매 판 첫 굴림에는 1이 나오지 않는다 (minigames.ts holdRoll)
+    ["m.k++;const a=d6(),b=item?d6():null;", "m.k++;let a=d6();while(m.k===1&&a===1)a=d6();const b=item?d6():null;"],
+    // 눈치 경매(디지털판): 시간제 입찰, 아이템 가진 사람이 없으면 바로 입찰 (minigames.ts auctionOpen)
+    ["m.step='pre';m.ready={};m.bids={};}", "m.step='pre';m.ready={};m.bids={};if(!Object.keys(m.hands).some(k=>hasItem(S,+k)))m.step='bid';else m.until=Date.now()+4000;}"],
+    // 선 가위바위보: 졌을 때 버티기 단계는 금고 털기만 (minigames.ts ovnLosers). 새 아이템(이기면 통과)은 대조 행동에 없다
+    ["m.saveq=losers.filter(j=>hasItem(S,j));", "m.saveq=m.id==='rps'?[]:losers.filter(j=>hasItem(S,j));"],
+    // 미니게임 동점: 주사위로 보상 고르는 순서 (core.ts endMinigame)
+    ["const order=[];groups.forEach(g=>order.push(...shuffle(g.slice())));\n  S.lastRank=groups;fx(S,{t:'rank',groups});",
+     "const rolls={},order=[];const tie=c=>{if(c.length<2){order.push(...c);return}const r=c.map(()=>d6());c.forEach((j,k)=>(rolls[j]=rolls[j]||[]).push(r[k]));[...new Set(r)].sort((a,b)=>b-a).forEach(v=>tie(c.filter((_,k)=>r[k]===v)))};groups.forEach(g=>tie(g.slice()));\n  S.lastRank=groups;fx(S,{t:'rank',groups,rolls,order});"],
+    // ♠J: 가져가는 쪽이 뒷면으로 펼친 손패에서 고른다 (core.ts applyAttack, stealPick)
+    ["const c=T.hand.splice(rnd(T.hand.length),1)[0];A.hand.push(c);log(S,`자리 ${from+1}이 자리 ${to+1}의 손패 1장을 뺏었다.`)}",
+     "shuffle(T.hand);S.steal={from,to};log(S,`자리 ${from+1}이 자리 ${to+1}의 손패에서 1장을 고른다.`)}"],
+    ["if(typeof module!=='undefined')module.exports={", "function stealPick(S,i,k){const st=S.steal;const T=S.seats[st.to];const c=T.hand.splice(k,1)[0];S.seats[i].hand.push(c);S.steal=null;log(S,`자리 ${i+1}이 자리 ${st.to+1}의 손패 1장을 뺏었다.`)}\nif(typeof module!=='undefined')module.exports={stealPick,"],
+  ];
+  for (const [a, b] of patches) { if (!src.includes(a)) throw new Error('시험판 덧대기 자리를 찾지 못했습니다: ' + a); src = src.replace(a, b); }
   const module: { exports: Eng } = { exports: {} };
-  new Function('module', m[1])(module);
+  new Function('module', src)(module);
   return module.exports;
 }
 
@@ -45,6 +65,7 @@ function choose(S: any, E: Eng, pick: () => number): Step | null {
   const items = (i: number) => S.seats[i].hand.filter(isItem);
   const ph = S.phase;
   if (ph === 'ended') return null;
+  if (S.steal) { const k = ri(S.seats[S.steal.to].hand.length); return { fn: 'stealPick', args: () => [S.steal.from, k] }; }
   if (ph === 'roll') return { fn: 'rollBoard', args: () => [] };
   if (ph === 'defense') {
     const P = S.pending; const def = S.seats[P.target].hand.filter((c: string) => U(c) === 'H' && (R(c) === 11 || R(c) === 13));
