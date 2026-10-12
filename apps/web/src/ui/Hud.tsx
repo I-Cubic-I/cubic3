@@ -6,6 +6,7 @@ import { cmd, exitRoom, getWorld } from '../flow';
 import { useStore, viewSeat } from '../store';
 import { Hand } from './Hand';
 import { MgPanel } from './MgPanel';
+import { MgScreen, SCREEN_MG } from './MgScreen';
 import { Cutin, FxView, HandPeek, ItemCutin, ResultsView, RulesScreen } from './Screens';
 import { type TurnView, turnActs } from './Turn';
 import { ICON, MCard, names } from './bits';
@@ -13,6 +14,16 @@ import { refreshTip } from './tip';
 import { MI, SettingsPanel } from './Options';
 
 /* ---------- 이름표: 아바타 머리 위를 따라다닌다 (대기실에서는 빈 의자 위에 "빈 자리"도) ---------- */
+/** 핑 표시: 방장은 "방장", 소식이 없으면 "끊김?", 아니면 ms(색으로 좋음·보통·나쁨) */
+function Ping({ uid }: { uid: string }) {
+  const pings = useStore(s => s.pings); const room = useStore(s => s.room);
+  if (!room || !Object.keys(pings).length) return null;
+  const ms = pings[uid];
+  if (ms == null) return <span className="ping bad" title="방장과 연결이 끊긴 것 같아요">끊김?</span>;
+  if (ms === 0) return <span className="ping host" title="방장(판정하는 기기)">방장</span>;
+  return <span className={`ping ${ms < 80 ? 'good' : ms < 200 ? 'mid' : 'bad'}`} title="방장과의 왕복 시간">{ms}ms</span>;
+}
+
 function Plates({ S }: { S: GameState }) {
   const me = useStore(s => s.me); const ui = useStore(s => s.ui); const ctl = useStore(s => s.ctl);
   const ref = useRef<HTMLDivElement>(null);
@@ -41,6 +52,7 @@ function Plates({ S }: { S: GameState }) {
           <div key={'s' + i} className={`plate${p.uid === me ? ' me' : ''}`} data-plate={i}>
             <span className="dot" style={{ background: SEATCOL[i % 5] }} /><strong>{seatName(S, i)}</strong>
             {p.uid === me && <span style={{ color: 'var(--brass)' }}>나</span>}
+            <Ping uid={p.uid} />
           </div>
         ))}
         {Array.from({ length: MAX_SEATS }, (_, c) => c).filter(c => !taken.includes(c)).map(c => (
@@ -62,6 +74,7 @@ function Plates({ S }: { S: GameState }) {
           {i === S.first && <span style={{ color: 'var(--brass)' }}>선</span>}
           <span style={{ color: 'var(--muted)' }}>{p.hand.length}장</span>
           <span className="toks">{(p.tokens || []).map((t, k) => <span key={k} className={`tok ${t}`} />)}</span>
+          <Ping uid={p.uid} />
         </div>
       ))}
     </div>
@@ -156,7 +169,8 @@ export function Hud() {
     if (cc) { pillWait = !ms.includes(cc.seat); pill = !pillWait ? (R(cc.card) === 13 ? `${cname(cc.card)}: 테이블의 디스크 중 하나를 고르세요` : `${cname(cc.card)}: 양옆 디스크 중 하나를 고르세요`) : `${nm(cc.seat)}이 ${cname(cc.card)}로 미니게임을 고르는 중`; }
   }
   else if (ph === 'mg') {
-    handTuck = !ui.showHand; center = <MgPanel S={S} i={i} sel={sel} ui={ui} />;
+    // 리더기 화면 미니게임은 테이블 대신 화면 가운데 전체를 쓴다
+    handTuck = !ui.showHand; center = SCREEN_MG.includes(S.mg!.id) ? <MgScreen S={S} i={i} /> : <MgPanel S={S} i={i} sel={sel} ui={ui} />;
     // 미니게임 중에도 이번 보상을 볼 수 있게
     if ((S.rewardDisp || []).length) extra = <div className="rewardstrip"><span className="lbl">이번 보상</span><div className="row">{S.rewardDisp!.map(c => <MCard key={c} c={c} />)}</div></div>;
     pill = actor != null && ms.includes(actor) ? '내 차례' : actor != null ? `${nm(actor)} 차례` : MG[S.mg!.id].name; pillWait = !(actor != null && ms.includes(actor));
@@ -190,7 +204,7 @@ export function Hud() {
       <Plates S={S} />
       <div id="mainui">
         {ph === 'main' && i != null && S.turn!.seat === i && S.turn!.picked && <div className="dz" data-dz="table"><span>테이블에 놓기</span></div>}
-        <div className="topl"><span className="logo" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></span><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span>
+        <div className="topl"><span className="logo" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></span><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span><Ping uid={me} />
           {ms.length > 1 && ms.map(k => <button key={k} className={`chip ${k === i ? 'on' : ''}`} onClick={() => cmd('ctl', { i: k })}>자리 {k + 1}</button>)}</div>
         <div className="topr">
           <button className="iconbtn" aria-label="기록 보기" onClick={() => cmd('log')}>{ICON.list}</button>

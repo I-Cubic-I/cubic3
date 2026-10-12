@@ -5,7 +5,7 @@ import {
   auctionOpen, balloonStart, bombLay, countStart, ovnStart, raceStart,
 } from './minigames';
 import {
-  advanceMg3, balanceStart, caveStart, changeStart, gestureStart, stackStart, tenStart,
+  advanceMg3, balanceStart, caveStart, changeStart, foreStart, forkStart, gestureStart, liarStart, stackStart, tenStart,
 } from './minigames3';
 import {
   advanceMg2, chainStart, curlingStart, duelStart, foldStart, lineStart, midStart, speedStart, updownStart,
@@ -322,6 +322,9 @@ export function startMinigame(S: GameState): void {
   if (id === 'cave') caveStart(S);
   if (id === 'ten') tenStart(S);
   if (id === 'balance') balanceStart(S);
+  if (id === 'liar') liarStart(S);
+  if (id === 'fore') foreStart(S);
+  if (id === 'fork') forkStart(S);
   log(S, `미니게임 시작: ${MG[id].name}`); fx(S, { t: 'title', mg: id });
 }
 /** scores: {seat:value} → 순위 그룹 [[seat..],..] */

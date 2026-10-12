@@ -5,7 +5,8 @@ export type Suit = 'S' | 'H' | 'D' | 'C';
 export type Card = string;
 export type MgId = 'hold' | 'bomb' | 'auction' | 'balloon' | 'rps' | 'vault' | 'count' | 'race'
   | 'nunchi' | 'updown' | 'curling' | 'line' | 'speed' | 'fold' | 'chain' | 'mid'
-  | 'gesture' | 'stack' | 'change' | 'cave' | 'ten' | 'balance';
+  | 'gesture' | 'stack' | 'change' | 'cave' | 'ten' | 'balance'
+  | 'liar' | 'fore' | 'fork';
 export type Phase = 'lobby' | 'main' | 'defense' | 'roll' | 'clubs' | 'mg' | 'reward' | 'ended';
 export type Hand = 'R' | 'P' | 'S';
 
@@ -209,6 +210,8 @@ export interface StackMg {
   id: 'stack';
   ord: number[]; step: 'pre' | 'play'; until: number; limit: number;
   wide: Record<number, boolean>; h: Record<number, number>; ms: Record<number, number>; done: Record<number, boolean>;
+  /** 자리별로 쌓은 칸(층마다 열 번호). 다른 사람 화면을 함께 보여 주는 데 쓴다 */
+  cols: Record<number, number[]>;
 }
 /** 뭐가 바뀌었지: 말 8개가 점수 트랙 판(10×5칸) 위에. 바꾸는 사람이 말을 옮기고 나머지가 고른다 */
 export interface ChangeMg {
@@ -243,9 +246,42 @@ export interface BalanceMg {
   picks: Record<number, number>; pts: Record<number, number>;
   last: { opts: string[]; picks: Record<number, number>; win: number | null; gain: number } | null;
 }
+/** 거짓말쟁이: 모두의 카드에 [문양]이 [N]장 이상이라고 선언하고, 다음 사람은 올리거나 "거짓말!" */
+export interface LiarMg {
+  id: 'liar';
+  ord: number[]; alive: number[]; ci: number; out: number[][];
+  hands: Record<number, Card[]>; bundle: Card[];
+  bid: { seat: number; suit: Suit; n: number } | null; caller: number | null;
+  step: 'bid' | 'judge'; until: number;
+  /** 판정 때 낸 아이템(그 문양 1장으로 더한다) */
+  adds: Record<number, Card[]>;
+  last: { bid: { seat: number; suit: Suit; n: number }; caller: number; count: number; loser: number; hands: Record<number, Card[]>; adds: Record<number, Card[]> } | null;
+}
+/** 이마 위의 카드(인디언 포커): 자기 더미(hands, 보지 않음)에서 이마로 1장, 승부(1장 더 걸기) 또는 포기 */
+export interface ForeMg {
+  id: 'fore';
+  ord: number[]; pan: number; extra: boolean;
+  hands: Record<number, Card[]>; bundle: Card[];
+  /** 이번 판 이마 카드(다른 사람에게만 보인다) */
+  fore: Record<number, Card>;
+  /** 가운데 걸린 카드(이월분 포함) */
+  pile: Card[];
+  seq: number[]; si: number; acts: Record<number, boolean>;
+  /** 아이템(거울): 물은 사람 → {누구에게, 숫자, 답} */
+  asks: Record<number, { to: number; v: number; yes: boolean }>;
+  last: { fore: Record<number, Card>; acts: Record<number, boolean>; win: number | null; got: number } | null;
+}
+/** 갈림길: 인원수만큼 카드를 깔고 동시에 칸을 고른다. 혼자 고른 칸만 가져간다 */
+export interface ForkMg {
+  id: 'fork';
+  ord: number[]; pan: number; row: Card[]; picks: Record<number, number>; rev: Record<number, boolean>;
+  won: Record<number, Card[]>; spent: Card[]; bundle: Card[];
+  step: 'pick' | 'wait'; until: number;
+  last: { row: Card[]; picks: Record<number, number>; rev: Record<number, boolean>; got: Record<number, number> } | null;
+}
 export type MgState = HoldMg | BombMg | AuctionMg | BalloonMg | OvnMg | CountMg | RaceMg
   | DuelMg | UpDownMg | CurlingMg | LineMg | SpeedMg | FoldMg | ChainMg | MidMg
-  | GestureMg | StackMg | ChangeMg | CaveMg | TenMg | BalanceMg;
+  | GestureMg | StackMg | ChangeMg | CaveMg | TenMg | BalanceMg | LiarMg | ForeMg | ForkMg;
 
 export interface GameState {
   v: number;

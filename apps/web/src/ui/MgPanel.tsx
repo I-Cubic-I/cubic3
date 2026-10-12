@@ -38,7 +38,7 @@ export function mgItemUse(S: GameState, i: number | null): ItemUse {
     }
     case 'race': return m.step !== 'bet' && (i in m.bet) ? pick('고른 뒤 갈아탈 문양을 누르세요') : no('경주가 시작되면 써요');
   }
-  return mgItemUse2(S, i, no, now_, pick) ?? mgItemUse3(S, i, no, now_) ?? no('이 미니게임에는 아이템이 없어요');
+  return mgItemUse2(S, i, no, now_, pick) ?? mgItemUse3(S, i, no, now_, pick) ?? no('이 미니게임에는 아이템이 없어요');
 }
 /** 아이템 카드를 눌렀을 때 */
 export function pressItemCard(S: GameState, i: number | null, c: Card): void {

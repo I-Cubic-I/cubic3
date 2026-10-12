@@ -1,5 +1,5 @@
 /* 상태를 읽는 도우미 (누구 차례인지, 내 자리, 이름) */
-import { type GameState, caveDecider, countOpenAt, curlTurn, gestTurn, now, tenTurn, udCaller, udShouter } from '@cubic3/engine';
+import { type GameState, caveDecider, countOpenAt, curlTurn, foreTurn, gestTurn, liarTurn, now, tenTurn, udCaller, udShouter } from '@cubic3/engine';
 
 export const SEATCOL = ['#2f5fc8', '#d3302f', '#e0b100', '#2e9450', '#8a5cc8'];
 export const SUITCOL: Record<string, string> = { S: '#2f5fc8', H: '#d3302f', D: '#e0b100', C: '#2e9450' };
@@ -53,11 +53,15 @@ export function whoActs(S: GameState | null, me: string): number | null {
     if (m.id === 'chain') return m.step === 'point' ? pickOne(m.ord.filter(k => !(k in m.aim))) : m.step === 'pass' ? m.cur : null;
     if (m.id === 'mid') return m.step === 'pick' ? pickOne(m.ord.filter(k => !(k in m.picks))) : null;
     if (m.id === 'gesture') return gestTurn(m);
-    if (m.id === 'stack') return m.step === 'play' ? pickOne(m.ord.filter(k => !m.done[k])) : null;
+    // 주사위 쌓기는 모두 동시에 각자 화면에서 하므로 차례가 없다(조종하는 자리를 바꾸지 않는다)
+    if (m.id === 'stack') return null;
     if (m.id === 'change') return m.step === 'move' ? m.changer : m.step === 'guess' ? pickOne(m.ord.filter(k => k !== m.changer && !(k in m.guesses))) : null;
     if (m.id === 'cave') return caveDecider(m);
     if (m.id === 'ten') return tenTurn(m);
     if (m.id === 'balance') return m.step === 'say' ? m.ord[m.ci] : pickOne(m.ord.filter(k => !(k in m.picks)));
+    if (m.id === 'liar') return m.step === 'bid' ? liarTurn(m) : null;
+    if (m.id === 'fore') return foreTurn(m);
+    if (m.id === 'fork') return m.step === 'pick' ? pickOne(m.ord.filter(k => !(k in m.picks))) : null;
   }
   return null;
 }

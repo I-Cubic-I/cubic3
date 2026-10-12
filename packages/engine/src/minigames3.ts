@@ -1,7 +1,8 @@
 /* 미니게임 3 (2026-10-13 디지털판 추가: 몸짓 잇기·주사위 쌓기·뭐가 바뀌었지·동굴 탐험·합이 10·밸런스 게임). 순수 함수: 상태를 받아 고친다 */
 import { R, cname, d6, now, rnd, shuffle } from './cards';
 import { buildBundle, endMinigame, fx, hasItem, log, N, outGroups, rankBy, useItem } from './core';
-import type { BalanceMg, Card, CaveMg, ChangeMg, GameState, GestureMg, StackMg, TenMg } from './types';
+import type { BalanceMg, Card, CaveMg, ChangeMg, ForeMg, ForkMg, GameState, GestureMg, LiarMg, StackMg, Suit, TenMg } from './types';
+import { SYM, U } from './cards';
 
 const mgOf = <T>(S: GameState) => S.mg as unknown as T;
 const seatOrd = (S: GameState): number[] => { const n = N(S), o: number[] = []; for (let k = 0; k < n; k++) o.push((S.first + k) % n); return o; };
@@ -45,10 +46,13 @@ export function gestOut(S: GameState, i: number, why: string): void {
 
 /* ================= 주사위 쌓기 (디지털판: 스태커) =================
    8행 5열. 좌우로 움직이는 네모를 멈춰 아래 칸 위에 쌓는다. 어긋나면 그 층부터 다시. 모두 동시에, 8층까지 걸린 시간으로 순위 */
-export const STACK_ROWS = 8, STACK_COLS = 5, STACK_PRE = 3000, STACK_LIMIT = 45000;
+export const STACK_ROWS = 8, STACK_COLS = 5, STACK_PRE = 3000, STACK_LIMIT = 60000, STACK_FAIL = 1000;
+/** 네모가 한 칸 움직이는 시간(ms): 1층은 느리고, 위로 갈수록 크게 빨라진다 */
+export const stackPeriod = (row: number): number => Math.max(45, Math.round(420 * Math.pow(0.72, row)));
 export function stackStart(S: GameState): void {
   const ord = seatOrd(S); const h: Record<number, number> = {}; ord.forEach(i => h[i] = 0);
-  S.mg = { id: 'stack', ord, step: 'pre', until: now() + STACK_PRE, limit: STACK_LIMIT, wide: {}, h, ms: {}, done: {} };
+  const cols: Record<number, number[]> = {}; ord.forEach(i => cols[i] = []);
+  S.mg = { id: 'stack', ord, step: 'pre', until: now() + STACK_PRE, limit: STACK_LIMIT, wide: {}, h, ms: {}, done: {}, cols };
 }
 /** 아이템: 시작 전에. 이번엔 네모가 2칸(실물의 "두 손") */
 export function stackWide(S: GameState, i: number, item: Card): false | undefined {
@@ -57,8 +61,9 @@ export function stackWide(S: GameState, i: number, item: Card): false | undefine
   m.wide[i] = true; log(S, `주사위 쌓기: ${nm(i)} 아이템 → 이번엔 네모 2칸.`); fx(S, { t: 'banner', text: '두 손으로!', seats: [i] });
 }
 /** 내 기기에서 쌓은 층수. 8층이면 걸린 시간(ms)도 */
-export function stackReport(S: GameState, i: number, h: number, ms: number | null, done: boolean): false | undefined {
+export function stackReport(S: GameState, i: number, h: number, ms: number | null, done: boolean, cols?: number[]): false | undefined {
   const m = mgOf<StackMg>(S); if (m.step !== 'play' || m.done[i] || !(i in m.h)) return false;
+  if (Array.isArray(cols)) m.cols[i] = cols.slice(0, STACK_ROWS).map(c => Math.max(0, Math.min(STACK_COLS - 1, Math.floor(+c) || 0)));
   m.h[i] = Math.max(m.h[i], Math.min(STACK_ROWS, Math.floor(h)));
   if (m.h[i] >= STACK_ROWS && ms != null) { m.ms[i] = Math.round(ms); m.done[i] = true; log(S, `주사위 쌓기: ${nm(i)} 8층 완성 (${(ms / 1000).toFixed(2)}초).`); fx(S, { t: 'banner', text: '8층!', seats: [i], tone: 'win' }); }
   else if (done) m.done[i] = true;
@@ -185,10 +190,12 @@ export function tenStart(S: GameState): void {
   S.mg = { id: 'ten', ord, pan: 1, hands, slots: [[], [], []], ci: 0, all: false, flipN: 0, grabs: {}, grabUntil: 0, spent: [], bundle: [], last: null };
 }
 const tenTop = (m: TenMg) => m.slots.map(s => s[s.length - 1] || null);
-/** 지금 보이는 두 장의 합이 10인 짝들(자리 번호) */
-export function tenPairs(m: TenMg): [number, number][] {
-  const t = tenTop(m); const out: [number, number][] = [];
+/** 지금 잡을 수 있는 것들(자리 번호): 보이는 카드로 어떻게든 합이 10이 되면(10 한 장·두 장·세 장, 사용자 2026-10-13) */
+export function tenPairs(m: TenMg): number[][] {
+  const t = tenTop(m); const out: number[][] = [];
   for (let a = 0; a < 3; a++) for (let b = a + 1; b < 3; b++) { const x = t[a], y = t[b]; if (x && y && R(x) + R(y) === 10) out.push([a, b]); }
+  t.forEach((x, k) => { if (x && R(x) === 10) out.push([k]); });
+  if (t.every(Boolean) && t.reduce((a, x) => a + R(x!), 0) === 10) out.push([0, 1, 2]);
   return out;
 }
 export const tenTurn = (m: TenMg): number => m.ord[m.ci];
@@ -228,8 +235,9 @@ export function tenTake(S: GameState): void {
   const m = mgOf<TenMg>(S); m.grabUntil = 0;
   const ok = Object.keys(m.grabs).map(Number).filter(j => m.grabs[j] >= 0); if (!ok.length) return;
   const w = ok.reduce((a, j) => (m.grabs[j] < m.grabs[a] ? j : a), ok[0]);
-  // 짝이 여럿이면 더미가 큰 쪽
-  const pr = tenPairs(m).sort((x, y) => (m.slots[y[0]].length + m.slots[y[1]].length) - (m.slots[x[0]].length + m.slots[x[1]].length))[0];
+  // 잡을 것이 여럿이면 더미가 큰 쪽(10 한 장이면 그 자리만)
+  const size = (x: number[]) => x.reduce((a, k) => a + m.slots[k].length, 0);
+  const pr = tenPairs(m).sort((x, y) => size(y) - size(x))[0];
   const take = m.all ? [0, 1, 2] : pr; const got: Card[] = []; take.forEach(k => { got.push(...m.slots[k]); m.slots[k] = []; });
   m.hands[w].unshift(...got); m.last = { seat: w, slots: take, got: got.length, all: m.all };
   log(S, `합이 10 ${m.pan}판: ${nm(w)}이 ${got.length}장 가져감 (${m.grabs[w]}ms)`); fx(S, { t: 'banner', text: `${got.length}장 획득!`, seats: [w], tone: 'win' });
@@ -276,6 +284,152 @@ export function balancePick(S: GameState, i: number, k: number): false | undefin
   m.step = 'say'; m.opts = []; m.picks = {};
 }
 
+/* ================= 거짓말쟁이 ================= */
+export const LIAR_EACH = 4, LIAR_JUDGE = 3000;
+export function liarStart(S: GameState): void {
+  const ord = seatOrd(S);
+  S.mg = { id: 'liar', ord, alive: ord.slice(), ci: 0, out: [], hands: {}, bundle: [], bid: null, caller: null, step: 'bid', until: 0, adds: {}, last: null };
+  liarDeal(S);
+}
+function liarDeal(S: GameState): void {
+  const m = mgOf<LiarMg>(S);
+  m.ord.forEach(j => { if (m.hands[j]?.length) S.deck.push(...m.hands[j]); m.hands[j] = []; }); shuffle(S.deck);
+  m.alive.forEach(j => m.hands[j] = buildBundle(S, LIAR_EACH));
+  m.bid = null; m.caller = null; m.adds = {}; m.step = 'bid';
+}
+export const liarTurn = (m: LiarMg): number => m.alive[m.ci];
+/** 선언: "[문양]이 [N]장 이상". N은 반드시 올린다(문양은 자유) */
+export function liarBid(S: GameState, i: number, suit: Suit, n: number): false | undefined {
+  const m = mgOf<LiarMg>(S); if (m.step !== 'bid' || liarTurn(m) !== i || !SYM[suit] || !Number.isInteger(n) || n < 1 || n <= (m.bid?.n || 0)) return false;
+  m.bid = { seat: i, suit, n }; m.ci = (m.ci + 1) % m.alive.length;
+  log(S, `거짓말쟁이: ${nm(i)} "${SYM[suit]} ${n}장 이상!"`);
+}
+const liarItemOk = (S: GameState, m: LiarMg, j: number) => !!m.bid && S.seats[j].hand.some(c => R(c) >= 11 && U(c) === m.bid!.suit);
+/** "거짓말!": 모두 공개. 아이템(그 문양 J·Q·K)을 가진 사람이 있으면 낼 틈을 둔다 */
+export function liarCall(S: GameState, i: number): false | undefined {
+  const m = mgOf<LiarMg>(S); if (m.step !== 'bid' || liarTurn(m) !== i || !m.bid) return false;
+  m.caller = i; log(S, `거짓말쟁이: ${nm(i)} "거짓말!"`); fx(S, { t: 'banner', text: '거짓말!', seats: [i], tone: 'bad' });
+  if (m.ord.some(j => liarItemOk(S, m, j))) { m.step = 'judge'; m.until = now() + LIAR_JUDGE; } else liarJudge(S);
+}
+/** 아이템(내 아이템도 센다): 판정 때 누구나. 선언한 문양의 아이템만 1장씩 더한다 */
+export function liarAdd(S: GameState, i: number, item: Card): false | undefined {
+  const m = mgOf<LiarMg>(S); if (m.step !== 'judge' || !m.bid || U(item) !== m.bid.suit || !(i in m.hands)) return false;
+  if (!useItem(S, i, item)) return false;
+  (m.adds[i] = m.adds[i] || []).push(item); log(S, `거짓말쟁이: ${nm(i)} 아이템 ${cname(item)} → ${SYM[m.bid.suit]} 1장 더`);
+  fx(S, { t: 'banner', text: `${SYM[m.bid.suit]} +1!`, seats: [i] });
+}
+export function liarJudge(S: GameState): void {
+  const m = mgOf<LiarMg>(S); const b = m.bid!; const caller = m.caller!;
+  const count = m.alive.reduce((a, j) => a + m.hands[j].filter(c => U(c) === b.suit).length, 0) + Object.values(m.adds).reduce((a, v) => a + v.length, 0);
+  // 선언이 맞으면(N장 이상) 외친 사람이, 틀리면 선언한 사람이 탈락
+  const loser = count >= b.n ? caller : b.seat;
+  m.last = { bid: { ...b }, caller, count, loser, hands: JSON.parse(JSON.stringify(m.hands)), adds: { ...m.adds } };
+  log(S, `거짓말쟁이: ${SYM[b.suit]} ${count}장 (선언 ${b.n}) → ${nm(loser)} 탈락`);
+  fx(S, { t: 'liar', ...m.last, seats: [loser] });
+  const idx = m.alive.indexOf(loser); m.out.push([loser]); m.alive.splice(idx, 1);
+  if (m.alive.length <= 1) { m.ord.forEach(j => { S.deck.push(...m.hands[j]); m.hands[j] = []; }); shuffle(S.deck); endMinigame(S, outGroups(m, m.alive)); return; }
+  // 남은 사람끼리 새로 4장씩, 탈락한 사람의 왼쪽부터
+  m.ci = idx % m.alive.length; liarDeal(S);
+}
+
+/* ================= 이마 위의 카드 ================= */
+export const FORE_EACH = 5, FORE_PANS = 3;
+export function foreStart(S: GameState): void {
+  const ord = seatOrd(S); const hands: Record<number, Card[]> = {}; ord.forEach(i => hands[i] = buildBundle(S, FORE_EACH));
+  S.mg = { id: 'fore', ord, pan: 0, extra: false, hands, bundle: [], fore: {}, pile: [], seq: [], si: 0, acts: {}, asks: {}, last: null };
+  forePan(S);
+}
+function forePan(S: GameState): void {
+  const m = mgOf<ForeMg>(S); m.pan++;
+  const live = m.ord.filter(j => m.hands[j].length);
+  if (live.length <= 1) { foreEnd(S); return; }
+  // 시작 사람을 판마다 왼쪽으로. 더미가 있는 사람만, 맨 위 1장을 보지 않고 이마로(참가비)
+  const st = (m.pan - 1) % m.ord.length; const rot = m.ord.slice(st).concat(m.ord.slice(0, st));
+  m.seq = rot.filter(j => m.hands[j].length); m.si = 0; m.acts = {}; m.asks = {}; m.fore = {};
+  m.seq.forEach(j => { m.fore[j] = m.hands[j].pop()!; });
+}
+export const foreTurn = (m: ForeMg): number | null => (m.si < m.seq.length ? m.seq[m.si] : null);
+/** 승부(더미에서 1장 더 걸기, 카드가 없어도 승부할 수 있다) 또는 포기 */
+export function foreAct(S: GameState, i: number, go: boolean): false | undefined {
+  const m = mgOf<ForeMg>(S); if (foreTurn(m) !== i) return false;
+  m.acts[i] = go; if (go && m.hands[i].length) m.pile.push(m.hands[i].pop()!);
+  log(S, `이마 위의 카드: ${nm(i)} ${go ? '승부' : '포기'}`);
+  m.si++; if (m.si >= m.seq.length) foreResolve(S);
+}
+/** 아이템(거울): 내 차례에 승부·포기 전에. 1명에게 "내 카드가 v보다 높아?" — 사실대로 답한다(디지털은 자동) */
+export function foreAsk(S: GameState, i: number, item: Card, to: number, v: number): false | undefined {
+  const m = mgOf<ForeMg>(S); if (foreTurn(m) !== i || i in m.asks || to === i || !(to in m.fore) || !(v >= 1 && v <= 13)) return false;
+  if (!useItem(S, i, item)) return false;
+  m.asks[i] = { to, v, yes: R(m.fore[i]) > v };
+  log(S, `이마 위의 카드: ${nm(i)} 아이템 → ${nm(to)}에게 물었다`); fx(S, { t: 'banner', text: '거울!', seats: [i] });
+}
+function foreResolve(S: GameState): void {
+  const m = mgOf<ForeMg>(S); const goers = m.seq.filter(j => m.acts[j]);
+  m.pile.push(...m.seq.map(j => m.fore[j]));
+  const mx = goers.length ? Math.max(...goers.map(j => R(m.fore[j]))) : 0; const top = goers.filter(j => R(m.fore[j]) === mx);
+  // 승부한 사람 중 가장 높은 사람이 걸린 카드를 모두 가져가 더미에 섞는다. 동점이거나 모두 포기하면 다음 판으로
+  const win = top.length === 1 ? top[0] : null; const got = win != null ? m.pile.length : 0;
+  m.last = { fore: { ...m.fore }, acts: { ...m.acts }, win, got };
+  if (win != null) { m.hands[win].push(...m.pile); shuffle(m.hands[win]); m.pile = []; }
+  log(S, `이마 위의 카드 ${m.pan}판: ${m.seq.map(j => `${nm(j)} ${cname(m.fore[j])}${m.acts[j] ? '' : '(포기)'}`).join(', ')} → ${win != null ? `${nm(win)} ${got}장` : '다음 판으로'}`);
+  fx(S, { t: 'fore', ...m.last, seats: win != null ? [win] : [] });
+  m.fore = {};
+  // 3판(3판째에 걸린 카드가 남으면 1판 더)
+  if (m.pan >= FORE_PANS && !(m.pile.length && !m.extra)) { foreEnd(S); return; }
+  if (m.pan >= FORE_PANS) m.extra = true;
+  forePan(S);
+}
+function foreEnd(S: GameState): void {
+  const m = mgOf<ForeMg>(S); S.deck.push(...m.pile, ...Object.values(m.fore)); m.pile = []; m.fore = {}; shuffle(S.deck);
+  const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.hands[j].length);
+  endMinigame(S, rankBy(sc));
+}
+
+/* ================= 갈림길 ================= */
+export const FORK_PANS = 3, FORK_WAIT = 3000;
+export function forkStart(S: GameState): void {
+  const ord = seatOrd(S); const won: Record<number, Card[]> = {}; ord.forEach(i => won[i] = []);
+  S.mg = { id: 'fork', ord, pan: 0, row: [], picks: {}, rev: {}, won, spent: [], bundle: [], step: 'pick', until: 0, last: null };
+  forkPan(S);
+}
+function forkPan(S: GameState): void {
+  const m = mgOf<ForkMg>(S); m.pan++; m.row = buildBundle(S, m.ord.length); m.picks = {}; m.rev = {}; m.step = 'pick';
+  if (m.row.length < 2) forkEnd(S);
+}
+export function forkPick(S: GameState, i: number, k: number): false | undefined {
+  const m = mgOf<ForkMg>(S); if (m.step !== 'pick' || !(i in m.won) || i in m.picks || !(k >= 0 && k < m.row.length)) return false;
+  m.picks[i] = k; if (!m.ord.every(j => j in m.picks)) return;
+  // 공개 전에 아이템(역배)을 낼 틈. 아이템 가진 사람이 없으면 바로 공개
+  if (m.ord.some(j => hasItem(S, j) && !m.rev[j])) { m.step = 'wait'; m.until = now() + FORK_WAIT; } else forkReveal(S);
+}
+/** 아이템(역배): 공개 전에. 내 칸이 겹치면 나 혼자 가져가고, 안 겹치면 아무것도 못 가져간다 */
+export function forkRev(S: GameState, i: number, item: Card): false | undefined {
+  const m = mgOf<ForkMg>(S); if (!(m.step === 'pick' || m.step === 'wait') || !(i in m.won) || m.rev[i]) return false;
+  if (!useItem(S, i, item)) return false;
+  m.rev[i] = true; log(S, `갈림길: ${nm(i)} 아이템 → 역배`); fx(S, { t: 'banner', text: '역배!', seats: [i] });
+}
+export function forkReveal(S: GameState): void {
+  const m = mgOf<ForkMg>(S); const got: Record<number, number> = {};
+  m.row.forEach((c, k) => {
+    const who = m.ord.filter(j => m.picks[j] === k); const revs = who.filter(j => m.rev[j]);
+    let w: number | null = null;
+    if (revs.length === 1 && who.length >= 2) w = revs[0];                 // 역배: 겹쳤으면 나 혼자
+    else if (who.length === 1 && !m.rev[who[0]]) w = who[0];               // 혼자 고른 칸(역배를 썼으면 못 가져감)
+    if (w != null) { m.won[w].push(c); got[w] = R(c); } else m.spent.push(c);
+  });
+  m.last = { row: m.row.slice(), picks: { ...m.picks }, rev: { ...m.rev }, got };
+  log(S, `갈림길 ${m.pan}판: ` + m.ord.map(j => `${nm(j)} ${m.picks[j] + 1}번${m.rev[j] ? '(역배)' : ''}${got[j] ? ` +${got[j]}` : ''}`).join(', '));
+  fx(S, { t: 'fork', ...m.last, seats: Object.keys(got).map(Number) });
+  m.row = [];
+  if (m.pan >= FORK_PANS) { forkEnd(S); return; }
+  forkPan(S);
+}
+function forkEnd(S: GameState): void {
+  const m = mgOf<ForkMg>(S); m.spent.push(...m.row); m.row = [];
+  const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.won[j].reduce((a, c) => a + R(c), 0));
+  endMinigame(S, rankBy(sc));
+}
+
 /** 방장 시계로 넘기는 단계들 (core.ts advanceTimers에서 부른다) */
 export function advanceMg3(S: GameState, t: number): boolean {
   const m = S.mg; if (S.phase !== 'mg' || !m) return false;
@@ -295,5 +449,7 @@ export function advanceMg3(S: GameState, t: number): boolean {
     if (m.step === 'show') { caveAfterShow(S); return true; }
   }
   if (m.id === 'ten' && m.grabUntil && t >= m.grabUntil) { tenTake(S); return true; }
+  if (m.id === 'liar' && m.step === 'judge' && t >= m.until) { liarJudge(S); return true; }
+  if (m.id === 'fork' && m.step === 'wait' && t >= m.until) { forkReveal(S); return true; }
   return false;
 }

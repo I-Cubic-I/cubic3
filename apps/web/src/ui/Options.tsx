@@ -1,4 +1,5 @@
 /* 꾸미기·설정 화면 (메인 화면 왼쪽 메뉴 자리, 게임 중에는 설정만 오른쪽 위에 겹쳐 연다) */
+import { usePerf } from '../scene/perf';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { CARD_BACKS, drawCardBack } from '../scene/cardBacks';
 import { FELTS, type Quality, usePrefs } from '../prefs';
@@ -75,12 +76,12 @@ const QUAL: [Quality, string][] = [['low', '낮음'], ['mid', '보통'], ['high'
 const VOLS: ['master' | 'sfx' | 'music', string][] = [['master', '전체'], ['sfx', '효과음'], ['music', '음악']];
 
 export function SettingsPanel({ onBack, close = false }: { onBack: () => void; close?: boolean }) {
-  const p = usePrefs();
+  const p = usePrefs(); const perf = usePerf();
   return (
     <div className="optpanel">
       <Head title="설정" onBack={onBack} close={close} />
       <div className="optbody">
-        <Sec title="소리" note="아직 게임에 소리가 없어요. 소리를 넣으면 이 값을 따라요.">
+        <Sec title="소리" note="지금은 눈치 게임의 효과음(종소리·미끼 소리)에 쓰여요.">
           {VOLS.map(([k, label]) => (
             <label key={k} className="volrow">
               <span>{label}</span>
@@ -93,6 +94,12 @@ export function SettingsPanel({ onBack, close = false }: { onBack: () => void; c
           <div className="seg" role="group" aria-label="그래픽 품질">
             {QUAL.map(([q, label]) => <button key={q} className={p.quality === q ? 'on' : ''} aria-pressed={p.quality === q} onClick={() => p.set({ quality: q })}>{label}</button>)}
           </div>
+        </Sec>
+        <Sec title="자동 품질 조절" note={`화면이 끊기면 그리는 해상도를 저절로 낮추고, 넉넉해지면 다시 올려요(위 품질이 최대). 지금 ×${perf.dpr}`}>
+          <label className="togrow">
+            <span>끊기면 저절로 낮추기</span>
+            <input type="checkbox" role="switch" className="tog" checked={p.autoQuality} onChange={e => p.set({ autoQuality: e.target.checked })} />
+          </label>
         </Sec>
         <Sec title="움직임 줄이기">
           <label className="togrow">

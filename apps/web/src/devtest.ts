@@ -42,6 +42,9 @@ function candidates(S: GameState, seat: number): Action[] {
   if (m?.id === 'change') { for (let p = 0; p < 8; p++) c.push({ type: 'chgMove', seat, piece: p, cell: Math.floor(Math.random() * 50) }); c.push({ type: 'chgGuess', seat, pieces: [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - .5).slice(0, m.need) }); }
   c.push({ type: 'caveGo', seat, stay: Math.random() < .7 });
   if (m?.id === 'ten') { for (let k = 0; k < 3; k++) c.push({ type: 'tenPlace', seat, slot: k }); c.push({ type: 'tenGrab', seat, n: m.flipN, ms: 200 + Math.floor(Math.random() * 400) }); }
+  if (m?.id === 'liar') { const n = (m.bid?.n || 0) + 1; c.push({ type: 'liarBid', seat, suit: (['S', 'H', 'D', 'C'] as const)[Math.floor(Math.random() * 4)], n }); if (Math.random() < .4) c.push({ type: 'liarCall', seat }); }
+  if (m?.id === 'fore') c.push({ type: 'foreAct', seat, go: Math.random() < .6 });
+  if (m?.id === 'fork') for (let k = 0; k < m.row.length; k++) c.push({ type: 'forkPick', seat, k });
   if (m?.id === 'balance') { c.push({ type: 'balSay', seat, opts: m.three ? ['산', '바다', '강'] : ['산', '바다'] }); for (let k = 0; k < 3; k++) c.push({ type: 'balPick', seat, k }); }
   return c;
 }

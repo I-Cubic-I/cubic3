@@ -21,6 +21,11 @@ export interface UiMode {
   /** 뭐가 바뀌었지: 옮길 말 / 고른 말들 */
   chg?: number;
   cg?: number[];
+  /** 거짓말쟁이: 고른 문양·장수 / 이마 위의 카드: 물어볼 사람·숫자 */
+  lsu?: string;
+  ln?: number;
+  fto?: number;
+  fv?: number;
   showHand?: boolean;
   rulesAgain?: boolean;
   log?: boolean;
@@ -59,6 +64,8 @@ interface Store {
   /** 개발 서버 미니게임 미리보기 방인지 / 미리보기가 끝나 선택 화면으로 돌아가는지 */
   devPreview: boolean;
   devBack: boolean;
+  /** 플레이어별 핑(uid → ms). 방장은 0. 소식이 없는 사람은 빠진다 */
+  pings: Record<string, number>;
 
   setRoom(room: Room, me: string, name: string): void;
   receive(S: GameState): void;
@@ -78,7 +85,7 @@ let flashT = 0, toastT = 0;
 
 export const useStore = create<Store>((set, get) => ({
   S: null, room: null, me: '', name: '', ctl: null, sel: [], ui: {}, flash: '', toast: '', fatal: null,
-  rulesShown: false, clubPlaying: false, lastKey: '', fxShow: null, shakeN: 0, screenAlert: false, cutin: null, results: null, fps: { ok: false, locked: false }, autoSit: false, devPreview: false, devBack: false,
+  rulesShown: false, clubPlaying: false, lastKey: '', fxShow: null, shakeN: 0, screenAlert: false, cutin: null, results: null, fps: { ok: false, locked: false }, autoSit: false, devPreview: false, devBack: false, pings: {},
 
   setRoom: (room, me, name) => set({ room, me, name, autoSit: true }),
   receive: S => {

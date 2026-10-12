@@ -207,7 +207,7 @@ function setFan(av: THREE.Group, n: number): void {
 
 /* ---------------- 미니게임 테이블 배치 ---------------- */
 // 미니게임 테이블: 안쪽 원 8개 + 바깥 원(나머지)
-const ST_IDS: MgId[] = ['balloon', 'vault', 'race', 'count', 'hold', 'bomb', 'auction', 'rps', 'nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance'];
+const ST_IDS: MgId[] = ['balloon', 'vault', 'race', 'count', 'hold', 'bomb', 'auction', 'rps', 'nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance', 'liar', 'fore', 'fork'];
 const ST_R = [440, 720];
 const STYLE: Record<MgId, { felt: string; wood: string; shape: 'round' | 'octa' | 'square' | 'long' }> = {
   balloon: { felt: '#7a3b22', wood: '#c99a6a', shape: 'round' }, vault: { felt: '#30363f', wood: '#1f2329', shape: 'square' }, race: { felt: '#2c5a3c', wood: '#5b3b23', shape: 'long' }, count: { felt: '#23405e', wood: '#3a2a1c', shape: 'round' },
@@ -216,6 +216,7 @@ const STYLE: Record<MgId, { felt: string; wood: string; shape: 'round' | 'octa' 
   speed: { felt: '#4a1f3a', wood: '#2a1a20', shape: 'round' }, fold: { felt: '#4a3a5a', wood: '#3a2a3a', shape: 'octa' }, chain: { felt: '#3a4a2a', wood: '#2a2a1a', shape: 'octa' }, mid: { felt: '#2a3a5a', wood: '#1f2a3a', shape: 'square' },
   gesture: { felt: '#5a3a2a', wood: '#3a2418', shape: 'round' }, stack: { felt: '#1f2f3f', wood: '#2a1f18', shape: 'square' }, change: { felt: '#2f3f2a', wood: '#3a2a1c', shape: 'square' }, cave: { felt: '#3a3026', wood: '#241a12', shape: 'octa' },
   ten: { felt: '#3f1f2a', wood: '#2a1a1a', shape: 'round' }, balance: { felt: '#2a2f4a', wood: '#c9c2b4', shape: 'round' },
+  liar: { felt: '#3a1f1f', wood: '#2a1612', shape: 'round' }, fore: { felt: '#1f3a2a', wood: '#3a2a1c', shape: 'octa' }, fork: { felt: '#2a3a3f', wood: '#2a2018', shape: 'square' },
 };
 function stFrame(id: MgId) { const k = ST_IDS.indexOf(id); const ring = k < 8 ? 0 : 1; const cnt = ring ? ST_IDS.length - 8 : 8; const a = (ring ? k - 8 : k) * 2 * PI / cnt + PI / cnt; const x = Math.sin(a) * ST_R[ring], z = Math.cos(a) * ST_R[ring]; return { x, z, ry: Math.atan2(-x, -z) }; }
 /** 말 컬링 판 좌표(cm, x 폭·y 길이) → 미니게임 테이블 위 위치. 화면 아래쪽이 출발 가장자리, 위쪽이 끝 벽 */

@@ -1,11 +1,11 @@
 /* 미니게임 조작판 3 (2026-10-13 디지털판 추가: 몸짓 잇기·주사위 쌓기·뭐가 바뀌었지·동굴 탐험·합이 10·밸런스 게임) */
 import { useEffect, useRef, useState } from 'react';
 import {
-  type Card, type GameState, GESTURES, STACK_COLS, STACK_ROWS, caveDecider, gestTurn, now, tenPairs, tenTurn,
+  type Card, type GameState, GESTURES, R, SUITS, SYM, type Suit, caveDecider, cname, foreTurn, gestTurn, liarTurn, now, tenTurn,
 } from '@cubic3/engine';
 import { SEATCOL, SUITCOL, seatName } from '../game';
 import { cmd } from '../flow';
-import { type UiMode, useStore } from '../store';
+import type { UiMode } from '../store';
 import { MCard } from './bits';
 import type { ItemUse } from './MgPanel';
 
@@ -16,7 +16,7 @@ function Pts({ S, pts, unit = '점', hi }: { S: GameState; pts: Record<number, n
 }
 
 /** 아이템 카드를 지금 쓸 수 있는지 (추가 미니게임 3) */
-export function mgItemUse3(S: GameState, i: number, no: (w: string) => ItemUse, now_: (r: string) => ItemUse): ItemUse | null {
+export function mgItemUse3(S: GameState, i: number, no: (w: string) => ItemUse, now_: (r: string) => ItemUse, pick: (w: string) => ItemUse): ItemUse | null {
   const m = S.mg!;
   switch (m.id) {
     case 'gesture': return gestTurn(m) === i && m.pos === 0 && m.seq.length ? now_('gskip') : no('내 차례에 따라 하기 전에 써요');
@@ -25,6 +25,9 @@ export function mgItemUse3(S: GameState, i: number, no: (w: string) => ItemUse, 
     case 'cave': return m.step === 'pre' && m.inside.includes(i) ? now_('cguard') : no('굴리기 전에, 동굴에 남은 사람이 써요');
     case 'ten': return tenTurn(m) === i ? (m.all ? no('이번 판에 이미 썼어요') : now_('tall')) : no('내 차례에 놓기 전에 써요');
     case 'balance': return m.step === 'say' && m.ord[m.ci] === i ? (m.three ? no('이미 썼어요') : now_('bthree')) : no('선일 때 주제를 내기 전에 써요');
+    case 'liar': return m.step === 'judge' && m.bid ? now_('ladd') : no(`판정 때("거짓말!" 뒤) 선언한 문양의 아이템을 써요`);
+    case 'fore': return foreTurn(m) === i ? (i in m.asks ? no('이미 썼어요') : pick('고른 뒤 물어볼 사람과 숫자를 누르세요')) : no('내 차례에 승부·포기 전에 써요');
+    case 'fork': return m.step === 'pick' || m.step === 'wait' ? (m.rev[i] ? no('이미 썼어요') : now_('frev')) : no('공개 전에 써요');
   }
   return null;
 }
@@ -55,56 +58,6 @@ function Gesture({ S, i }: { S: GameState; i: number | null }) {
     </div>
     <div className="chips">{m.alive.map(k => <span key={k} className={`chip${k === cur ? ' on' : ''}`}><Dot k={k} />{nm(k)}</span>)}{m.out.flat().map(k => <span key={'o' + k} className="chip out">{nm(k)}</span>)}</div>
     {i != null && m.alive.includes(i) && <div className="dpads">{pad(0, '손·팔')}{pad(4, '머리·몸')}</div>}
-  </>;
-}
-
-/* ---------- 주사위 쌓기 (스태커) ---------- */
-function Stack({ S, i }: { S: GameState; i: number | null }) {
-  const m = S.mg!;
-  const st = useRef<{ key: string; t0: number; rowT: number; rows: number[]; done: boolean; fail: number }>({ key: '', t0: 0, rowT: 0, rows: [], done: false, fail: 0 });
-  const [, force] = useState(0);
-  const playing = m.id === 'stack' && m.step === 'play' && i != null && !m.done[i];
-  const wide = m.id === 'stack' && i != null && !!m.wide[i]; const w = wide ? 2 : 1;
-  // 시작: 상태를 받은 때부터 내 기기에서 잰다
-  const key = m.id === 'stack' && m.step === 'play' ? `${S.round}:${i}` : '';
-  if (key && st.current.key !== key) st.current = { key, t0: performance.now(), rowT: performance.now(), rows: [], done: false, fail: 0 };
-  useEffect(() => { if (!playing) return; let raf = 0; const f = () => { force(x => x + 1); raf = requestAnimationFrame(f); }; raf = requestAnimationFrame(f); return () => cancelAnimationFrame(raf); }, [playing]);
-  const row = st.current.rows.length;
-  const period = Math.max(55, 230 - row * 22);
-  const span = STACK_COLS - w; const tt = Math.floor((performance.now() - st.current.rowT) / period) % (span * 2 || 1);
-  const pos = span ? (tt <= span ? tt : span * 2 - tt) : 0;
-  const elapsed = performance.now() - st.current.t0; const limit = m.id === 'stack' ? m.limit : 0;
-  const stop = () => {
-    const s = st.current; if (!playing || s.done) return;
-    const prev = s.rows[row - 1];
-    if (row === 0 || (prev >= pos && prev < pos + w)) {
-      s.rows.push(row === 0 ? pos : prev); s.rowT = performance.now();
-      const h = s.rows.length; const fin = h >= STACK_ROWS; if (fin) s.done = true;
-      void useStore.getState().act({ type: 'stack', seat: i!, h, ms: fin ? Math.round(performance.now() - s.t0) : null });
-    } else { s.fail = performance.now(); s.rowT = performance.now(); }
-  };
-  useEffect(() => {
-    if (!playing) return;
-    const k = (e: KeyboardEvent) => { if (e.repeat || ['Tab', 'Escape', 'Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return; e.preventDefault(); stop(); };
-    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
-  });
-  // 시간이 다 되면 지금 높이로 끝
-  useEffect(() => { if (playing && !st.current.done && elapsed > limit) { st.current.done = true; void useStore.getState().act({ type: 'stack', seat: i!, h: st.current.rows.length, done: true }); } });
-  if (m.id !== 'stack') return null;
-  const nm = (k: number) => seatName(S, k);
-  const failing = performance.now() - st.current.fail < 300;
-  return <>
-    {m.step === 'pre' ? <div className="line"><strong>{secs(m.until)}초 뒤 시작!</strong> · 아무 키·클릭·터치로 네모를 멈춰요</div>
-      : <div className="line">{i != null && m.done[i] ? (i in m.ms ? <strong>8층 완성! {(m.ms[i] / 1000).toFixed(2)}초</strong> : '끝 · 기다리는 중') : <>남은 시간 <strong>{Math.max(0, Math.ceil((limit - elapsed) / 1000))}초</strong> · 바로 아래 칸 위에 멈추세요</>}</div>}
-    {i != null && <div className={`stacker${failing ? ' fail' : ''}`} onPointerDown={e => { e.preventDefault(); stop(); }} role="button" aria-label="멈추기">
-      {Array.from({ length: STACK_ROWS }, (_, r) => STACK_ROWS - 1 - r).map(r => <div key={r} className="srow">
-        {Array.from({ length: STACK_COLS }, (_, c) => {
-          const on = r < row ? st.current.rows[r] === c : r === row && playing && c >= pos && c < pos + w;
-          return <span key={c} className={`scell${on ? ' on' : ''}${r === row && playing ? ' cur' : ''}`} />;
-        })}
-      </div>)}
-    </div>}
-    <div className="chips">{m.ord.map(k => <span key={k} className={`chip${m.done[k] ? ' on' : ''}`}><Dot k={k} />{nm(k)} {m.h[k]}층{k in m.ms ? ` · ${(m.ms[k] / 1000).toFixed(1)}초` : ''}</span>)}</div>
   </>;
 }
 
@@ -176,12 +129,13 @@ function Ten({ S, i }: { S: GameState; i: number | null }) {
   });
   if (m.id !== 'ten') return null;
   const nm = (k: number) => seatName(S, k); const turn = tenTurn(m); const mine = turn === i && (m.hands[turn] || []).length > 0 && !m.grabUntil;
-  const anyEmpty = m.slots.some(s => !s.length); const pairs = tenPairs(m);
+  const anyEmpty = m.slots.some(s => !s.length);
   const sc: Record<number, number> = {}; m.ord.forEach(k => sc[k] = m.hands[k].length);
   return <>
     <div className="line">{Math.min(3, m.pan)}/3판 · {mine ? <strong>{anyEmpty ? '빈 자리' : '덮을 자리'}를 눌러 카드를 놓으세요</strong> : <>{nm(turn)} 차례</>}{m.all ? ' · 이번 판: 세 자리 모두' : ''}</div>
-    <div className="tenslots">{m.slots.map((s, k) => { const can = mine && !(anyEmpty && s.length); const hot = pairs.some(p => p.includes(k));
-      return <button key={k} className={`tslot${can ? ' can' : ''}${hot ? ' hot' : ''}`} disabled={!can} onClick={() => cmd('tplace', { k })} aria-label={`${k + 1}번 자리`}>
+    {/* 합이 10인 자리는 표시하지 않는다(보고 계산해서 치는 게임이라) */}
+    <div className="tenslots">{m.slots.map((s, k) => { const can = mine && !(anyEmpty && s.length);
+      return <button key={k} className={`tslot${can ? ' can' : ''}`} disabled={!can} onClick={() => cmd('tplace', { k })} aria-label={`${k + 1}번 자리`}>
         {s.length ? <MCard c={s[s.length - 1]} /> : <span className="empty">빈 자리</span>}<small>{s.length}장</small></button>; })}</div>
     {i != null && <div className="bigbtns"><button className={`btn primary big grab${i in m.grabs ? ' done' : ''}`} disabled={i in m.grabs} onPointerDown={e => { e.preventDefault(); grab(); }}>🎲 잡기! <kbd>Space</kbd></button></div>}
     <Pts S={S} pts={sc} unit="장" hi={turn} />
@@ -217,17 +171,74 @@ function Balance({ S, i }: { S: GameState; i: number | null }) {
   </>;
 }
 
-export function MgBody3({ S, i, ui }: { S: GameState; i: number | null; sel: Card[]; ui: UiMode }) {
+/* ---------- 거짓말쟁이 ---------- */
+function Liar({ S, i, ui }: { S: GameState; i: number | null; ui: UiMode }) {
+  const m = S.mg!; if (m.id !== 'liar') return null;
+  const nm = (k: number) => seatName(S, k); const cur = liarTurn(m); const mine = cur === i && m.step === 'bid';
+  const minN = (m.bid?.n || 0) + 1; const su = (ui.lsu as Suit | undefined) || m.bid?.suit || 'S'; const n = Math.max(minN, ui.ln || minN);
+  const h = i != null ? m.hands[i] || [] : [];
+  return <>
+    <div className="line">{m.bid ? <><strong>{nm(m.bid.seat)}: "{SYM[m.bid.suit]} {m.bid.n}장 이상!"</strong></> : '아직 선언이 없어요'} · {m.step === 'judge' ? <strong>공개! 아이템 낼 시간 {secs(m.until)}초</strong> : <>{nm(cur)} 차례</>}</div>
+    {i != null && h.length > 0 && <div className="mini-cards">{h.map(c => <MCard key={c} c={c} />)}</div>}
+    {mine && <>
+      <div className="bigbtns">{SUITS.map(s => <button key={s} className={`btn${su === s ? ' primary' : ''}`} style={{ fontSize: 20, borderColor: SUITCOL[s] }} onClick={() => cmd('lsu', { s })}>{SYM[s]}</button>)}
+        <button className="btn" disabled={n <= minN} onClick={() => cmd('ln', { n: n - 1 })}>−</button><span className="line big"><strong>{n}</strong>장 이상</span><button className="btn" onClick={() => cmd('ln', { n: n + 1 })}>+</button></div>
+      <div className="bigbtns"><button className="btn primary big" onClick={() => cmd('lbid', { s: su, n })}>"{SYM[su]} {n}장 이상!"</button>{m.bid && <button className="btn big danger" onClick={() => cmd('lcall')}>거짓말!</button>}</div>
+    </>}
+    <div className="chips">{m.alive.map(k => <span key={k} className={`chip${k === cur ? ' on' : ''}`}><Dot k={k} />{nm(k)} · {m.hands[k]?.length || 0}장</span>)}{m.out.flat().map(k => <span key={'o' + k} className="chip out">{nm(k)}</span>)}</div>
+  </>;
+}
+
+/* ---------- 이마 위의 카드 ---------- */
+function Fore({ S, i, ui, selItem }: { S: GameState; i: number | null; ui: UiMode; selItem: Card | null }) {
+  const m = S.mg!; if (m.id !== 'fore') return null;
+  const nm = (k: number) => seatName(S, k); const cur = foreTurn(m); const mine = cur === i;
+  const ask = i != null ? m.asks[i] : undefined; const to = ui.fto ?? null; const v = ui.fv ?? 7;
+  return <>
+    <div className="line">{m.pan}판{m.extra ? '(1판 더)' : ''} · 가운데 걸린 카드 <strong>{m.pile.length + Object.keys(m.fore).length}장</strong> · {cur != null ? <>{nm(cur)} 차례</> : ''}</div>
+    {/* 이마 카드: 남의 것만 보이고 내 것은 ? */}
+    <div className="forerow">{m.seq.map(k => <div key={k} className={`fslot${k === cur ? ' cur' : ''}`}>
+      {k === i ? <MCard c={null} /> : <MCard c={m.fore[k]} />}
+      <small><Dot k={k} />{nm(k)}{k in m.acts ? (m.acts[k] ? ' · 승부' : ' · 포기') : ''}</small>
+      <small className="pile">더미 {m.hands[k].length}장</small>
+    </div>)}</div>
+    {ask && <div className="line">거울: {nm(ask.to)}에게 "내 카드가 {ask.v}보다 높아?" → <strong>{ask.yes ? '예' : '아니오'}</strong></div>}
+    {mine && selItem && !ask && <>
+      <div className="line"><strong>{cname(selItem)}</strong>: 누구에게, 몇보다 높은지 물을까요?</div>
+      <div className="bigbtns">{m.seq.filter(k => k !== i).map(k => <button key={k} className={`btn${to === k ? ' primary' : ''}`} onClick={() => cmd('fto', { k })}>{nm(k)}</button>)}</div>
+      <div className="bigbtns"><button className="btn" disabled={v <= 1} onClick={() => cmd('fv', { v: v - 1 })}>−</button><span className="line big">내 카드가 <strong>{v}</strong>보다 높아?</span><button className="btn" disabled={v >= 13} onClick={() => cmd('fv', { v: v + 1 })}>+</button>
+        <button className="btn primary" disabled={to == null} onClick={() => cmd('fask', { to: to!, v })}>묻기</button></div>
+    </>}
+    {mine && !(selItem && !ask) && <div className="bigbtns"><button className="btn primary big" onClick={() => cmd('fgo', { g: 1 })}>승부{i != null && !m.hands[i].length ? ' (올인)' : ' · 1장 더'}</button><button className="btn big" onClick={() => cmd('fgo', { g: 0 })}>포기</button></div>}
+  </>;
+}
+
+/* ---------- 갈림길 ---------- */
+function Fork({ S, i }: { S: GameState; i: number | null }) {
+  const m = S.mg!; if (m.id !== 'fork') return null;
+  const nm = (k: number) => seatName(S, k); const sc: Record<number, number> = {}; m.ord.forEach(k => sc[k] = m.won[k].reduce((a, c) => a + R(c), 0));
+  const can = m.step === 'pick' && i != null && !(i in m.picks);
+  return <>
+    <div className="line">{m.pan}/3판 · {m.step === 'wait' ? <strong>{secs(m.until)}초 뒤 공개 · 역배를 낼 수 있어요</strong> : can ? <strong>몰래 칸을 고르세요 · 혼자 고른 칸만 가져가요</strong> : i != null && i in m.picks ? `${m.picks[i] + 1}번 칸을 골랐어요 · 기다리는 중` : '고르는 중'}</div>
+    <div className="forkrow">{m.row.map((c, k) => <button key={k} className={`fork${i != null && m.picks[i] === k ? ' sel' : ''}`} disabled={!can} onClick={() => cmd('fpick', { k })}><b>{k + 1}</b><MCard c={c} /></button>)}</div>
+    <div className="chips">{m.ord.map(k => <span key={k} className="chip"><Dot k={k} />{nm(k)} {sc[k]}점{k in m.picks ? ' ✓' : ''}{m.rev[k] ? ' · 역배' : ''}</span>)}</div>
+  </>;
+}
+
+export function MgBody3({ S, i, sel, ui }: { S: GameState; i: number | null; sel: Card[]; ui: UiMode }) {
+  const selItem = sel.length === 1 && R(sel[0]) >= 11 ? sel[0] : null;
   const [, set] = useState(0);
   // 남은 시간 표시용
   useEffect(() => { const t = setInterval(() => set(x => x + 1), 250); return () => clearInterval(t); }, []);
   switch (S.mg?.id) {
     case 'gesture': return <Gesture S={S} i={i} />;
-    case 'stack': return <Stack S={S} i={i} />;
     case 'change': return <Change S={S} i={i} ui={ui} />;
     case 'cave': return <Cave S={S} i={i} />;
     case 'ten': return <Ten S={S} i={i} />;
     case 'balance': return <Balance S={S} i={i} />;
+    case 'liar': return <Liar S={S} i={i} ui={ui} />;
+    case 'fore': return <Fore S={S} i={i} ui={ui} selItem={selItem} />;
+    case 'fork': return <Fork S={S} i={i} />;
   }
   return null;
 }

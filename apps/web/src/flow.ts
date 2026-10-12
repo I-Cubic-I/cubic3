@@ -29,7 +29,7 @@ function nextFx(): void {
   setTimeout(() => { st().set({ fxShow: { f, out: true } }); setTimeout(nextFx, 260); }, dur);
 }
 function fxDuration(f: Fx): number {
-  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200, item: 2100, change: 2600, cave: 1600, balance: 2400, duel: 2600, updown: 2600, curl: 2200, fold: 2200, chainAim: 1500, mid: 2600, line: 1700 } as Record<string, number>)[f.t] || 1300;
+  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200, item: 2100, change: 2600, cave: 1600, balance: 2400, liar: 3000, fore: 2800, fork: 2600, duel: 2600, updown: 2600, curl: 2200, fold: 2200, chainAim: 1500, mid: 2600, line: 1700 } as Record<string, number>)[f.t] || 1300;
 }
 function shakes(f: Fx): boolean {
   if (f.t === 'dice') return !!f.bust;
@@ -344,6 +344,17 @@ export function cmd(a: string, d: D = {}): void {
     case 'bsay': act({ type: 'balSay', seat: i, opts: JSON.parse(String(d.o)) as string[] }); break;
     case 'bthree': act({ type: 'balThree', seat: i, item: sel[0] }); break;
     case 'bpick': act({ type: 'balPick', seat: i, k: +d.k! }); break;
+    case 'lsu': store.patchUi({ lsu: String(d.s) }); break;
+    case 'ln': store.patchUi({ ln: +d.n! }); break;
+    case 'lbid': act({ type: 'liarBid', seat: i, suit: d.s as Suit, n: +d.n! }); break;
+    case 'lcall': act({ type: 'liarCall', seat: i }); break;
+    case 'ladd': act({ type: 'liarAdd', seat: i, item: sel[0] }); break;
+    case 'fgo': act({ type: 'foreAct', seat: i, go: !!+d.g! }); break;
+    case 'fto': store.patchUi({ fto: +d.k! }); break;
+    case 'fv': store.patchUi({ fv: +d.v! }); break;
+    case 'fask': act({ type: 'foreAsk', seat: i, item: sel[0], to: +d.to!, v: +d.v! }); break;
+    case 'fpick': act({ type: 'forkPick', seat: i, k: +d.k! }); break;
+    case 'frev': act({ type: 'forkRev', seat: i, item: sel[0] }); break;
   }
 }
 

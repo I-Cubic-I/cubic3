@@ -6,7 +6,8 @@ import type { Room } from './net/room';
 export const MG_IDS = Object.keys(MG) as MgId[];
 
 export async function setupMgPreview(r: Room, id: MgId, name: string): Promise<void> {
-  for (let k = 0; k < 3; k++) await r.act({ type: 'sit', name });
+  // 내 자리 3개(그 미니게임의 최소 인원이 더 많으면 그만큼)
+  for (let k = 0; k < Math.max(3, MG[id].min); k++) await r.act({ type: 'sit', name });
   await r.act({ type: 'start' });
   r.dev!((S: GameState) => {
     const n = S.seats.length;

@@ -1,7 +1,8 @@
 /* 방: 방장은 테이블 상태를 들고 행동을 판정하고, 참가자는 행동만 보낸다.
    메시지
-   참가자 → 방장: hello{uid} · act{id, a} · time{id}
-   방장 → 참가자: snap{data} · res{id, ok, error} · time{id, now} */
+   참가자 → 방장: hello{uid} · act{id, a} · time{id} · ping{id} · rtt{ms}
+   방장 → 참가자: snap{data} · res{id, ok, error} · time{id, now} · pong{id} · pings{map}
+   핑: 참가자가 2초마다 방장에게 왕복 시간을 재서 알리고, 방장이 모두의 핑을 2초마다 나눠 준다(반응 미니게임 판정을 믿을 수 있게) */
 import { type Action, type GameState, type Result, advanceTimers, applyAction, newLobby } from '@cubic3/engine';
 import type { ClientLink, HostLink, Transport } from './transport';
 
@@ -17,10 +18,13 @@ export interface Room {
   close(): void;
   /** 개발 서버 전용: 방장이 테이블 상태를 직접 고친다(미니게임 미리보기 등) */
   dev?(f: (S: GameState) => void): void;
+  /** 플레이어별 핑(ms, uid → 왕복 시간). 방장은 0 */
+  onPings(f: (m: Record<string, number>) => void): () => void;
 }
 
-type CMsg = { t: 'hello'; uid: string } | { t: 'act'; id: number; a: Action } | { t: 'time'; id: number };
-type HMsg = { t: 'snap'; data: GameState } | { t: 'res'; id: number; ok: boolean; error?: string } | { t: 'time'; id: number; now: number };
+type CMsg = { t: 'hello'; uid: string } | { t: 'act'; id: number; a: Action } | { t: 'time'; id: number } | { t: 'ping'; id: number } | { t: 'rtt'; ms: number };
+type HMsg = { t: 'snap'; data: GameState } | { t: 'res'; id: number; ok: boolean; error?: string } | { t: 'time'; id: number; now: number } | { t: 'pong'; id: number } | { t: 'pings'; map: Record<string, number> };
+const PING_MS = 2000;
 
 const LS = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -57,6 +61,8 @@ export async function hostRoom(net: Transport, code: string, myUid: string): Pro
   const subs = new Set<(S: GameState) => void>();
   const who = new Map<string, string>(); // 연결 → uid
   let link: HostLink | null = null;
+  const rtts = new Map<string, { ms: number; at: number }>(); // uid → 핑
+  const pingSubs = new Set<(m: Record<string, number>) => void>();
 
   const publish = () => {
     LS.set(hostKey(code), JSON.stringify(S));
@@ -78,6 +84,8 @@ export async function hostRoom(net: Transport, code: string, myUid: string): Pro
       if (!m || typeof m !== 'object') return;
       if (m.t === 'hello' && typeof m.uid === 'string') { who.set(cid, m.uid); return; }
       if (m.t === 'time') { link?.send(cid, { t: 'time', id: m.id, now: Date.now() } satisfies HMsg); return; }
+      if (m.t === 'ping') { link?.send(cid, { t: 'pong', id: m.id } satisfies HMsg); return; }
+      if (m.t === 'rtt') { const uid = who.get(cid); if (uid && Number.isFinite(m.ms)) rtts.set(uid, { ms: Math.max(0, Math.round(m.ms)), at: Date.now() }); return; }
       if (m.t === 'act') {
         const uid = who.get(cid);
         const r: Result = uid ? judge(uid, m.a) : { ok: false, error: '아직 연결 중이에요.' };
@@ -89,19 +97,28 @@ export async function hostRoom(net: Transport, code: string, myUid: string): Pro
 
   // 시간이 지난 단계(♠ 방어 유예 등)는 방장이 넘긴다
   const timer = setInterval(() => { if (advanceTimers(S)) { S.v = (S.v || 0) + 1; publish(); } }, 250);
+  // 모두의 핑을 나눠 준다(한동안 소식이 없는 사람은 뺀다 → 화면에 "끊김?"으로)
+  const pingTimer = setInterval(() => {
+    const map: Record<string, number> = { [myUid]: 0 }; const t = Date.now();
+    rtts.forEach((v, uid) => { if (t - v.at < PING_MS * 3) map[uid] = v.ms; });
+    pingSubs.forEach(f => f(map)); link?.broadcast({ t: 'pings', map } satisfies HMsg);
+  }, PING_MS);
 
   return {
     role: 'host', code, clockOffset: 0,
     dev: import.meta.env.DEV ? f => { f(S); S.v = (S.v || 0) + 1; publish(); } : undefined,
     act: async a => judge(myUid, a),
     subscribe: f => { subs.add(f); setTimeout(() => f(clone(S)), 0); return () => subs.delete(f); },
-    close: () => { clearInterval(timer); link?.close(); },
+    onPings: f => { pingSubs.add(f); return () => pingSubs.delete(f); },
+    close: () => { clearInterval(timer); clearInterval(pingTimer); link?.close(); },
   };
 }
 
 export async function joinRoom(net: Transport, code: string, myUid: string, onLost: () => void): Promise<Room> {
   let last: GameState | null = null;
   const subs = new Set<(S: GameState) => void>();
+  const pingSubs = new Set<(m: Record<string, number>) => void>();
+  const pingAt = new Map<number, number>();
   const wait = new Map<number, (m: HMsg) => void>();
   let seq = 0;
   let link: ClientLink | null = null;
@@ -110,6 +127,8 @@ export async function joinRoom(net: Transport, code: string, myUid: string, onLo
     onMsg: raw => {
       const m = raw as HMsg;
       if (m.t === 'snap') { last = m.data; subs.forEach(f => f(clone(m.data))); return; }
+      if (m.t === 'pong') { const t0 = pingAt.get(m.id); if (t0 != null) { pingAt.delete(m.id); link?.send({ t: 'rtt', ms: performance.now() - t0 } satisfies CMsg); } return; }
+      if (m.t === 'pings') { pingSubs.forEach(f => f(m.map)); return; }
       const w = wait.get(m.id);
       if (w) { wait.delete(m.id); w(m); }
     },
@@ -131,6 +150,9 @@ export async function joinRoom(net: Transport, code: string, myUid: string, onLo
     if (r.t === 'time') clockOffset = r.now + (t1 - t0) / 2 - t1;
   } catch { /* 맞추지 못해도 진행 */ }
 
+  // 2초마다 방장과의 왕복 시간을 잰다
+  const pingTimer = setInterval(() => { const id = ++seq; pingAt.set(id, performance.now()); link?.send({ t: 'ping', id } satisfies CMsg); if (pingAt.size > 20) pingAt.clear(); }, PING_MS);
+
   return {
     role: 'client', code, clockOffset,
     act: async a => {
@@ -140,6 +162,7 @@ export async function joinRoom(net: Transport, code: string, myUid: string, onLo
       } catch { return { ok: false, error: '방장에게서 답이 없어요. 잠시 뒤 다시 시도해 주세요.' }; }
     },
     subscribe: f => { subs.add(f); if (last) { const l = last; setTimeout(() => f(clone(l)), 0); } return () => subs.delete(f); },
-    close: () => link?.close(),
+    onPings: f => { pingSubs.add(f); return () => pingSubs.delete(f); },
+    close: () => { clearInterval(pingTimer); link?.close(); },
   };
 }

@@ -1,4 +1,5 @@
 /* 앱: 방에 연결한 뒤 테이블 장면과 화면 UI를 띄운다 */
+import { usePerf } from './scene/perf';
 import { useEffect, useState } from 'react';
 import { setClock } from '@cubic3/engine';
 import { type Room, clearHostMark, hostMarkPerTab, hostRoom, joinRoom, wasHosting } from './net/room';
@@ -73,6 +74,7 @@ export function App() {
       const u = new URL(location.href); u.searchParams.set('room', code); history.replaceState(null, '', u);
       useStore.getState().setRoom(r, me, p.name);
       r.subscribe(S => useStore.getState().receive(S));
+      r.onPings(m => useStore.getState().set({ pings: m }));
       setBusy(null);
     } catch (e) {
       console.error(e);
@@ -125,8 +127,20 @@ export function App() {
       {room ? <Hud /> : <Start msg={msg} busy={busy} onPick={connect} onDevMg={import.meta.env.DEV ? devPreview : undefined} />}
       {/* 로고는 하나만: 시작 화면·로비의 자리를 따라다녀 화면이 바뀌어도 끊기지 않는다 */}
       {fontsOk && <LogoHost />}
+      <GpuWarn />
       {/* 휴대폰은 가로 화면 전용: 세로로 들면 돌려 달라고 덮는다 */}
       <div className="rotate" role="alert"><div className="rotphone" aria-hidden="true" /><p>휴대폰을 가로로 돌려 주세요</p><span>Cubic³는 가로 화면에서 즐길 수 있어요</span></div>
     </>
   );
+}
+
+/** 그래픽 가속이 꺼져 있으면(소프트웨어로 그리는 중) 켜 달라고 안내한다 */
+function GpuWarn() {
+  const soft = usePerf(s => s.software); const closed = usePerf(s => s.warnClosed);
+  if (!soft || closed) return null;
+  return <div className="gpuwarn" role="alert">
+    <b>그래픽 가속이 꺼져 있는 것 같아요</b>
+    <span>그래서 화면이 계속 끊길 수 있어요. 품질을 "낮음"으로 바꿔 두었어요. 크롬이면 설정 → 시스템 → "가능한 경우 그래픽 가속 사용"을 켜고 브라우저를 다시 시작해 주세요.</span>
+    <button className="btn sm" onClick={() => usePerf.setState({ warnClosed: true })}>닫기</button>
+  </div>;
 }

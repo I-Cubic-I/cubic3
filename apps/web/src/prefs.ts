@@ -8,6 +8,8 @@ export type Prefs = {
   felt: string;       // FELTS의 id
   vol: { master: number; sfx: number; music: number }; // 0~100 (소리는 아직 없다. 넣으면 이 값을 따른다)
   quality: Quality;
+  /** 끊기면 그리는 해상도를 저절로 낮춘다 */
+  autoQuality: boolean;
   reduceMotion: boolean;
 };
 
@@ -31,7 +33,7 @@ const osReduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduce
 const DEFAULTS: Prefs = {
   name: '', cardBack: 'classic', felt: 'green',
   // 휴대폰·태블릿(손가락 화면)은 처음부터 보통 품질로
-  vol: { master: 80, sfx: 100, music: 60 }, quality: touch ? 'mid' : 'high', reduceMotion: osReduce,
+  vol: { master: 80, sfx: 100, music: 60 }, quality: touch ? 'mid' : 'high', autoQuality: true, reduceMotion: osReduce,
 };
 function load(): Prefs {
   let saved: Partial<Prefs> = {};

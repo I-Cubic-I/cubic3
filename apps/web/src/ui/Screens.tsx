@@ -143,6 +143,22 @@ export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
     inner = <><div className="k">공개! · {({ mid: '가운데', hi: '가장 큰', lo: '가장 작은' } as Record<string, string>)[f.crit as string]} 숫자 {String(f.target)}</div>
       <div className="mini-cards">{ks.map(k => <div key={k} className="col" style={{ opacity: win.includes(k) ? 1 : .55 }}><MCard c={picks[k]} /><small>{nm(k)}</small></div>)}{dc && <div className="col"><MCard c={dc} /><small>덱</small></div>}</div>
       <div className="s">{f.void ? '덱 카드가 걸려 무산!' : win.length ? names(S, win) + ' 1점' : '아무도 없음'}</div></>;
+  } else if (f.t === 'liar') {
+    const b = f.bid as { seat: number; suit: string; n: number }; const loser = f.loser as number;
+    inner = <><div className="k">{nm(b.seat)} "{SYM[b.suit as 'S']} {b.n}장 이상" · {nm(f.caller as number)} "거짓말!"</div>
+      <div className="b" style={{ color: SUITCOL[b.suit] }}>{SYM[b.suit as 'S']} {String(f.count)}장</div>
+      <div className="s">{nm(loser)} 탈락!</div></>;
+    cls += ' bad';
+  } else if (f.t === 'fore') {
+    const fore = f.fore as Record<number, Card>; const acts = f.acts as Record<number, boolean>; const win = f.win as number | null;
+    inner = <><div className="k">공개!</div>
+      <div className="mini-cards">{Object.keys(fore).map(k => <div key={k} className="col" style={{ opacity: acts[+k] ? 1 : .45 }}><MCard c={fore[+k]} /><small>{nm(+k)}{acts[+k] ? '' : ' 포기'}</small></div>)}</div>
+      <div className="s">{win != null ? `${nm(win)} ${String(f.got)}장 획득!` : '동점이거나 모두 포기 · 다음 판으로'}</div></>;
+  } else if (f.t === 'fork') {
+    const row = f.row as Card[]; const picks = f.picks as Record<number, number>; const rev = f.rev as Record<number, boolean>; const got = f.got as Record<number, number>;
+    inner = <><div className="k">공개!</div>
+      <div className="mini-cards">{row.map((c, k) => <div key={k} className="col"><MCard c={c} /><small>{Object.keys(picks).filter(j => picks[+j] === k).map(j => nm(+j) + (rev[+j] ? '(역배)' : '')).join(', ') || '-'}</small></div>)}</div>
+      <div className="s">{Object.keys(got).length ? Object.keys(got).map(k => `${nm(+k)} +${got[+k]}`).join(' · ') : '아무도 못 가져감'}</div></>;
   } else if (f.t === 'change') {
     const gain = f.gain as Record<number, number>; const moved = f.moved as number[];
     inner = <><div className="k">옮겨진 말</div>

@@ -10,6 +10,7 @@ import { tip3d } from '../ui/tip';
 import { World } from './World';
 import { type Quality, feltColor, prefs, usePrefs } from '../prefs';
 import { setCardBack } from './textures';
+import { AutoDpr, detectSoftware, usePerf } from './perf';
 
 function Director() {
   const { scene, camera, gl, size } = useThree();
@@ -52,6 +53,30 @@ function Director() {
   return null;
 }
 
+/** 성능 지키기: 소프트웨어 렌더링이면 품질을 낮추고 안내, 끊기면 해상도 배율을 저절로 낮춘다(perf.ts) */
+function PerfGuard() {
+  const gl = useThree(s => s.gl); const setDpr = useThree(s => s.setDpr);
+  const quality = usePrefs(s => s.quality); const auto = usePrefs(s => s.autoQuality);
+  const ad = useRef<AutoDpr | null>(null);
+  const cap = Math.min(DPR[quality][1], window.devicePixelRatio || 1);
+  useEffect(() => {
+    if (!detectSoftware(gl)) return;
+    usePerf.setState({ software: true });
+    // 한 번만 낮춘다(사용자가 다시 올리면 그대로 둔다)
+    let done = false; try { done = sessionStorage.getItem('c3-soft-low') === '1'; sessionStorage.setItem('c3-soft-low', '1'); } catch { /* 저장소를 못 쓰면 매번 */ }
+    if (!done && prefs().quality !== 'low') prefs().set({ quality: 'low' });
+  }, [gl]);
+  useEffect(() => {
+    if (!ad.current) ad.current = new AutoDpr(cap);
+    const v = ad.current.reset(cap); setDpr(v); usePerf.setState({ dpr: v });
+  }, [cap, auto, setDpr]);
+  useFrame((_, dt) => {
+    if (!auto || !ad.current) return;
+    const v = ad.current.tick(dt); if (v != null) { setDpr(v); usePerf.setState({ dpr: v }); }
+  });
+  return null;
+}
+
 /** 그래픽 품질별 해상도 배율(화면 픽셀 대비 최대) */
 const DPR: Record<Quality, [number, number]> = { low: [1, 1], mid: [1, 1.5], high: [1, 2] };
 
@@ -70,6 +95,7 @@ export function SceneView() {
       camera={{ fov: 50, near: 1, far: 4000, position: [0, 150, 128] }}
       onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0; }}>
       <Director />
+      <PerfGuard />
     </Canvas>
   );
 }

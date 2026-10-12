@@ -16,6 +16,7 @@ import {
 import {
   CHG_PIECES, GESTURES, STACK_ROWS, balancePick, balanceSay, balanceThree, caveDecider, caveGo, caveGuard, changeGuess, changeMore, changeMove,
   gestSkip, gestTurn, gesture, stackReport, stackWide, tenAll, tenGrab, tenPlace, tenTurn,
+  foreAct, foreAsk, foreTurn, forkPick, forkRev, liarAdd, liarBid, liarCall, liarTurn,
 } from './minigames3';
 import type { Card, CurlShot, GameState, Hand, MidCrit, Suit } from './types';
 
@@ -92,7 +93,7 @@ export type Action =
   | { type: 'midPick'; seat: number; card: Card }
   | { type: 'gesture'; seat: number; g: number }
   | { type: 'gestSkip'; seat: number; item: Card }
-  | { type: 'stack'; seat: number; h: number; ms?: number | null; done?: boolean }
+  | { type: 'stack'; seat: number; h: number; ms?: number | null; done?: boolean; cols?: number[] }
   | { type: 'stackWide'; seat: number; item: Card }
   | { type: 'chgMove'; seat: number; piece: number; cell: number }
   | { type: 'chgMore'; seat: number; item: Card }
@@ -104,7 +105,14 @@ export type Action =
   | { type: 'tenAll'; seat: number; item: Card }
   | { type: 'balSay'; seat: number; opts: string[] }
   | { type: 'balThree'; seat: number; item: Card }
-  | { type: 'balPick'; seat: number; k: number };
+  | { type: 'balPick'; seat: number; k: number }
+  | { type: 'liarBid'; seat: number; suit: Suit; n: number }
+  | { type: 'liarCall'; seat: number }
+  | { type: 'liarAdd'; seat: number; item: Card }
+  | { type: 'foreAct'; seat: number; go: boolean }
+  | { type: 'foreAsk'; seat: number; item: Card; to: number; v: number }
+  | { type: 'forkPick'; seat: number; k: number }
+  | { type: 'forkRev'; seat: number; item: Card };
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -286,6 +294,13 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'tenAll': return mg.id === 'ten' && tenTurn(mg) === a.seat && !mg.all ? null : '내 차례에 놓기 전에 써요.';
     case 'balSay': return mg.id === 'balance' && mg.step === 'say' && mg.ord[mg.ci] === a.seat && Array.isArray(a.opts) && a.opts.length === (mg.three ? 3 : 2) && a.opts.every(x => typeof x === 'string' && x.trim()) && new Set(a.opts.map(x => x.trim())).size === a.opts.length ? null : `서로 다른 ${mg.id === 'balance' && mg.three ? 3 : 2}가지를 적으세요.`;
     case 'balThree': return mg.id === 'balance' && mg.step === 'say' && mg.ord[mg.ci] === a.seat && !mg.three ? null : '선일 때 주제를 내기 전에 써요.';
+    case 'liarBid': return mg.id === 'liar' && mg.step === 'bid' && liarTurn(mg) === a.seat && SUIT_SET.has(a.suit) && Number.isInteger(a.n) && a.n >= 1 && a.n > (mg.bid?.n || 0) ? null : (mg.id === 'liar' && mg.bid ? `${mg.bid.n + 1}장 이상으로 올려야 해요.` : '지금은 선언할 수 없어요.');
+    case 'liarCall': return mg.id === 'liar' && mg.step === 'bid' && liarTurn(mg) === a.seat && !!mg.bid ? null : '지금은 외칠 수 없어요.';
+    case 'liarAdd': return mg.id === 'liar' && mg.step === 'judge' && !!mg.bid && U(a.item) === mg.bid.suit && (a.seat in mg.hands) ? null : '선언한 문양의 아이템만 낼 수 있어요.';
+    case 'foreAct': return mg.id === 'fore' && foreTurn(mg) === a.seat ? null : '내 차례가 아니에요.';
+    case 'foreAsk': return mg.id === 'fore' && foreTurn(mg) === a.seat && !(a.seat in mg.asks) && a.to !== a.seat && (a.to in mg.fore) && Number.isInteger(a.v) && a.v >= 1 && a.v <= 13 ? null : '내 차례에 승부·포기 전에 써요.';
+    case 'forkPick': return mg.id === 'fork' && mg.step === 'pick' && (a.seat in mg.won) && !(a.seat in mg.picks) && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.row.length ? null : '지금은 고를 수 없어요.';
+    case 'forkRev': return mg.id === 'fork' && (mg.step === 'pick' || mg.step === 'wait') && (a.seat in mg.won) && !mg.rev[a.seat] ? null : '공개 전에 써요.';
     case 'balPick': return mg.id === 'balance' && mg.step === 'pick' && (a.seat in mg.pts) && !(a.seat in mg.picks) && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.opts.length ? null : '지금은 고를 수 없어요.';
   }
   return null;
@@ -402,7 +417,7 @@ function run(S: GameState, uid: string, a: Action): false | void {
     case 'midPick': return midPick(S, a.seat, a.card);
     case 'gesture': return gesture(S, a.seat, a.g);
     case 'gestSkip': return gestSkip(S, a.seat, a.item);
-    case 'stack': return stackReport(S, a.seat, a.h, a.ms ?? null, !!a.done);
+    case 'stack': return stackReport(S, a.seat, a.h, a.ms ?? null, !!a.done, a.cols);
     case 'stackWide': return stackWide(S, a.seat, a.item);
     case 'chgMove': return changeMove(S, a.seat, a.piece, a.cell);
     case 'chgMore': return changeMore(S, a.seat, a.item);
@@ -415,5 +430,12 @@ function run(S: GameState, uid: string, a: Action): false | void {
     case 'balSay': return balanceSay(S, a.seat, a.opts);
     case 'balThree': return balanceThree(S, a.seat, a.item);
     case 'balPick': return balancePick(S, a.seat, a.k);
+    case 'liarBid': return liarBid(S, a.seat, a.suit, a.n);
+    case 'liarCall': return liarCall(S, a.seat);
+    case 'liarAdd': return liarAdd(S, a.seat, a.item);
+    case 'foreAct': return foreAct(S, a.seat, !!a.go);
+    case 'foreAsk': return foreAsk(S, a.seat, a.item, a.to, a.v);
+    case 'forkPick': return forkPick(S, a.seat, a.k);
+    case 'forkRev': return forkRev(S, a.seat, a.item);
   }
 }

@@ -31,6 +31,8 @@ function allCards(S: GameState): Card[] {
     for (const k of ['hands', 'won']) if (m[k]) Object.values(m[k] as Record<string, Card[]>).forEach(h => out.push(...h));
     if (m.piles) (m.piles as Card[][]).forEach(p => out.push(...p));
     if (m.slots) (m.slots as Card[][]).forEach(p => out.push(...p));
+    if (m.id === 'fore') out.push(...Object.values(m.fore as Record<string, Card>));
+    if (m.id === 'fork') out.push(...(m.row as Card[]));
     if (m.deckCard) out.push(m.deckCard as Card);
     if (m.id === 'mid') out.push(...Object.values(m.picks as Record<string, Card>));
     if (m.flip) Object.values(m.flip as Record<string, { c: Card }>).forEach(f => out.push(f.c));
@@ -96,7 +98,12 @@ function candidates(S: GameState, seat: number): Action[] {
   c.push({ type: 'caveGo', seat, stay: rng() < .7 });
   if (m?.id === 'ten') { for (let k = 0; k < 3; k++) c.push({ type: 'tenPlace', seat, slot: k }); c.push({ type: 'tenGrab', seat, n: m.flipN, ms: Math.floor(rng() * 500) }); }
   if (m?.id === 'balance') { c.push({ type: 'balSay', seat, opts: m.three ? ['가', '나', '다'] : ['가', '나'] }); for (let k = 0; k < 3; k++) c.push({ type: 'balPick', seat, k }); }
+  if (m?.id === 'liar') { const n = (m.bid?.n || 0) + 1 + Math.floor(rng() * 2); for (const su of ['S', 'H', 'D', 'C'] as const) c.push({ type: 'liarBid', seat, suit: su, n }); c.push({ type: 'liarCall', seat }); }
+  c.push({ type: 'foreAct', seat, go: rng() < .6 });
+  if (m?.id === 'fork') for (let k = 0; k < m.row.length; k++) c.push({ type: 'forkPick', seat, k });
   for (const it of its) {
+    c.push({ type: 'liarAdd', seat, item: it }, { type: 'forkRev', seat, item: it });
+    for (let t = 0; t < S.seats.length; t++) c.push({ type: 'foreAsk', seat, item: it, to: t, v: 1 + Math.floor(rng() * 13) });
     c.push({ type: 'gestSkip', seat, item: it }, { type: 'stackWide', seat, item: it }, { type: 'chgMore', seat, item: it }, { type: 'caveGuard', seat, item: it }, { type: 'tenAll', seat, item: it }, { type: 'balThree', seat, item: it });
     c.push({ type: 'duelFake', seat, item: it }, { type: 'udRegrip', seat, item: it, n: Math.floor(rng() * 4) }, { type: 'curlNoWall', seat, item: it },
       { type: 'linePeek', seat, item: it }, { type: 'foldSafe', seat, item: it }, { type: 'chainTwo', seat, item: it },
@@ -257,8 +264,8 @@ describe('applyAction', () => {
     expect(S.seats[i].tokens).toEqual(['H']);
   });
 
-  it('새 미니게임 14개: 인원마다 판정이 허용한 행동만으로 끝까지 가고 카드 수가 보존된다', () => {
-    const ids: MgId[] = ['nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance'];
+  it('새 미니게임 17개: 인원마다 판정이 허용한 행동만으로 끝까지 가고 카드 수가 보존된다', () => {
+    const ids: MgId[] = ['nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance', 'liar', 'fore', 'fork'];
     for (const id of ids) for (let n = MG[id].min; n <= MG[id].max; n++) for (let g = 0; g < 6; g++) {
       const r = playMg(id, n, 9000 + g * 31 + n);
       if (!r.done) throw new Error(`${id} ${n}인: 끝나지 않음 (seed ${9000 + g * 31 + n}) ${JSON.stringify(r.S.mg).slice(0, 900)} end=${JSON.stringify(r.S.mgEnd)}`);
@@ -318,6 +325,30 @@ describe('applyAction', () => {
     m.total = 48; m.hands[a][0] = 'H9';
     applyAction(S, 'u' + a, { type: 'balloon', seat: a, card: 'H9' });
     expect(S.lastRank).toEqual([[b], [a]]);
+  });
+
+  it('합이 10: 10 한 장도 잡을 수 있고, 그 자리 더미만 가져간다', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(31));
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.board = Array(6).fill('ten'); S.die = 1; S.phase = 'clubs'; S.turn = null; startMinigame(S);
+    const m = S.mg as unknown as { slots: Card[][]; flipN: number; hands: Record<number, Card[]> };
+    m.slots = [['H3', 'S10'], ['D4'], []];
+    const before = m.hands[1].length;
+    expect(applyAction(S, 'u1', { type: 'tenGrab', seat: 1, n: m.flipN, ms: 200 }).ok).toBe(true);
+    T += 1000; advanceTimers(S);
+    expect(m.hands[1].length).toBe(before + 2); expect(m.slots[0]).toEqual([]); expect(m.slots[1]).toEqual(['D4']);
+  });
+
+  it('합이 10: 세 장의 합이 10이어도 잡고 세 자리를 모두 가져간다', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(32));
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.board = Array(6).fill('ten'); S.die = 1; S.phase = 'clubs'; S.turn = null; startMinigame(S);
+    const m = S.mg as unknown as { slots: Card[][]; flipN: number; hands: Record<number, Card[]> };
+    m.slots = [['H2'], ['S3'], ['D5']];
+    const before = m.hands[2].length;
+    expect(applyAction(S, 'u2', { type: 'tenGrab', seat: 2, n: m.flipN, ms: 200 }).ok).toBe(true);
+    T += 1000; advanceTimers(S);
+    expect(m.hands[2].length).toBe(before + 3); expect(m.slots).toEqual([[], [], []]);
   });
 
   it('2인은 메인 턴 2바퀴, 토큰 만들기는 한 라운드에 1번', () => {
