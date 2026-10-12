@@ -117,6 +117,8 @@ export const BLIMIT = 50;
 export function balloonStart(S: GameState, ord: number[]): void {
   const hands: Record<number, Card[]> = {}; ord.forEach(i => hands[i] = buildBundle(S, 3));
   S.mg = { id: 'balloon', bundle: [], hands, pile: [], total: 0, alive: ord.slice(), ci: 0, out: [], last: null, pops: 0 };
+  // 2·3인은 각자 동전 1개(목숨 2개째)를 받는다(사용자 2026-10-13)
+  if (ord.length <= 3) { const coins: Record<number, number> = {}; ord.forEach(i => coins[i] = 1); (S.mg as BalloonMg).coins = coins; }
 }
 export function balloonPlay(S: GameState, i: number, c: Card, item: Card | null): false | undefined {
   const m = mgOf<BalloonMg>(S); if (m.alive[m.ci] !== i || !m.hands[i].includes(c)) return false;
@@ -125,6 +127,12 @@ export function balloonPlay(S: GameState, i: number, c: Card, item: Card | null)
   m.total = item ? Math.max(0, m.total - v) : m.total + v; m.last = { i, c, sub: !!item, total: m.total };
   const x = draw(S); if (x) m.hands[i].push(x);
   log(S, `풍선 불기: 자리 ${i + 1} ${cname(c)}${item ? ' (빼기)' : ''} → 합 ${m.total}`);
+  if (m.total > BLIMIT && m.coins && m.coins[i] > 0) {
+    // 2·3인: 동전이 있으면 내놓고 버틴다. 손패는 그대로 들고 펑 한 사람부터 합 0에서 다시
+    m.coins[i]--; fx(S, { t: 'pop', seats: [i], total: m.total, small: true, life: true }); log(S, `펑! 자리 ${i + 1} (합 ${m.total}) 동전을 내놓고 버텼다.`);
+    S.deck.push(...m.pile); m.pile = []; shuffle(S.deck); m.total = 0; m.pops++; m.last = null;
+    m.ci = m.alive.indexOf(i); return;
+  }
   if (m.total > BLIMIT) {
     fx(S, { t: 'pop', seats: [i], total: m.total }); log(S, `펑! 자리 ${i + 1} 탈락 (합 ${m.total}).`);
     const idx = m.alive.indexOf(i); m.out.push([i]); m.alive.splice(idx, 1);
@@ -245,7 +253,7 @@ function countPan(S: GameState): void {
     if (swapped) shuffle(S.deck);
   }
 }
-export function countOpenAt(m: CountMg): number { return m.t0 + m.seq!.length * CFLIP; }
+export function countOpenAt(m: CountMg): number { return m.t0 + (m.seq ? m.seq.length : 0) * CFLIP; }
 export function countArm(S: GameState, i: number, item: Card): false | undefined {
   const m = mgOf<CountMg>(S); if (m.arm[i] || (i in m.ans)) return false; if (!useItem(S, i, item)) return false;
   m.arm[i] = true; log(S, `몇 장이었지: 자리 ${i + 1} 아이템(±1)`);

@@ -18,6 +18,9 @@ export interface UiMode {
   aim?: number[];
   /** 스피드: 골라 둔 손패 */
   spc?: Card;
+  /** 뭐가 바뀌었지: 옮길 말 / 고른 말들 */
+  chg?: number;
+  cg?: number[];
   showHand?: boolean;
   rulesAgain?: boolean;
   log?: boolean;

@@ -8,9 +8,10 @@ import { useEffect, useRef, useState } from 'react';
 import { mgLook } from '../scene/textures';
 import { digitalRules } from './mgtext';
 import { CurlPractice } from './CurlPad';
+import { PIECE_COL } from './MgPanel3';
 
 /** 미니게임 카드 앞면 도구 아이콘 → 이름 */
-const TOOL: Record<string, string> = { '🂠': '카드', '🎲': '주사위', '✊': '손', '🪙': '동전', '1·2·3': '판 뒷면', '🗣': '말하기', '✋': '손가락' };
+const TOOL: Record<string, string> = { '🂠': '카드', '🎲': '주사위', '✊': '손', '🪙': '동전', '1·2·3': '판 뒷면', '🗣': '말하기', '✋': '손가락', '🙌': '몸짓', '♟': '말·판' };
 
 export function RulesScreen({ S }: { S: GameState }) {
   const me = useStore(s => s.me); const i = useStore(s => s.ctl); const ui = useStore(s => s.ui);
@@ -64,7 +65,23 @@ export function Cutin({ S, f }: { S: GameState; f: Fx }) {
   );
 }
 
-const EMO: Record<Hand, string> = { S: '✌️', R: '✊', P: '✋' };
+/** 메인 턴 아이템 컷신: 누가 · 어떤 아이템을 · (누구에게) · 무슨 효과로 썼는지. ♣ 컷신과 같은 모양 */
+export function ItemCutin({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
+  const c = f.card as Card; const [i, tg] = f.seats || [0]; const su = U(c);
+  const verb = f.kind === 'attack' ? '공격' : f.kind === 'defend' ? '방어' : '사용';
+  return (
+    <div className={`cutin show item${out ? ' out' : ''}`}>
+      <div className="shade" /><div className="band" />
+      <div className="who"><span className="av" style={{ background: SEATCOL[i % 5] }} /><span className="nm">{seatName(S, i)}</span>
+        {tg != null && <><span className="arrow" aria-hidden="true">→</span><span className="av sm" style={{ background: SEATCOL[tg % 5] }} /><span className="nm sm">{seatName(S, tg)}</span></>}</div>
+      <div className="card" style={{ color: SUITCOL[su] }}><span className="rk">{RL(R(c))}</span><span className="s1">{SYM[su]}</span><span className="s2">{SYM[su]}</span></div>
+      <div className="eff">{cname(c)} {verb} · {String(f.eff || '')}</div>
+      {Array.isArray(f.cards) && (f.cards as Card[]).length > 0 && <div className="cutcards">{(f.cards as Card[]).map(x => <MCard key={x} c={x} />)}</div>}
+    </div>
+  );
+}
+
+const EMO: Record<Hand, string> ={ S: '✌️', R: '✊', P: '✋' };
 export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
   const nm = (k: number) => seatName(S, k);
   const who = f.seats && f.seats.length ? <div className="s">{names(S, f.seats)}</div> : null;
@@ -74,7 +91,7 @@ export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
     if (f.bust) cls += ' bad';
     inner = <><div className="k">{f.bust ? '와르르' : '굴림'}</div><div className="b">{both ? `${both[0]} · ${both[1]} → ${f.v}` : String(f.v)}</div>{f.bust ? <div className="s">기준 {String(f.th)} 이하!</div> : null}{who}</>;
   } else if (f.t === 'title') inner = <><div className="k">미니게임 시작</div><div className="b">{MG[f.mg as keyof typeof MG].name}</div></>;
-  else if (f.t === 'pop') { cls += ' bad'; inner = <><div className="b">{f.bomb ? '펑!' : '빵!'}</div>{who}<div className="s">{f.small ? '폭탄 1개' : '탈락'}</div></>; }
+  else if (f.t === 'pop') { cls += ' bad'; inner = <><div className="b">{f.bomb ? '펑!' : '빵!'}</div>{who}<div className="s">{f.small ? (f.bomb ? '폭탄 1개' : '동전을 내놓고 버텼다') : '탈락'}</div></>; }
   else if (f.t === 'rps') {
     const picks = f.picks as Record<number, Hand>; const lead = f.lead as number; const losers = f.losers as number[];
     inner = <><div className="k">하나 둘 셋!</div>
@@ -108,7 +125,7 @@ export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
     const grip = f.grip as Record<number, number>;
     inner = <><div className="k">{nm(f.caller as number)} {String(f.call)} · {nm(f.shouter as number)} "{f.up ? '위' : '아래'}!"</div>
       <div className="b">합 {String(f.sum)}</div>
-      <div className="s">{Object.keys(grip).map(k => `${nm(+k)} ${'🪙'.repeat(grip[+k]) || '0'}`).join(' · ')}</div>
+      <div className="s">{Object.keys(grip).map(k => `${nm(+k)} 동전 ${grip[+k]}개`).join(' · ')}</div>
       <div className="s">{nm(f.who as number)} +{String(f.gain)}점</div></>;
   } else if (f.t === 'curl') {
     const got = f.got as Record<number, number>;
@@ -126,6 +143,21 @@ export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
     inner = <><div className="k">공개! · {({ mid: '가운데', hi: '가장 큰', lo: '가장 작은' } as Record<string, string>)[f.crit as string]} 숫자 {String(f.target)}</div>
       <div className="mini-cards">{ks.map(k => <div key={k} className="col" style={{ opacity: win.includes(k) ? 1 : .55 }}><MCard c={picks[k]} /><small>{nm(k)}</small></div>)}{dc && <div className="col"><MCard c={dc} /><small>덱</small></div>}</div>
       <div className="s">{f.void ? '덱 카드가 걸려 무산!' : win.length ? names(S, win) + ' 1점' : '아무도 없음'}</div></>;
+  } else if (f.t === 'change') {
+    const gain = f.gain as Record<number, number>; const moved = f.moved as number[];
+    inner = <><div className="k">옮겨진 말</div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>{moved.map(p => <i key={p} className="piece big" style={{ background: PIECE_COL[p] }} />)}</div>
+      <div className="s">{Object.keys(gain).map(k => `${nm(+k)} +${gain[+k]}`).join(' · ')}</div></>;
+  } else if (f.t === 'cave') {
+    const faces = f.faces as number[];
+    if (f.collapse) cls += ' bad';
+    inner = <><div className="k">굴림</div><div className="b">{faces.map(v => ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][v]).join(' ')}</div>
+      <div className="s">{f.collapse ? '무너졌다!' : `${String(f.turn)}턴 버팀 · 빼 둔 1 ${String(f.ones)}개`}{f.kept ? ` · 1 보호 ${String(f.kept)}` : ''}</div></>;
+  } else if (f.t === 'balance') {
+    const opts = f.opts as string[]; const picks = f.picks as Record<number, number>; const win = f.win as number | null;
+    inner = <><div className="k">공개!</div>
+      <div className="s" style={{ display: 'grid', gap: 4 }}>{opts.map((o, k) => <span key={k} style={{ fontWeight: k === win ? 700 : 400, color: k === win ? 'var(--brass)' : undefined }}>{o} · {Object.keys(picks).filter(j => picks[+j] === k).map(j => nm(+j)).join(', ') || '없음'}</span>)}</div>
+      <div className="s">{win == null ? '동점! 아무도 점수 없음' : `${opts[win]} +${String(f.gain)}점`}</div></>;
   } else if (f.t === 'line') {
     const stop = f.stop as Record<number, Card>;
     inner = <><div className="b">멈춰!</div><div className="s">{nm(f.seat as number)} {cname(f.c as Card)} · 더 작은 카드: {Object.keys(stop).map(k => `${nm(+k)} ${cname(stop[+k])}`).join(', ')}</div></>;

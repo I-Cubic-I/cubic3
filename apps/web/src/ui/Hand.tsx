@@ -3,10 +3,11 @@
    아이템: 지금 쓸 수 있는 것만 드러나 빛나고, 나머지는 살짝 나온 채 숨어 있다가 커서를 가까이 가져가면 올라온다.
    (규칙 설명 때는 ♣를 화면 가운데로 끌어 놓아 쓴다. 미니게임에서는 눌러서 쓴다) */
 import { useEffect, useRef, useState } from 'react';
-import { type Card, type GameState, R, RL, SYM, U, cname, isItem } from '@cubic3/engine';
+import { type Card, type GameState, R, RL, SUITS, SYM, U, canAct, cname, costFor, isItem } from '@cubic3/engine';
+import { SUITCOL } from '../game';
 import { useStore } from '../store';
 import { type Drop, cmd, dropCard, getWorld } from '../flow';
-import { handSort } from './bits';
+import { Tok, handSort } from './bits';
 import { setDragging } from './tip';
 import { mgItemUse, pressItemCard } from './MgPanel';
 
@@ -54,6 +55,7 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
   const S = useStore(s => s.S)!;
   const sel = useStore(s => s.sel);
   const toggleSel = useStore(s => s.toggleSel);
+  const me = useStore(s => s.me); const uiMode = useStore(s => s.ui.mode);
   const seen = useRef(new Set<Card>());
   const [, force] = useState(0);
   const [near, setNear] = useState(false);
@@ -71,7 +73,23 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
   const rightPad = !items && !['mg', 'clubs'].includes(S.phase) && window.innerWidth > 720 ? 250 : 0;
   const avail = Math.max(cw * 2, window.innerWidth - leftPad - rightPad);
   const w = items ? iW : Math.min(860, avail);
-  const step = items ? iStep : n > 1 ? Math.min(cw * .82, (w - cw - 40) / (n - 1)) : 0;
+  // 숫자 손패는 문양별 묶음 사이를 조금 띄운다
+  const G = items ? 0 : cw * .22;
+  const brk = (k: number) => !items && k > 0 && U(h[k]) !== U(h[k - 1]);
+  const nb = h.reduce((a, _, k) => a + (brk(k) ? 1 : 0), 0);
+  const step = items ? iStep : n > 1 ? Math.max(cw * .2, Math.min(cw * .82, (w - cw - 40 - nb * G) / (n - 1))) : 0;
+  const xs: number[] = []; h.forEach((_, k) => xs.push(k ? xs[k - 1] + step + (brk(k) ? G : 0) : 0));
+  const x0 = items ? 0 : w / 2 - cw / 2 - (xs[n - 1] || 0) / 2;
+  // 지금 토큰을 만들 수 있는 문양: 그 묶음(쓰일 카드)을 빛내고 위에 버튼을 띄운다
+  const tok: { su: string; cards: Card[] }[] = [];
+  if (!items && !uiMode) {
+    const cost = costFor(S, seat);
+    for (const su of SUITS) {
+      const cards = S.seats[seat].hand.filter(c => U(c) === su && !isItem(c)).sort((a, b) => R(a) - R(b)).slice(0, cost);
+      if (cards.length === cost && !canAct(S, me, { type: 'token', seat, cards })) tok.push({ su, cards });
+    }
+  }
+  const tokOf = (c: Card) => tok.find(g => g.cards.includes(c));
   const prevSeen = seen.current;
   useEffect(() => { seen.current = new Set(h); });
   useEffect(() => { const f = () => force(x => x + 1); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
@@ -132,9 +150,9 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
         const hide = items && !look.show && !near && !s;
         const style = items
           ? { left: k * step, transform: `translateY(${hide ? ch - 52 : s ? -18 : 0}px) rotate(${f * 4}deg)`, zIndex: k + 1 }
-          : { left: w / 2 - cw / 2 + f * step, transform: `translateY(${(s ? -26 : 0) + Math.abs(f) * 5}px) rotate(${f * (n > 7 ? 3.5 : 5)}deg)`, zIndex: k + 1 };
+          : { left: x0 + xs[k], transform: `translateY(${(s ? -26 : 0) + Math.abs(f) * 5}px) rotate(${f * (n > 7 ? 3.5 : 5)}deg)`, zIndex: k + 1, ...(tokOf(c) ? { '--tc': SUITCOL[U(c)] } : {}) } as React.CSSProperties;
         return (
-          <div key={c} className={`hcard ${U(c)}${isItem(c) ? ' item' : ''}${look.lit ? ' lit' : ''}${s ? ' sel' : ''}${isNew ? ' new' : ''}`} data-h={c} data-note={note} tabIndex={0} role="button" aria-pressed={s} aria-label={cname(c)}
+          <div key={c} className={`hcard ${U(c)}${isItem(c) ? ' item' : ''}${look.lit ? ' lit' : ''}${tokOf(c) ? ' tokc' : ''}${s ? ' sel' : ''}${isNew ? ' new' : ''}`} data-h={c} data-note={note} tabIndex={0} role="button" aria-pressed={s} aria-label={cname(c)}
             style={style}
             onPointerDown={e => { if (e.button > 0) return; if (items && S.phase === 'mg') return; drag.current = { c, el: e.currentTarget, x: e.clientX, y: e.clientY, on: false }; }}
             onClick={() => press(c)}
@@ -142,6 +160,11 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
             <span className="rk">{RL(R(c))}</span><span className="su">{SYM[U(c)]}</span>{isItem(c) && <span className="tg">아이템</span>}
           </div>
         );
+      })}
+      {tok.map(g => {
+        const ks = g.cards.map(c => h.indexOf(c)); const cx = x0 + ks.reduce((a, k) => a + xs[k], 0) / ks.length + cw / 2;
+        return <button key={'t' + g.su} className="tokbtn" style={{ left: cx, '--tc': SUITCOL[g.su] } as React.CSSProperties} onClick={() => cmd('qtoken', { s: g.su })}>
+          <Tok s={g.su} /> {SYM[g.su as 'S']} 토큰 만들기 · {g.cards.length}장</button>;
       })}
     </div>
   );

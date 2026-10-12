@@ -73,11 +73,13 @@ function UpDown({ S, i, selItem }: { S: GameState; i: number | null; selItem: Ca
   const myG = i != null && i in m.grip ? m.grip[i] : null;
   let me_: React.ReactNode = null;
   const nums = (n: number, c: string, lbl?: (v: number) => string) => <div className="nums">{Array.from({ length: n + 1 }, (_, v) => <button key={v} className="num" onClick={() => cmd(c, { n: v })}>{lbl ? lbl(v) : v}</button>)}</div>;
-  if (m.step === 'grip') me_ = i != null && myG == null ? <><div className="line">동전을 몇 개 쥘까요? <small>(0~{m.coins}개, 아무도 모르게)</small></div>{nums(m.coins, 'udgrip', v => '🪙'.repeat(v) || '0')}</> : <div className="line">{myG}개를 쥐었어요 · 다른 사람을 기다리는 중</div>;
+  // 동전 수 고르기: 숫자와 동전을 한 줄로(동전 아이콘이 줄바꿈되지 않게)
+  const coinPick = (c: string) => <div className="coinbtns">{Array.from({ length: m.coins + 1 }, (_, v) => <button key={v} className="coinbtn" aria-label={`동전 ${v}개`} onClick={() => cmd(c, { n: v })}><b>{v}</b><span className="coins" aria-hidden="true">{v ? Array.from({ length: v }, (_, k) => <i key={k} className="coin" />) : '빈손'}</span></button>)}</div>;
+  if (m.step === 'grip') me_ = i != null && myG == null ? <><div className="line">동전을 몇 개 쥘까요? <small>(0~{m.coins}개, 아무도 모르게)</small></div>{coinPick('udgrip')}</> : <div className="line">{myG}개를 쥐었어요 · 다른 사람을 기다리는 중</div>;
   if (m.step === 'call') me_ = i === caller ? <><div className="line">내 손 {myG}개 · 모두의 동전 합을 짐작해 부르세요 (0~{max})</div>{nums(max, 'udcall')}</> : <div className="line">{nm(caller)}이 숫자를 부르는 중 · 내 손 {myG}개</div>;
   if (m.step === 'shout') me_ = i === sh ? <>
     <div className="line"><strong>{nm(caller)}: {m.call}!</strong> · 내 손 {myG}개 · 합이 {m.call}보다 클까 작을까?</div>
-    {selItem && !m.regrip ? <><div className="line"><strong>{cname(selItem)}</strong>: 다시 쥘 동전 수</div>{nums(m.coins, 'udre')}</> :
+    {selItem && !m.regrip ? <><div className="line"><strong>{cname(selItem)}</strong>: 다시 쥘 동전 수</div>{coinPick('udre')}</> :
       <div className="bigbtns"><button className="btn primary big" onClick={() => cmd('udshout', { up: 1 })}>위! ▲</button><button className="btn primary big" onClick={() => cmd('udshout', { up: 0 })}>아래! ▼</button></div>}
   </> : <div className="line"><strong>{nm(caller)}: {m.call}!</strong> · {nm(sh)}이 외치는 중{myG != null ? ` · 내 손 ${myG}개` : ''}</div>;
   const L = m.last;

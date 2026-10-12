@@ -1,5 +1,5 @@
 /* 상태를 읽는 도우미 (누구 차례인지, 내 자리, 이름) */
-import { type GameState, countOpenAt, curlTurn, now, udCaller, udShouter } from '@cubic3/engine';
+import { type GameState, caveDecider, countOpenAt, curlTurn, gestTurn, now, tenTurn, udCaller, udShouter } from '@cubic3/engine';
 
 export const SEATCOL = ['#2f5fc8', '#d3302f', '#e0b100', '#2e9450', '#8a5cc8'];
 export const SUITCOL: Record<string, string> = { S: '#2f5fc8', H: '#d3302f', D: '#e0b100', C: '#2e9450' };
@@ -26,6 +26,8 @@ export function whoActs(S: GameState | null, me: string): number | null {
   if (S.phase === 'main') return S.turn ? S.turn.seat : null;
   if (S.phase === 'defense') return S.pending ? S.pending.target : null;
   if (S.phase === 'reward') return S.reward ? S.reward.order[S.reward.pi] : null;
+  // 미니게임이 끝나 결과를 보여 주는 중이면 아무도 차례가 아니다
+  if (S.phase === 'mg' && S.mgEnd) return null;
   if (S.phase === 'mg' && S.mg) {
     const m = S.mg;
     if (m.id === 'hold') return m.ord[m.ci];
@@ -50,6 +52,12 @@ export function whoActs(S: GameState | null, me: string): number | null {
     if (m.id === 'fold') return m.step === 'say' ? m.ord[m.ci] : pickOne(m.ord.filter(k => !(k in m.ans)));
     if (m.id === 'chain') return m.step === 'point' ? pickOne(m.ord.filter(k => !(k in m.aim))) : m.step === 'pass' ? m.cur : null;
     if (m.id === 'mid') return m.step === 'pick' ? pickOne(m.ord.filter(k => !(k in m.picks))) : null;
+    if (m.id === 'gesture') return gestTurn(m);
+    if (m.id === 'stack') return m.step === 'play' ? pickOne(m.ord.filter(k => !m.done[k])) : null;
+    if (m.id === 'change') return m.step === 'move' ? m.changer : m.step === 'guess' ? pickOne(m.ord.filter(k => k !== m.changer && !(k in m.guesses))) : null;
+    if (m.id === 'cave') return caveDecider(m);
+    if (m.id === 'ten') return tenTurn(m);
+    if (m.id === 'balance') return m.step === 'say' ? m.ord[m.ci] : pickOne(m.ord.filter(k => !(k in m.picks)));
   }
   return null;
 }

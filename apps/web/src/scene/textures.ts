@@ -58,6 +58,8 @@ const MGLOOK: Record<string, [string, string]> = {
   rps: ['#a9bdff', '#6a7fe0'], vault: ['#b9c3d6', '#6f7d99'], count: ['#9cc3ea', '#4f86c6'], race: ['#8fd0a4', '#3f9a63'],
   nunchi: ['#ffc58a', '#d9822b'], updown: ['#e6d38a', '#a8902a'], curling: ['#b8e0f0', '#4a9cc0'], line: ['#d0c4f0', '#7d68c4'],
   speed: ['#ffa8c8', '#d04a7e'], fold: ['#f0c0a8', '#c47458'], chain: ['#c8e8a0', '#6aa040'], mid: ['#a8e0dc', '#3a9a94'],
+  gesture: ['#ffd0a0', '#d97a3a'], stack: ['#b8c8f0', '#5a72c4'], change: ['#c8f0b8', '#5aa04a'], cave: ['#d8c8a8', '#8a6a3a'],
+  ten: ['#f0b8c8', '#c44a6a'], balance: ['#d0d8ff', '#6a74c4'],
 };
 export const mgLook = (id: string): [string, string] => MGLOOK[id] || ['#cfd4dc', '#7b8494'];
 export function floppyTex(id: MgId): THREE.CanvasTexture {

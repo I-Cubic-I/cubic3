@@ -36,6 +36,13 @@ function candidates(S: GameState, seat: number): Action[] {
   if (m?.id === 'fold') c.push({ type: 'foldSay', seat, text: '테스트 조건 ' + Math.floor(Math.random() * 1e5) });
   if (m?.id === 'chain') { const o = m.ord.filter(x => x !== seat); c.push({ type: 'chainAim', seat, targets: o.slice(0, 2) }, { type: 'chainAim', seat, targets: o.slice(0, 1) }, { type: 'chainPass', seat, k: 0 }, { type: 'chainPass', seat, k: 1 }); }
   if (m?.id === 'mid') (m.hands[seat] || []).forEach(card => c.push({ type: 'midPick', seat, card }));
+  // 2026-10-13 추가
+  if (m?.id === 'gesture') c.push({ type: 'gesture', seat, g: m.pos < m.seq.length ? m.seq[m.pos] : Math.floor(Math.random() * 8) });
+  if (m?.id === 'stack') c.push({ type: 'stack', seat, h: Math.min(8, (m.h[seat] || 0) + 1), ms: 8000 + Math.floor(Math.random() * 15000) });
+  if (m?.id === 'change') { for (let p = 0; p < 8; p++) c.push({ type: 'chgMove', seat, piece: p, cell: Math.floor(Math.random() * 50) }); c.push({ type: 'chgGuess', seat, pieces: [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - .5).slice(0, m.need) }); }
+  c.push({ type: 'caveGo', seat, stay: Math.random() < .7 });
+  if (m?.id === 'ten') { for (let k = 0; k < 3; k++) c.push({ type: 'tenPlace', seat, slot: k }); c.push({ type: 'tenGrab', seat, n: m.flipN, ms: 200 + Math.floor(Math.random() * 400) }); }
+  if (m?.id === 'balance') { c.push({ type: 'balSay', seat, opts: m.three ? ['산', '바다', '강'] : ['산', '바다'] }); for (let k = 0; k < 3; k++) c.push({ type: 'balPick', seat, k }); }
   return c;
 }
 

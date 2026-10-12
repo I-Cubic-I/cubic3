@@ -9,6 +9,7 @@ import { type UiMode, useStore } from '../store';
 import { MCard } from './bits';
 import { digitalRules } from './mgtext';
 import { MgBody2, mgItemUse2 } from './MgPanel2';
+import { MgBody3, mgItemUse3 } from './MgPanel3';
 
 const HAND_EMOJI: Record<Hand, string> = { S: '✌️', R: '✊', P: '✋' };
 
@@ -19,6 +20,7 @@ export type ItemUse = { ok: boolean; why: string; mode: 'now' | 'pick'; run?: st
 export function mgItemUse(S: GameState, i: number | null): ItemUse {
   const no = (why: string): ItemUse => ({ ok: false, why, mode: 'now' });
   const m = S.mg; if (!m || i == null) return no('지금은 쓸 수 없어요');
+  if (S.mgEnd) return no('미니게임이 끝났어요');
   const now_ = (run: string): ItemUse => ({ ok: true, why: '누르면 바로 써요', mode: 'now', run });
   const pick = (why: string): ItemUse => ({ ok: true, why, mode: 'pick' });
   if ((m.id === 'rps' || m.id === 'vault') && m.step === 'save') return m.saveq.includes(i) ? now_('osave') : no('지금은 쓸 수 없어요');
@@ -36,7 +38,7 @@ export function mgItemUse(S: GameState, i: number | null): ItemUse {
     }
     case 'race': return m.step !== 'bet' && (i in m.bet) ? pick('고른 뒤 갈아탈 문양을 누르세요') : no('경주가 시작되면 써요');
   }
-  return mgItemUse2(S, i, no, now_, pick) ?? no('이 미니게임에는 아이템이 없어요');
+  return mgItemUse2(S, i, no, now_, pick) ?? mgItemUse3(S, i, no, now_) ?? no('이 미니게임에는 아이템이 없어요');
 }
 /** 아이템 카드를 눌렀을 때 */
 export function pressItemCard(S: GameState, i: number | null, c: Card): void {
@@ -114,7 +116,7 @@ export function MgPanel({ S, i, sel, ui }: { S: GameState; i: number | null; sel
     body = <>
       <div className="line">합 <strong>{m.total}</strong> / {BLIMIT} · <strong>{nm(who)}</strong> 차례{m.last ? ` · 방금 ${nm(m.last.i)} ${cname(m.last.c)}${m.last.sub ? ' 빼기' : ''}` : ''}</div>
       <div className="chips">
-        {m.alive.map(k => <span key={k} className={`chip ${k === who ? 'on' : ''}`}>{nm(k)} · {m.hands[k].length}장</span>)}
+        {m.alive.map(k => <span key={k} className={`chip ${k === who ? 'on' : ''}`}>{nm(k)} · {m.hands[k].length}장{m.coins ? ` · 🪙${m.coins[k] || 0}` : ''}</span>)}
         {m.out.flat().map(k => <span key={'o' + k} className="chip out">{nm(k)}</span>)}
       </div>
       {myB}
@@ -159,7 +161,7 @@ export function MgPanel({ S, i, sel, ui }: { S: GameState; i: number | null; sel
       {me_}
     </>;
   }
-  if (!body) body = <MgBody2 S={S} i={i} sel={sel} ui={ui} />;
+  if (!body) body = <><MgBody2 S={S} i={i} sel={sel} ui={ui} /><MgBody3 S={S} i={i} sel={sel} ui={ui} /></>;
   if (m.id === 'count') {
     const t = now(); const k = Math.floor((t - m.t0) / CFLIP); const open = t >= countOpenAt(m);
     let stage: React.ReactNode;
@@ -189,8 +191,9 @@ export function MgPanel({ S, i, sel, ui }: { S: GameState; i: number | null; sel
     </>;
   }
   return (
-    <div className="panel mg">
+    <div className={`panel mg${S.mgEnd ? ' ended' : ''}`}>
       <div className="head"><span className="disp">{def.name}</span><button className="btn sm" onClick={() => cmd('rulesagain')}>규칙 다시 보기</button></div>
+      {S.mgEnd && <div className="endnote" role="status">끝! 잠시 후 순위를 발표해요</div>}
       <div className="stage">{body}</div>
       {ui.rulesAgain && <div className="line" style={{ marginTop: 10, textAlign: 'left', whiteSpace: 'pre-line', fontSize: 13, color: 'var(--muted)' }}>{digitalRules(m.id).map(([h, t]) => `${h}: ${t}`).join('\n')}</div>}
     </div>

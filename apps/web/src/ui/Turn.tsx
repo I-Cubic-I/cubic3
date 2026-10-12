@@ -1,6 +1,6 @@
 /* 메인 턴 조작 (내 차례) */
 import type { ReactNode } from 'react';
-import { type GameState, R, SNAME, SUITS, SYM, U, canMakeToken, cname, costFor, isItem } from '@cubic3/engine';
+import { type GameState, R, SNAME, SUITS, SYM, U, canMakeToken, cname, costFor, isItem, mainLaps } from '@cubic3/engine';
 import { SUITCOL, seatName } from '../game';
 import { cmd } from '../flow';
 import type { UiMode } from '../store';
@@ -47,16 +47,11 @@ export function turnActs(S: GameState, i: number, sel: string[], ui: UiMode): Tu
     pill: '♦Q: 만들 토큰 색을 고르세요',
     acts: <div className="group">{SUITS.filter(c => S.supply[c] > 0 && !p.tokens.includes(c)).map(c => <button key={c} className="btn sm" onClick={() => cmd('dqcol', { s: c })}><Tok s={c} /> {SNAME[c]}</button>)}<button className="btn sm" onClick={() => cmd('cancel')}>취소</button></div>,
   };
+  const laps = mainLaps(S.seats.length), lap = Math.floor(S.ti / S.seats.length) + 1;
   const tokErr = sel.length ? canMakeToken(S, i, sel) : '카드를 고르세요.'; const one = sel.length === 1 && isItem(sel[0]) ? sel[0] : null;
   const acts: ReactNode[] = []; let note = '';
   // 덱에서 줍기는 테이블의 덱을 눌러서(줍기 전엔 덱·버림 줄이 금빛 테두리로 빛난다)
-  if (!t.token) {
-    const cost = costFor(S, i);
-    for (const su of SUITS) {
-      const nums = p.hand.filter(c => U(c) === su && !isItem(c)).sort((x, y) => R(x) - R(y));
-      if (nums.length >= cost && !canMakeToken(S, i, nums.slice(0, cost))) acts.push(<button key={'q' + su} className="btn" style={{ borderColor: SUITCOL[su] }} onClick={() => cmd('qtoken', { s: su })}><Tok s={su} /> {SNAME[su]} 토큰 만들기 · {cost}장</button>);
-    }
-  }
+  // 토큰 만들기 버튼은 손패의 문양 묶음 위에 뜬다(Hand.tsx)
   if (sel.length && !one) acts.push(<button key="tk" className="btn" disabled={!!tokErr} onClick={() => cmd('token')}>고른 카드로 토큰</button>);
   if (one && !t.item) {
     const su = U(one), r = R(one);
@@ -67,7 +62,8 @@ export function turnActs(S: GameState, i: number, sel: string[], ui: UiMode): Tu
   acts.push(<button key="end" className={`btn ${t.picked ? 'primary' : ''}`} disabled={!t.picked} onClick={() => cmd('end')}>턴 끝내기</button>);
   return {
     pill: t.picked ? '카드를 끌어 토큰 칸에 놓으면 토큰, 상대에게 놓으면 공격' : '테이블의 덱이나 버림 줄 카드를 눌러 주우세요',
-    sub: [[t.picked ? '줍기 완료' : '줍기', !t.picked], [`아이템 ${t.item ? 1 : 0}/1`, false], [`토큰 ${t.token ? 1 : 0}/1 · 다음 ${costFor(S, i)}장`, false]],
+    // 아이템·토큰은 한 라운드에 1번. 2인은 메인 턴 2바퀴라 몇 바퀴째인지도 보인다
+    sub: [...(laps > 1 ? [[`${lap}/${laps}바퀴`, false] as [string, boolean]] : []), [t.picked ? '줍기 완료' : '줍기', !t.picked], [`이번 라운드 아이템 ${t.item ? 1 : 0}/1`, false], [`토큰 ${t.token ? 1 : 0}/1 · 다음 ${costFor(S, i)}장`, false]],
     acts: <>{acts}</>, note,
   };
 }

@@ -30,7 +30,25 @@ function loadOld(): Eng {
     ["const c=T.hand.splice(rnd(T.hand.length),1)[0];A.hand.push(c);log(S,`자리 ${from+1}이 자리 ${to+1}의 손패 1장을 뺏었다.`)}",
      "shuffle(T.hand);S.steal={from,to};log(S,`자리 ${from+1}이 자리 ${to+1}의 손패에서 1장을 고른다.`)}"],
     ["if(typeof module!=='undefined')module.exports={", "function stealPick(S,i,k){const st=S.steal;const T=S.seats[st.to];const c=T.hand.splice(k,1)[0];S.seats[i].hand.push(c);S.steal=null;log(S,`자리 ${i+1}이 자리 ${st.to+1}의 손패 1장을 뺏었다.`)}\nif(typeof module!=='undefined')module.exports={stealPick,"],
+    // 2인 메인 턴 2바퀴, 토큰 만들기·아이템은 한 라운드에 1번 (core.ts startMain·resetTurn·mark)
+    ["S.order=[];for(let k=0;k<N(S);k++)S.order.push((S.first+k)%N(S));",
+     "S.order=[];for(let k=0;k<N(S);k++)S.order.push((S.first+k)%N(S));const one=S.order.slice();for(let l=1;l<(N(S)===2?2:1);l++)S.order.push(...one);S.used={};"],
+    ["function resetTurn(S){S.turn={seat:S.order[S.ti],picked:false,mustDiscard:false,item:false,token:false,",
+     "function resetTurn(S){const u=S.used&&S.used[S.order[S.ti]];S.turn={seat:S.order[S.ti],picked:false,mustDiscard:false,item:!!(u&&u.item),token:!!(u&&u.token),"],
+    // 디지털판: 최근 3라운드에 한 미니게임은 6장에서 뺀다 (core.ts afterMain·startMinigame)
+    ["const n=N(S);const pool=Object.keys(MG).filter(k=>MG[k].min<=n&&n<=MG[k].max);",
+     "const n=N(S);const all=Object.keys(MG).filter(k=>MG[k].min<=n&&n<=MG[k].max);const rest=(S.recentMg||[]).slice(-3);const fresh=all.filter(k=>!rest.includes(k));const pool=fresh.length>=6?fresh:all;"],
+    ["function startMinigame(S){\n  const id=S.board[S.die-1];const n=N(S);", "function startMinigame(S){\n  const id=S.board[S.die-1];const n=N(S);S.recentMg=[...(S.recentMg||[]),id].slice(-3);"],
+    ["  S.board=null;\n  // ", "  S.board=null;S.recentMg=[];\n  // "],
+    // 풍선 불기 2·3인: 동전 1개(목숨 2개), 손패 그대로, 펑 한 사람 먼저 (minigames.ts balloonStart·balloonPlay)
+    ["  if(m.total>BLIMIT){\n    fx(S,{t:'pop',seats:[i],total:m.total});",
+     "  if(m.total>BLIMIT&&m.coins&&m.coins[i]>0){m.coins[i]--;fx(S,{t:'pop',seats:[i],total:m.total,small:true,life:true});log(S,`펑! 자리 ${i+1} (합 ${m.total}) 동전을 내놓고 버텼다.`);S.deck.push(...m.pile);m.pile=[];shuffle(S.deck);m.total=0;m.pops++;m.last=null;m.ci=m.alive.indexOf(i);return}\n  if(m.total>BLIMIT){\n    fx(S,{t:'pop',seats:[i],total:m.total});"],
+    ["S.mg={id:'balloon',bundle:[],hands,pile:[],total:0,alive:ord.slice(),ci:0,out:[],last:null,pops:0}}",
+     "S.mg={id:'balloon',bundle:[],hands,pile:[],total:0,alive:ord.slice(),ci:0,out:[],last:null,pops:0};if(ord.length<=3){const coins={};ord.forEach(i=>coins[i]=1);S.mg.coins=coins}}"],
   ];
+  // 아이템·토큰 사용 표시도 라운드 단위로
+  src = src.split('S.turn.item=true').join("(S.turn.item=true,S.used=S.used||{},(S.used[S.turn.seat]=S.used[S.turn.seat]||{}).item=true)");
+  src = src.split('S.turn.token=true').join("(S.turn.token=true,S.used=S.used||{},(S.used[S.turn.seat]=S.used[S.turn.seat]||{}).token=true)");
   for (const [a, b] of patches) { if (!src.includes(a)) throw new Error('시험판 덧대기 자리를 찾지 못했습니다: ' + a); src = src.replace(a, b); }
   const module: { exports: Eng } = { exports: {} };
   new Function('module', src)(module);
@@ -195,7 +213,11 @@ function playOne(n: number, seed: number): { steps: number; phases: Set<string> 
     if (!st) break;
     if ('raw' in st) { st.raw(OLD, A); st.raw(TS, B); }
     else { const args = st.args(A); const ra = OLD[st.fn](A, ...clone(args)); const rb = (TS as any)[st.fn](B, ...clone(args)); deepStrictEqual(rb, ra, `${st.fn} 반환값`); }
-    try { deepStrictEqual(B, A); } catch (e) { throw new Error(`seed ${seed}, ${n}인, ${steps}번째 행동 뒤 상태가 다름: ${(e as Error).message.slice(0, 2000)}`); }
+    // 새 엔진은 미니게임 결과를 잠깐 보여 준 뒤 순위로 넘어간다(시험판은 바로). 같은 시점에 맞춘다
+    if ((B as any).mgEnd) TS.finishMinigame(B as any);
+    // 연출 이벤트(fx·fxn)는 화면용이라 비교에서 뺀다(새 엔진에만 아이템 컷신 이벤트가 있다)
+    const noFx = (X: any) => { const { fx: _f, fxn: _n, ...rest } = X; void _f; void _n; return rest; };
+    try { deepStrictEqual(noFx(B), noFx(A)); } catch (e) { throw new Error(`seed ${seed}, ${n}인, ${steps}번째 행동 뒤 상태가 다름: ${(e as Error).message.slice(0, 2000)}`); }
   }
   return { steps, phases };
 }

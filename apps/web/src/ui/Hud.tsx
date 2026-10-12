@@ -6,7 +6,7 @@ import { cmd, exitRoom, getWorld } from '../flow';
 import { useStore, viewSeat } from '../store';
 import { Hand } from './Hand';
 import { MgPanel } from './MgPanel';
-import { Cutin, FxView, HandPeek, ResultsView, RulesScreen } from './Screens';
+import { Cutin, FxView, HandPeek, ItemCutin, ResultsView, RulesScreen } from './Screens';
 import { type TurnView, turnActs } from './Turn';
 import { ICON, MCard, names } from './bits';
 import { refreshTip } from './tip';
@@ -217,7 +217,8 @@ export function Hud() {
       {i != null && ph !== 'ended' && !(ph === 'clubs' && screenAlert) && <Hand seat={i} kind="item" />}
       {cutin && <Cutin S={S} f={cutin} />}
       {results && <ResultsView S={S} r={results} />}
-      <div id="fxl">{fxShow && <FxView key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}</div>
+      {fxShow?.f.t === 'item' && <ItemCutin key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}
+      <div id="fxl">{fxShow && fxShow.f.t !== 'item' && <FxView key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}</div>
       <Toast m={toast} />
       <div id="fpshint" className={fps.locked ? 'fps on' : fps.ok ? 'fps' : 'fps off'}>
         {fps.locked ? <><div className="xh" aria-hidden="true" /><div className="fpstip">Esc · 커서 꺼내기</div></> : fps.ok ? <div className="fpstip">화면을 클릭하면 1인칭 시점 (마우스로 둘러보기)</div> : null}

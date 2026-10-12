@@ -13,6 +13,10 @@ import {
   chainAim, chainFingers, chainPass, chainTwo, curlNoWall, curlShot, curlTurn, duelFake, duelHit, foldAnswer, foldIsDup, foldSafe, foldSay,
   lineGo, linePeek, linePlay, midCrit, midPick, speedFits, speedPile, speedPlay, udCall, udCaller, udGrip, udRegrip, udShout, udShouter,
 } from './minigames2';
+import {
+  CHG_PIECES, GESTURES, STACK_ROWS, balancePick, balanceSay, balanceThree, caveDecider, caveGo, caveGuard, changeGuess, changeMore, changeMove,
+  gestSkip, gestTurn, gesture, stackReport, stackWide, tenAll, tenGrab, tenPlace, tenTurn,
+} from './minigames3';
 import type { Card, CurlShot, GameState, Hand, MidCrit, Suit } from './types';
 
 export const MAX_SEATS = 5;
@@ -85,7 +89,22 @@ export type Action =
   | { type: 'chainAim'; seat: number; targets: number[] }
   | { type: 'chainPass'; seat: number; k: number }
   | { type: 'midCrit'; seat: number; item: Card; crit: MidCrit }
-  | { type: 'midPick'; seat: number; card: Card };
+  | { type: 'midPick'; seat: number; card: Card }
+  | { type: 'gesture'; seat: number; g: number }
+  | { type: 'gestSkip'; seat: number; item: Card }
+  | { type: 'stack'; seat: number; h: number; ms?: number | null; done?: boolean }
+  | { type: 'stackWide'; seat: number; item: Card }
+  | { type: 'chgMove'; seat: number; piece: number; cell: number }
+  | { type: 'chgMore'; seat: number; item: Card }
+  | { type: 'chgGuess'; seat: number; pieces: number[] }
+  | { type: 'caveGo'; seat: number; stay: boolean }
+  | { type: 'caveGuard'; seat: number; item: Card }
+  | { type: 'tenPlace'; seat: number; slot: number }
+  | { type: 'tenGrab'; seat: number; n: number; ms: number }
+  | { type: 'tenAll'; seat: number; item: Card }
+  | { type: 'balSay'; seat: number; opts: string[] }
+  | { type: 'balThree'; seat: number; item: Card }
+  | { type: 'balPick'; seat: number; k: number };
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -113,6 +132,8 @@ function check(S: GameState, uid: string, a: Action): string | null {
   const myTurn = (i: number) => S.phase === 'main' && !!S.turn && S.turn.seat === i;
   const mg = S.mg;
   if ('seat' in a && !seatOk(a.seat)) return '내 자리가 아니에요.';
+  // 미니게임이 끝나 결과를 보여 주는 중에는 아무것도 받지 않는다
+  if (S.mgEnd && !['reset', 'toLobby', 'leave'].includes(a.type)) return '미니게임 결과를 보여 주는 중이에요.';
   // ♠J로 카드를 고르는 동안에는 그것만
   if (S.steal && a.type !== 'stealPick' && !['reset', 'toLobby', 'leave', 'sit'].includes(a.type)) return '♠J로 카드를 고르는 중이에요.';
   switch (a.type) {
@@ -250,6 +271,22 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'chainPass': return mg.id === 'chain' && mg.step === 'pass' && mg.cur === a.seat && mg.bent[a.seat]?.[a.k] === false ? null : '지금은 넘길 수 없어요.';
     case 'midCrit': return mg.id === 'mid' && mg.step === 'pre' && (a.seat in mg.hands) && mg.crit !== a.crit && ['mid', 'hi', 'lo'].includes(a.crit) ? null : '지금은 아이템을 쓸 수 없어요.';
     case 'midPick': return mg.id === 'mid' && mg.step === 'pick' && !(a.seat in mg.picks) && (mg.hands[a.seat] || []).includes(a.card) ? null : '지금은 낼 수 없어요.';
+    // 2026-10-13 추가
+    case 'gesture': return mg.id === 'gesture' && gestTurn(mg) === a.seat && Number.isInteger(a.g) && a.g >= 0 && a.g < GESTURES.length ? null : '내 차례가 아니에요.';
+    case 'gestSkip': return mg.id === 'gesture' && gestTurn(mg) === a.seat && mg.pos === 0 && mg.seq.length > 0 ? null : '내 차례에 따라 하기 전에 써요.';
+    case 'stack': return mg.id === 'stack' && mg.step === 'play' && (a.seat in mg.h) && !mg.done[a.seat] && Number.isFinite(a.h) && a.h >= 0 && a.h <= STACK_ROWS ? null : '지금은 할 수 없어요.';
+    case 'stackWide': return mg.id === 'stack' && mg.step === 'pre' && (a.seat in mg.h) && !mg.wide[a.seat] ? null : '시작 전에 써요.';
+    case 'chgMove': return mg.id === 'change' && mg.step === 'move' && mg.changer === a.seat && Number.isInteger(a.piece) && a.piece >= 0 && a.piece < CHG_PIECES && !mg.moved.includes(a.piece) && Number.isInteger(a.cell) && a.cell >= 0 && a.cell < 50 && !mg.pieces.includes(a.cell) ? null : '옮길 수 없어요.';
+    case 'chgMore': return mg.id === 'change' && mg.step === 'move' && mg.changer === a.seat && mg.need === 2 ? null : '바꾸는 사람이 옮기는 동안에 써요.';
+    case 'chgGuess': return mg.id === 'change' && mg.step === 'guess' && mg.changer !== a.seat && (a.seat in mg.pts) && !(a.seat in mg.guesses) && Array.isArray(a.pieces) && a.pieces.length === mg.need && new Set(a.pieces).size === a.pieces.length && a.pieces.every(p => Number.isInteger(p) && p >= 0 && p < CHG_PIECES) ? null : `말 ${mg.id === 'change' ? mg.need : 2}개를 고르세요.`;
+    case 'caveGo': return mg.id === 'cave' && caveDecider(mg) === a.seat ? null : '내 차례가 아니에요.';
+    case 'caveGuard': return mg.id === 'cave' && mg.step === 'pre' && mg.inside.includes(a.seat) ? null : '굴리기 전에, 동굴에 남은 사람이 써요.';
+    case 'tenPlace': return mg.id === 'ten' && tenTurn(mg) === a.seat && (mg.hands[a.seat] || []).length > 0 && !mg.grabUntil && !!mg.slots[a.slot] && !(mg.slots.some(s => !s.length) && mg.slots[a.slot].length) ? null : '그 자리에는 놓을 수 없어요.';
+    case 'tenGrab': return mg.id === 'ten' && (a.seat in mg.hands) && a.n === mg.flipN && !(a.seat in mg.grabs) && Number.isFinite(a.ms) ? null : '지금은 잡을 수 없어요.';
+    case 'tenAll': return mg.id === 'ten' && tenTurn(mg) === a.seat && !mg.all ? null : '내 차례에 놓기 전에 써요.';
+    case 'balSay': return mg.id === 'balance' && mg.step === 'say' && mg.ord[mg.ci] === a.seat && Array.isArray(a.opts) && a.opts.length === (mg.three ? 3 : 2) && a.opts.every(x => typeof x === 'string' && x.trim()) && new Set(a.opts.map(x => x.trim())).size === a.opts.length ? null : `서로 다른 ${mg.id === 'balance' && mg.three ? 3 : 2}가지를 적으세요.`;
+    case 'balThree': return mg.id === 'balance' && mg.step === 'say' && mg.ord[mg.ci] === a.seat && !mg.three ? null : '선일 때 주제를 내기 전에 써요.';
+    case 'balPick': return mg.id === 'balance' && mg.step === 'pick' && (a.seat in mg.pts) && !(a.seat in mg.picks) && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.opts.length ? null : '지금은 고를 수 없어요.';
   }
   return null;
 }
@@ -363,5 +400,20 @@ function run(S: GameState, uid: string, a: Action): false | void {
     case 'chainPass': return chainPass(S, a.seat, a.k);
     case 'midCrit': return midCrit(S, a.seat, a.item, a.crit);
     case 'midPick': return midPick(S, a.seat, a.card);
+    case 'gesture': return gesture(S, a.seat, a.g);
+    case 'gestSkip': return gestSkip(S, a.seat, a.item);
+    case 'stack': return stackReport(S, a.seat, a.h, a.ms ?? null, !!a.done);
+    case 'stackWide': return stackWide(S, a.seat, a.item);
+    case 'chgMove': return changeMove(S, a.seat, a.piece, a.cell);
+    case 'chgMore': return changeMore(S, a.seat, a.item);
+    case 'chgGuess': return changeGuess(S, a.seat, a.pieces);
+    case 'caveGo': return caveGo(S, a.seat, !!a.stay);
+    case 'caveGuard': return caveGuard(S, a.seat, a.item);
+    case 'tenPlace': return tenPlace(S, a.seat, a.slot);
+    case 'tenGrab': return tenGrab(S, a.seat, a.n, a.ms);
+    case 'tenAll': return tenAll(S, a.seat, a.item);
+    case 'balSay': return balanceSay(S, a.seat, a.opts);
+    case 'balThree': return balanceThree(S, a.seat, a.item);
+    case 'balPick': return balancePick(S, a.seat, a.k);
   }
 }

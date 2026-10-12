@@ -29,11 +29,11 @@ function nextFx(): void {
   setTimeout(() => { st().set({ fxShow: { f, out: true } }); setTimeout(nextFx, 260); }, dur);
 }
 function fxDuration(f: Fx): number {
-  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200, duel: 2600, updown: 2600, curl: 2200, fold: 2200, chainAim: 1500, mid: 2600, line: 1700 } as Record<string, number>)[f.t] || 1300;
+  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200, item: 2100, change: 2600, cave: 1600, balance: 2400, duel: 2600, updown: 2600, curl: 2200, fold: 2200, chainAim: 1500, mid: 2600, line: 1700 } as Record<string, number>)[f.t] || 1300;
 }
 function shakes(f: Fx): boolean {
   if (f.t === 'dice') return !!f.bust;
-  if (f.t === 'pop' || f.t === 'attack') return true;
+  if (f.t === 'pop' || f.t === 'attack' || (f.t === 'item' && f.kind === 'attack')) return true;
   if (f.t === 'rps' || f.t === 'vault') return !!(f.losers as number[])?.length;
   return false;
 }
@@ -89,7 +89,8 @@ export function onState(s: GameState): void {
   if (s.mg) lastMgId = s.mg.id;
   for (const f of nw) {
     // 미니게임이 끝나면 순위 결과 화면(잠깐 뜨는 알림 대신)
-    if (f.t === 'rank') { st().set({ results: { mg: lastMgId, groups: f.groups as number[][], rolls: (f.rolls || {}) as Record<number, number[]>, order: (f.order || []) as number[] } }); continue; }
+    // 앞서 나온 연출(마지막 판 결과)이 다 끝난 뒤에 띄운다
+    if (f.t === 'rank') { const r = { mg: lastMgId, groups: f.groups as number[][], rolls: (f.rolls || {}) as Record<number, number[]>, order: (f.order || []) as number[] }; const show = () => { if (fxBusy) setTimeout(show, 200); else st().set({ results: r }); }; show(); continue; }
     if (f.club || f.t === 'pick') { if (clubBusy) clubQ.push(f); else if (f.t === 'pick') runPick(f); else runClub(f); continue; }
     // 즉시 시작 미니게임(눈치 게임)이 뽑혔으면 디스크 고르기 연출 없이 바로 미니게임으로
     if (f.t === 'dice' && f.mg && ph === 'mg') { queueFx({ ...f, t: 'banner', text: `${f.v}번 · 바로 시작!`, tone: 'bad' }); continue; }
@@ -323,6 +324,26 @@ export function cmd(a: string, d: D = {}): void {
     case 'cpass': act({ type: 'chainPass', seat: i, k: +d.k! }); break;
     case 'mcrit': act({ type: 'midCrit', seat: i, item: sel[0], crit: d.c as MidCrit }); break;
     case 'mpick': act({ type: 'midPick', seat: i, card: String(d.c) }); break;
+    // 2026-10-13 추가
+    case 'gest': act({ type: 'gesture', seat: i, g: +d.g! }); break;
+    case 'gskip': act({ type: 'gestSkip', seat: i, item: sel[0] }); break;
+    case 'swide': act({ type: 'stackWide', seat: i, item: sel[0] }); break;
+    case 'cmore': act({ type: 'chgMore', seat: i, item: sel[0] }); break;
+    case 'chgsel': store.patchUi({ chg: ui.chg === +d.p! ? undefined : +d.p! }); break;
+    case 'chgmove': store.patchUi({ chg: undefined }); act({ type: 'chgMove', seat: i, piece: +d.p!, cell: +d.c! }); break;
+    case 'chgtog': {
+      if (s?.mg?.id !== 'change') break; const need = s.mg.need; const p = +d.p!;
+      let g = (ui.cg || []).slice(); g = g.includes(p) ? g.filter(x => x !== p) : [...g, p].slice(-need); store.patchUi({ cg: g }); break;
+    }
+    case 'chgguess': { const g = (ui.cg || []).slice(); store.patchUi({ cg: [] }); act({ type: 'chgGuess', seat: i, pieces: g }); break; }
+    case 'cgo': act({ type: 'caveGo', seat: i, stay: !!+d.s! }); break;
+    case 'cguard': act({ type: 'caveGuard', seat: i, item: sel[0] }); break;
+    case 'tplace': act({ type: 'tenPlace', seat: i, slot: +d.k! }); break;
+    case 'tgrab': act({ type: 'tenGrab', seat: i, n: +d.n!, ms: +d.ms! }); break;
+    case 'tall': act({ type: 'tenAll', seat: i, item: sel[0] }); break;
+    case 'bsay': act({ type: 'balSay', seat: i, opts: JSON.parse(String(d.o)) as string[] }); break;
+    case 'bthree': act({ type: 'balThree', seat: i, item: sel[0] }); break;
+    case 'bpick': act({ type: 'balPick', seat: i, k: +d.k! }); break;
   }
 }
 

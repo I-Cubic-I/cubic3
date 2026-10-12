@@ -397,7 +397,7 @@ export function midPick(S: GameState, i: number, c: Card): false | undefined {
   m.last = { picks: { ...m.picks }, deckCard: m.deckCard, crit: m.crit, target, win, void: vd };
   log(S, `가운데 숫자 ${m.pan}판: ${m.ord.map(j => nm(j) + ' ' + cname(m.picks[j])).join(', ')}${m.deckCard ? ' / 덱 ' + cname(m.deckCard) : ''} → ${vd ? '무산' : win.map(nm).join('·') + ' 1점'}`);
   fx(S, { t: 'mid', ...m.last, seats: win });
-  m.deckCard = null;
+  m.deckCard = null; m.picks = {};
   if (m.pan >= MID_PANS) { const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.won[j].length); endMinigame(S, rankBy(sc)); return; }
   midPan(S);
 }

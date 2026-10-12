@@ -5,6 +5,9 @@ import {
   auctionOpen, balloonStart, bombLay, countStart, ovnStart, raceStart,
 } from './minigames';
 import {
+  advanceMg3, balanceStart, caveStart, changeStart, gestureStart, stackStart, tenStart,
+} from './minigames3';
+import {
   advanceMg2, chainStart, curlingStart, duelStart, foldStart, lineStart, midStart, speedStart, updownStart,
 } from './minigames2';
 import type { Card, Fx, GameState, MgId, Suit } from './types';
@@ -64,7 +67,7 @@ export function startGame(S: GameState): void {
   S.seats.forEach(p => { p.hand = []; p.tokens = []; p.front = []; });
   S.seats.forEach(p => { p.hand.push(draw(S)!, draw(S)!); });
   S.supply = { S: 3, H: 3, D: 3, C: 3 };
-  S.board = null;
+  S.board = null; S.recentMg = [];
   // 첫 선: 모두 주사위, 같은 최고 눈끼리 다시
   let cand = S.seats.map((_, i) => i);
   while (cand.length > 1) { const rolls = cand.map(() => d6()); const m = Math.max(...rolls); cand = cand.filter((_, k) => rolls[k] === m); }
@@ -107,13 +110,23 @@ export function useClub(S: GameState, i: number, c: Card, arg?: number): void {
   else fx(S, { t: 'banner', text: `${cname(c)} → ${S.die}번 ${MG[boardMg(S)].name}`, seats: [i], club: c, v: S.die });
   instantStart(S);
 }
+/** 한 라운드의 메인 턴 바퀴 수: 2인은 2바퀴(사용자 2026-10-13, 2인은 메인 턴이 너무 짧다), 나머지 1바퀴 */
+export const mainLaps = (n: number): number => (n === 2 ? 2 : 1);
 export function startMain(S: GameState): void {
   S.phase = 'main'; S.deadline = null;
   S.order = []; for (let k = 0; k < N(S); k++) S.order.push((S.first + k) % N(S));
+  const one = S.order.slice(); for (let l = 1; l < mainLaps(N(S)); l++) S.order.push(...one);
+  S.used = {};
   S.ti = 0; resetTurn(S);
 }
 export function resetTurn(S: GameState): void {
-  S.turn = { seat: S.order[S.ti], picked: false, mustDiscard: false, item: false, token: false, trim: false, peek: null };
+  // 토큰 만들기·아이템은 한 라운드에 1번: 앞 바퀴에서 했으면 이번 턴에도 한 것으로 친다
+  const u = S.used && S.used[S.order[S.ti]];
+  S.turn = { seat: S.order[S.ti], picked: false, mustDiscard: false, item: !!(u && u.item), token: !!(u && u.token), trim: false, peek: null };
+}
+/** 이번 라운드에 아이템·토큰을 썼다고 적는다 */
+function mark(S: GameState, k: 'item' | 'token'): void {
+  S.turn![k] = true; S.used = S.used || {}; const i = S.turn!.seat; (S.used[i] = S.used[i] || {})[k] = true;
 }
 
 export function pickup(S: GameState, i: number, fromRow: boolean, want?: Card): 'none' | undefined {
@@ -153,17 +166,18 @@ export function makeToken(S: GameState, i: number, cards: Card[], color?: Suit):
   const p = S.seats[i]; const it = cards.find(isItem); const nums = cards.filter(c => !isItem(c));
   let col = U(nums[0]); if (it && R(it) === 12) col = color!;
   for (const c of cards) { p.hand.splice(p.hand.indexOf(c), 1); }
-  nums.forEach(c => S.row.push(c)); if (it) { p.front.push(it); S.turn!.item = true; }
-  p.tokens.push(col); S.supply[col]--; S.turn!.token = true;
+  nums.forEach(c => S.row.push(c)); if (it) { p.front.push(it); mark(S, 'item'); }
+  if (it) fx(S, { t: 'item', card: it, seats: [i], eff: R(it) === 12 ? `${SNAME[col]} 토큰으로 만들기` : '이번 토큰 비용 3장' });
+  p.tokens.push(col); S.supply[col]--; mark(S, 'token');
   log(S, `자리 ${i + 1}: ${SNAME[col]} 토큰을 만들었다${it ? ' (' + cname(it) + ' 사용)' : ''}. 토큰 ${p.tokens.length}개.`);
   fx(S, { t: 'token', col, seats: [i], n: p.tokens.length });
 }
 export function startAttack(S: GameState, i: number, c: Card, target: number, arg: Suit | null): void {
-  const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c); S.turn!.item = true;
+  const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c); mark(S, 'item');
   S.pending = { card: c, attacker: i, target, arg, deadline: now() + DEF_MS }; S.phase = 'defense';
   const what = ({ 11: '손패 1장 뺏기', 12: `${SNAME[arg as Suit]} 숫자 카드 1장 받기`, 13: `${SNAME[arg as Suit]} 토큰 뺏기` } as Record<number, string>)[R(c)];
   log(S, `자리 ${i + 1} → 자리 ${target + 1}: ${cname(c)} 공격 (${what}). 방어 기회 ${DEF_MS / 1000}초.`);
-  fx(S, { t: 'attack', card: c, seats: [i, target] });
+  fx(S, { t: 'item', kind: 'attack', card: c, seats: [i, target], eff: what });
 }
 /** from이 to에게서 가져온다 */
 export function applyAttack(S: GameState, kind: number, from: number, to: number, arg: Suit | null): void {
@@ -187,8 +201,8 @@ export function applyAttack(S: GameState, kind: number, from: number, to: number
 export function defend(S: GameState, i: number, c: Card): void {
   const P = S.pending!; const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c);
   const kind = R(P.card);
-  if (R(c) === 11) { log(S, `자리 ${i + 1}: ♥J로 공격을 막았다.`); fx(S, { t: 'banner', text: '막았다!', seats: [i], tone: 'good' }); }
-  else { log(S, `자리 ${i + 1}: ♥K로 공격을 되돌렸다(막을 수 없음).`); fx(S, { t: 'banner', text: '되돌렸다!', seats: [i], tone: 'good' }); applyAttack(S, kind, P.target, P.attacker, null); }
+  if (R(c) === 11) { log(S, `자리 ${i + 1}: ♥J로 공격을 막았다.`); fx(S, { t: 'item', kind: 'defend', card: c, seats: [i, P.attacker], eff: `${cname(P.card)} 공격 막기` }); }
+  else { log(S, `자리 ${i + 1}: ♥K로 공격을 되돌렸다(막을 수 없음).`); fx(S, { t: 'item', kind: 'defend', card: c, seats: [i, P.attacker], eff: `${cname(P.card)} 공격 되돌리기` }); applyAttack(S, kind, P.target, P.attacker, null); }
   S.pending = null; S.phase = 'main';
 }
 export function stealPick(S: GameState, i: number, k: number): void {
@@ -199,14 +213,16 @@ export function resolveAttack(S: GameState): void {
   const P = S.pending!; applyAttack(S, R(P.card), P.attacker, P.target, P.arg); S.pending = null; S.phase = 'main';
 }
 export function useHQ(S: GameState, i: number, c: Card, picks: Card[]): void {
-  const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c); S.turn!.item = true;
+  const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c); mark(S, 'item');
   for (const x of picks) { S.row.splice(S.row.indexOf(x), 1); p.hand.push(x); }
   log(S, `자리 ${i + 1}: ♥Q로 버림 줄에서 ${picks.map(cname).join(', ') || '0장'} 가져옴.`);
+  fx(S, { t: 'item', card: c, seats: [i], eff: `버림 줄에서 ${picks.length}장 가져오기`, cards: picks.slice() });
 }
 export function useDJ(S: GameState, i: number, c: Card): void {
-  const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c); S.turn!.item = true;
+  const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c); mark(S, 'item');
   const pk: Card[] = []; for (let k = 0; k < 3; k++) { const x = draw(S); if (x) pk.push(x); }
   S.turn!.peek = pk; log(S, `자리 ${i + 1}: ♦J로 덱 위 ${pk.length}장을 봤다.`);
+  fx(S, { t: 'item', card: c, seats: [i], eff: `덱 위 ${pk.length}장 중 1장 고르기` });
 }
 export function pickDJ(S: GameState, i: number, c: Card): void {
   const p = S.seats[i]; const pk = S.turn!.peek!; p.hand.push(c); pk.splice(pk.indexOf(c), 1);
@@ -234,7 +250,10 @@ export function afterMain(S: GameState): void {
       S.winners = c; S.phase = 'ended'; log(S, `큐빅 롤: ${detail.join(' / ')} → 자리 ${c[0] + 1} 우승!`); fx(S, { t: 'win', seats: c }); return;
     }
   }
-  const n = N(S); const pool = (Object.keys(MG) as MgId[]).filter(k => MG[k].min <= n && n <= MG[k].max);
+  const n = N(S); const all = (Object.keys(MG) as MgId[]).filter(k => MG[k].min <= n && n <= MG[k].max);
+  // 디지털판: 한 번 한 미니게임은 그 뒤 MG_REST라운드 동안 6장에 넣지 않는다(남는 게 6개보다 적으면 그대로)
+  const rest = (S.recentMg || []).slice(-MG_REST); const fresh = all.filter(k => !rest.includes(k));
+  const pool = fresh.length >= 6 ? fresh : all;
   const b: MgId[] = []; while (b.length < 6) b.push(...shuffle(pool.slice())); S.board = b.slice(0, 6);
   const disp: Card[] = []; for (let k = 0; k < 2 * N(S) + 1; k++) { const x = draw(S); if (x) disp.push(x); }
   S.rewardDisp = disp;
@@ -270,8 +289,11 @@ export function reclaim(S: GameState): void {
 export function buildBundle(S: GameState, need: number): Card[] {
   const b: Card[] = []; for (let k = 0; k < need; k++) { const x = draw(S); if (!x) break; b.push(x); } return b;
 }
+/** 디지털판: 한 번 한 미니게임이 다시 미니게임 6장에 나오지 않는 라운드 수(사용자 2026-10-13) */
+export const MG_REST = 3;
 export function startMinigame(S: GameState): void {
   const id = boardMg(S); const n = N(S);
+  S.recentMg = [...(S.recentMg || []), id].slice(-MG_REST);
   const ord: number[] = []; for (let k = 0; k < n; k++) ord.push((S.first + k) % n);
   S.phase = 'mg';
   if (id === 'hold') { S.mg = { id, pan: 1, ord, ci: 0, k: 0, s: 0, tot: Array(n).fill(0), last: null }; }
@@ -294,6 +316,12 @@ export function startMinigame(S: GameState): void {
   if (id === 'fold') foldStart(S);
   if (id === 'chain') chainStart(S);
   if (id === 'mid') midStart(S);
+  if (id === 'gesture') gestureStart(S);
+  if (id === 'stack') stackStart(S);
+  if (id === 'change') changeStart(S);
+  if (id === 'cave') caveStart(S);
+  if (id === 'ten') tenStart(S);
+  if (id === 'balance') balanceStart(S);
   log(S, `미니게임 시작: ${MG[id].name}`); fx(S, { t: 'title', mg: id });
 }
 /** scores: {seat:value} → 순위 그룹 [[seat..],..] */
@@ -310,7 +338,14 @@ type AnyMg = {
   bundle?: Card[]; lay?: (Card | null)[]; flip?: Record<number, { c: Card }>; hands?: Record<number, Card[]>;
   prizes?: ({ c: Card } | null)[]; won?: Record<number, Card[]>; spent?: Card[]; pot?: ({ c: Card } | Card)[]; pile?: Card[];
 };
+/** 미니게임 마지막 결과를 보여 주는 시간(ms). 그동안 미니게임 화면에 머물고 행동은 받지 않는다(사용자 2026-10-13) */
+export const MG_HOLD = 3500;
 export function endMinigame(S: GameState, groups: number[][]): void {
+  S.mgEnd = { groups, at: now() + MG_HOLD }; S.lastRank = groups;
+}
+/** 결과를 보여 준 뒤: 재료를 덱에 섞고, 동점 주사위, 순위 발표, 보상 고르기로 */
+export function finishMinigame(S: GameState): void {
+  const groups = S.mgEnd!.groups; delete S.mgEnd;
   const m = S.mg as AnyMg;
   if (m.bundle) {
     const back = m.bundle.slice();
@@ -352,6 +387,8 @@ export function finishReward(S: GameState): void {
 /** 시간 지난 단계 넘기기 (방장 기기에서) */
 export function advanceTimers(S: GameState): boolean {
   const t = now();
+  // 미니게임이 끝나 결과를 보여 주는 중: 시간이 되면 순위로. 그동안 미니게임 타이머는 멈춘다
+  if (S.mgEnd) { if (t < S.mgEnd.at) return false; finishMinigame(S); return true; }
   if (S.phase === 'clubs' && S.deadline && t >= S.deadline && !S.clubChoose) {
     S.deadline = null; reclaim(S); log(S, '버림 줄과 앞의 아이템을 거둬 덱에 섞었다.');
     startMinigame(S); return true;
@@ -359,5 +396,5 @@ export function advanceTimers(S: GameState): boolean {
   if (S.phase === 'defense' && S.pending && t >= S.pending.deadline) { resolveAttack(S); return true; }
   // 눈치 경매(디지털판): 아이템 낼 시간이 지나면 입찰로
   if (S.phase === 'mg' && S.mg?.id === 'auction' && S.mg.step === 'pre' && S.mg.until && t >= S.mg.until) { S.mg.step = 'bid'; return true; }
-  return advanceMg2(S, t);
+  return advanceMg2(S, t) || advanceMg3(S, t);
 }

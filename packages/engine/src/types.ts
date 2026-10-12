@@ -4,7 +4,8 @@ export type Suit = 'S' | 'H' | 'D' | 'C';
 /** 'S1'~'C13', 두 번째 덱은 'S1b'처럼 끝에 b */
 export type Card = string;
 export type MgId = 'hold' | 'bomb' | 'auction' | 'balloon' | 'rps' | 'vault' | 'count' | 'race'
-  | 'nunchi' | 'updown' | 'curling' | 'line' | 'speed' | 'fold' | 'chain' | 'mid';
+  | 'nunchi' | 'updown' | 'curling' | 'line' | 'speed' | 'fold' | 'chain' | 'mid'
+  | 'gesture' | 'stack' | 'change' | 'cave' | 'ten' | 'balance';
 export type Phase = 'lobby' | 'main' | 'defense' | 'roll' | 'clubs' | 'mg' | 'reward' | 'ended';
 export type Hand = 'R' | 'P' | 'S';
 
@@ -74,6 +75,8 @@ export interface BalloonMg {
   id: 'balloon';
   bundle: Card[]; hands: Record<number, Card[]>; pile: Card[]; total: number; alive: number[]; ci: number;
   out: number[][]; last: { i: number; c: Card; sub: boolean; total: number } | null; pops: number;
+  /** 2·3인: 목숨(실물은 동전 1개). 자리별 남은 동전 수. 동전이 없을 때 펑 하면 탈락 */
+  coins?: Record<number, number>;
 }
 export interface OvnMg {
   id: 'rps' | 'vault';
@@ -191,8 +194,58 @@ export interface MidMg {
   picks: Record<number, Card>;
   last: { picks: Record<number, Card>; deckCard: Card | null; crit: MidCrit; target: number; win: number[]; void: boolean } | null;
 }
+/* ---- 2026-10-13 디지털판 추가 (실물 문서에 있던 미니게임) ---- */
+/** 몸짓 잇기(디지털판: 정해진 몸짓 8개를 버튼으로). 지금까지의 몸짓 줄(seq)을 처음부터 따라 하고(pos) 새 몸짓 1개를 붙인다 */
+export interface GestureMg {
+  id: 'gesture';
+  alive: number[]; ci: number; out: number[][];
+  seq: number[]; pos: number; until: number;
+  /** 최근 입력 2개(머리 위 아이콘: 방금 것과 흐려진 직전 것) */
+  recent: { seat: number; g: number; n: number }[];
+  n: number;
+}
+/** 주사위 쌓기(디지털판: 스태커). 모두 동시에 각자 화면에서 쌓고, 기기가 잰 시간을 보낸다 */
+export interface StackMg {
+  id: 'stack';
+  ord: number[]; step: 'pre' | 'play'; until: number; limit: number;
+  wide: Record<number, boolean>; h: Record<number, number>; ms: Record<number, number>; done: Record<number, boolean>;
+}
+/** 뭐가 바뀌었지: 말 8개가 점수 트랙 판(10×5칸) 위에. 바꾸는 사람이 말을 옮기고 나머지가 고른다 */
+export interface ChangeMg {
+  id: 'change';
+  ord: number[]; pan: number; changer: number;
+  step: 'look' | 'move' | 'guess'; until: number;
+  pieces: number[]; before: number[]; moved: number[]; need: number;
+  guesses: Record<number, number[]>; pts: Record<number, number>;
+  last: { changer: number; moved: number[]; guesses: Record<number, number[]>; gain: Record<number, number> } | null;
+}
+/** 동굴 탐험: 공유 굴림. 남기·나가기를 선부터 차례로 정하고, 매 턴 주사위를 1개 더해(최대 3개) 굴린다 */
+export interface CaveMg {
+  id: 'cave';
+  ord: number[]; pan: number;
+  step: 'decide' | 'pre' | 'show'; until: number;
+  inside: number[]; di: number; pool: number; ones: number; turn: number; protect: number;
+  /** 이번 판 점수(나간 사람은 버틴 턴 수, 무너지면 남은 사람 0) */
+  got: Record<number, number>; score: Record<number, number[]>;
+  last: { faces: number[]; kept: number; ones: number; collapse: boolean; turn: number } | null;
+}
+/** 합이 10: 자기 더미(hands, 맨 위 = 끝), 가운데 자리 3개. 두 장의 합이 10이면 주사위 잡기(반응 시간은 각 기기가 잰다) */
+export interface TenMg {
+  id: 'ten';
+  ord: number[]; pan: number; hands: Record<number, Card[]>; slots: Card[][]; ci: number;
+  all: boolean; flipN: number; grabs: Record<number, number>; grabUntil: number; spent: Card[]; bundle: Card[];
+  last: { seat: number; slots: number[]; got: number; all: boolean } | null;
+}
+/** 밸런스 게임: 선이 두 가지(아이템이면 세 가지)를 내고 모두 동시에 고른다. 가장 많은 쪽이 혼자면 그쪽 1점(세 가지면 3점) */
+export interface BalanceMg {
+  id: 'balance';
+  ord: number[]; ci: number; step: 'say' | 'pick'; opts: string[]; three: boolean;
+  picks: Record<number, number>; pts: Record<number, number>;
+  last: { opts: string[]; picks: Record<number, number>; win: number | null; gain: number } | null;
+}
 export type MgState = HoldMg | BombMg | AuctionMg | BalloonMg | OvnMg | CountMg | RaceMg
-  | DuelMg | UpDownMg | CurlingMg | LineMg | SpeedMg | FoldMg | ChainMg | MidMg;
+  | DuelMg | UpDownMg | CurlingMg | LineMg | SpeedMg | FoldMg | ChainMg | MidMg
+  | GestureMg | StackMg | ChangeMg | CaveMg | TenMg | BalanceMg;
 
 export interface GameState {
   v: number;
@@ -227,6 +280,12 @@ export interface GameState {
   clubChoose?: { seat: number; card: Card } | null;
   /** ♠J: from이 to의 손패(뒷면으로 펼친 것)에서 1장을 고르는 중 */
   steal?: { from: number; to: number } | null;
+  /** 이번 라운드 메인 턴에 이미 한 것(자리별). 토큰 만들기·아이템은 한 라운드에 1번 */
+  used?: Record<number, { item?: boolean; token?: boolean }>;
+  /** 디지털판: 최근에 한 미니게임(오래된 것부터). 이 미니게임들은 미니게임 6장에 나오지 않는다 */
+  recentMg?: MgId[];
+  /** 미니게임이 끝났다: 마지막 결과를 보여 주는 동안(at까지, 방장 시계) 미니게임 화면에 머문 뒤 순위·보상으로 넘어간다 */
+  mgEnd?: { groups: number[][]; at: number } | null;
   rewardDisp?: Card[] | null;
   lastRank?: number[][];
   fx?: Fx[];

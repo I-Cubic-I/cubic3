@@ -496,3 +496,83 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .mbtn.mgpick{justify-content:space-between;gap:6px;padding:0 10px 0 14px;font-size:15px}
 .mbtn.mgpick>span:first-child{white-space:nowrap;letter-spacing:-.3px}
 .mgtag{flex:none;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);font-size:12px;font-weight:600;color:var(--muted)}
+
+/* 손패: 토큰을 만들 수 있는 문양 묶음과 그 위 버튼 */
+.hcard.tokc{border-color:var(--tc);box-shadow:0 0 0 3px var(--tc),0 0 22px color-mix(in srgb,var(--tc) 70%,transparent),0 14px 30px rgba(0,0,0,.5)}
+.tokbtn{position:absolute;bottom:150px;transform:translateX(-50%);z-index:30;pointer-events:auto;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:7px 14px;border-radius:999px;border:2px solid var(--tc);background:rgba(16,14,12,.92);color:#fbf8f0;font-size:14px;font-weight:700;box-shadow:0 0 16px color-mix(in srgb,var(--tc) 60%,transparent),0 6px 16px rgba(0,0,0,.45);animation:tokpop .25s ease-out}
+.tokbtn:hover{background:var(--tc);color:#fff}
+.tokbtn:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+@keyframes tokpop{from{transform:translate(-50%,8px);opacity:0}to{transform:translateX(-50%);opacity:1}}
+/* 메인 턴 아이템 컷신(♣ 컷신과 같은 모양) */
+.cutin.item{transition:opacity .25s}
+.cutin.item.out{opacity:0}
+.cutin .who .arrow{font-family:'Black Han Sans',sans-serif;font-size:clamp(28px,4vw,44px);color:var(--brass)}
+.cutin .who .av.sm{width:44px;height:44px}
+.cutin .who .nm.sm{font-size:clamp(26px,4vw,44px)}
+.cutin .cutcards{position:absolute;left:50%;top:calc(50% + 185px);transform:translateX(-50%);display:flex;gap:8px;animation:fadein .5s .25s both}
+/* 위냐 아래냐: 동전 수 고르기 */
+.coinbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.coinbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:64px;height:64px;padding:0 12px;border-radius:12px;background:var(--glass);border:1px solid var(--line)}
+.coinbtn:hover{border-color:var(--brass)}
+.coinbtn:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+.coinbtn b{font-family:'Black Han Sans',sans-serif;font-size:22px;font-weight:400;line-height:1}
+.coinbtn .coins{display:flex;gap:2px;white-space:nowrap;font-size:11px;color:var(--muted);line-height:1}
+.coin{display:inline-block;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe9a0,#d9b24a 60%,#9a7420);box-shadow:inset 0 0 0 1px rgba(90,60,10,.6)}
+/* 미니게임이 끝나 결과를 보여 주는 동안 */
+.panel.mg.ended .stage{pointer-events:none;opacity:.75}
+.panel.mg .endnote{margin:-2px 0 10px;padding:6px 12px;border-radius:999px;background:var(--brass);color:var(--brass-ink);font-weight:700;text-align:center;animation:fadein .3s}
+
+/* ---- 2026-10-13 추가 미니게임 ---- */
+/* 몸짓 잇기 */
+.gesthead{display:flex;align-items:flex-end;justify-content:center;gap:10px;min-height:76px}
+.gesthead .g{display:flex;flex-direction:column;align-items:center;font-size:52px;line-height:1;animation:gestpop .25s ease-out}
+.gesthead .g small{font-size:12px;color:var(--muted);margin-top:4px}
+.gesthead .g.prev{font-size:30px;opacity:.35;animation:none}
+.gesthead .g.none{font-size:40px;color:var(--muted)}
+@keyframes gestpop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.dpads{display:flex;gap:28px;justify-content:center}
+.dpad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,54px);gap:4px}
+.dbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-radius:12px;background:var(--glass);border:1px solid var(--line);position:relative}
+.dbtn .e{font-size:22px;line-height:1}.dbtn small{font-size:10px;color:var(--muted)}
+.dbtn kbd{position:absolute;right:4px;top:2px;font-size:9px;color:var(--muted)}
+.dbtn:not(:disabled):hover{border-color:var(--brass)}.dbtn:disabled{opacity:.45}
+.dbtn.p0{grid-area:1/2}.dbtn.p1{grid-area:2/1}.dbtn.p2{grid-area:3/2}.dbtn.p3{grid-area:2/3}
+/* 주사위 쌓기 */
+.stacker{display:flex;flex-direction:column;gap:4px;padding:8px;border-radius:12px;background:#0b0f14;border:1px solid var(--line);cursor:pointer;touch-action:none;user-select:none}
+.stacker.fail{animation:shakex .25s}
+.srow{display:flex;gap:4px}
+.scell{width:34px;height:22px;border-radius:4px;background:#1a222c}
+.scell.on{background:#ff5a4a;box-shadow:0 0 10px rgba(255,90,74,.7)}
+.scell.cur:not(.on){background:#222c38}
+@keyframes shakex{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+/* 뭐가 바뀌었지 */
+.chgboard{position:relative;display:grid;grid-template-columns:repeat(10,1fr);gap:3px;width:min(460px,86vw);padding:6px;border-radius:10px;background:#efe6d2}
+.ccell{position:relative;aspect-ratio:1;border-radius:5px;background:#f8f2e4;border:1px solid #d8cbb0;display:flex;align-items:center;justify-content:center;padding:0}
+.ccell small{position:absolute;left:3px;top:1px;font-size:8px;color:#a89878}
+.ccell.sel{outline:3px solid var(--cyan);outline-offset:-1px}
+.ccell.mv{background:#ffe9b0}
+.piece{display:inline-block;width:62%;height:62%;border-radius:50%;box-shadow:inset 0 -3px 0 rgba(0,0,0,.25),0 2px 4px rgba(0,0,0,.35);border:1px solid rgba(0,0,0,.35)}
+.piece.big{width:34px;height:34px}
+.chgboard.dark{background:#05070a}
+.chgboard.dark .ccell{background:#0b0f14;border-color:#141a22}
+.chgboard.dark .ccell small{color:#2a323c}
+.chgboard .eyes{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:54px}
+/* 동굴 탐험 */
+.cavedice{display:flex;align-items:center;gap:10px;font-size:46px;line-height:1}
+.cdie.one{color:#ff6b6b}.cdie.idle{opacity:.5}
+.onesbox{display:flex;gap:4px;margin-left:10px}
+.onesbox i{font-style:normal;font-size:14px;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);color:var(--muted)}
+.onesbox i.on{background:#ff6b6b;border-color:#ff6b6b;color:#fff}
+/* 합이 10 */
+.tenslots{display:flex;gap:14px;justify-content:center}
+.tslot{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;border-radius:12px;background:var(--glass);border:1px solid var(--line);min-width:80px;min-height:112px;justify-content:center}
+.tslot.can{border-color:var(--brass);cursor:pointer}
+.tslot.hot .mcard{box-shadow:0 0 0 3px #ff5a4a}
+.tslot .empty{font-size:12px;color:var(--muted)}
+.tslot small{font-size:11px;color:var(--muted)}
+.btn.grab kbd{font-size:10px;margin-left:6px;opacity:.7}
+.btn.grab.done{opacity:.5}
+/* 밸런스 게임 */
+.balsay{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.balsay input{width:130px;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:inherit;font:inherit;user-select:text}
+.vs{color:var(--muted);font-weight:700}

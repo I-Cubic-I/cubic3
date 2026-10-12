@@ -206,16 +206,18 @@ function setFan(av: THREE.Group, n: number): void {
 }
 
 /* ---------------- 미니게임 테이블 배치 ---------------- */
-// 미니게임 테이블: 안쪽 원 8개 + 바깥 원 8개(2026-10-12 추가분)
-const ST_IDS: MgId[] = ['balloon', 'vault', 'race', 'count', 'hold', 'bomb', 'auction', 'rps', 'nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid'];
+// 미니게임 테이블: 안쪽 원 8개 + 바깥 원(나머지)
+const ST_IDS: MgId[] = ['balloon', 'vault', 'race', 'count', 'hold', 'bomb', 'auction', 'rps', 'nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance'];
 const ST_R = [440, 720];
 const STYLE: Record<MgId, { felt: string; wood: string; shape: 'round' | 'octa' | 'square' | 'long' }> = {
   balloon: { felt: '#7a3b22', wood: '#c99a6a', shape: 'round' }, vault: { felt: '#30363f', wood: '#1f2329', shape: 'square' }, race: { felt: '#2c5a3c', wood: '#5b3b23', shape: 'long' }, count: { felt: '#23405e', wood: '#3a2a1c', shape: 'round' },
   hold: { felt: '#5a2626', wood: '#2a1a12', shape: 'octa' }, bomb: { felt: '#3a1414', wood: '#1a1a1a', shape: 'round' }, auction: { felt: '#4a3a12', wood: '#6b4a2a', shape: 'square' }, rps: { felt: '#2e2e5a', wood: '#c9c2b4', shape: 'round' },
   nunchi: { felt: '#7a4a22', wood: '#4a2c18', shape: 'round' }, updown: { felt: '#2f4a3a', wood: '#3a2a1c', shape: 'round' }, curling: { felt: '#2a3442', wood: '#5b3b23', shape: 'long' }, line: { felt: '#22303f', wood: '#2a1f18', shape: 'square' },
   speed: { felt: '#4a1f3a', wood: '#2a1a20', shape: 'round' }, fold: { felt: '#4a3a5a', wood: '#3a2a3a', shape: 'octa' }, chain: { felt: '#3a4a2a', wood: '#2a2a1a', shape: 'octa' }, mid: { felt: '#2a3a5a', wood: '#1f2a3a', shape: 'square' },
+  gesture: { felt: '#5a3a2a', wood: '#3a2418', shape: 'round' }, stack: { felt: '#1f2f3f', wood: '#2a1f18', shape: 'square' }, change: { felt: '#2f3f2a', wood: '#3a2a1c', shape: 'square' }, cave: { felt: '#3a3026', wood: '#241a12', shape: 'octa' },
+  ten: { felt: '#3f1f2a', wood: '#2a1a1a', shape: 'round' }, balance: { felt: '#2a2f4a', wood: '#c9c2b4', shape: 'round' },
 };
-function stFrame(id: MgId) { const k = ST_IDS.indexOf(id); const ring = k < 8 ? 0 : 1; const a = (k % 8) * 2 * PI / 8 + PI / 8; const x = Math.sin(a) * ST_R[ring], z = Math.cos(a) * ST_R[ring]; return { x, z, ry: Math.atan2(-x, -z) }; }
+function stFrame(id: MgId) { const k = ST_IDS.indexOf(id); const ring = k < 8 ? 0 : 1; const cnt = ring ? ST_IDS.length - 8 : 8; const a = (ring ? k - 8 : k) * 2 * PI / cnt + PI / cnt; const x = Math.sin(a) * ST_R[ring], z = Math.cos(a) * ST_R[ring]; return { x, z, ry: Math.atan2(-x, -z) }; }
 /** 말 컬링 판 좌표(cm, x 폭·y 길이) → 미니게임 테이블 위 위치. 화면 아래쪽이 출발 가장자리, 위쪽이 끝 벽 */
 const CS = 3;
 const curlLocal = (x: number, y: number): [number, number] => [-x * CS, (y - CURL.L / 2) * CS];
@@ -244,7 +246,7 @@ export class World {
   private avatars = new Map<number, THREE.Group>();
   private chairs = new Map<number, THREE.Group>(); // 대기실의 빈 의자 (의자 번호 → 의자)
   private seatKey = '';
-  private stations = new Map<MgId, { g: THREE.Group; props: THREE.Group; parts: Record<string, any> }>();
+  private stations = new Map<MgId, { g: THREE.Group; props: THREE.Group; parts: Record<string, any>; lamp?: THREE.Group }>();
   private mgSpot!: THREE.SpotLight;
   private monitor!: THREE.Group;
   private screenCtx!: CanvasRenderingContext2D;
@@ -431,8 +433,7 @@ export class World {
         map: ctex('sign' + id, 512, 132, (gg, w, h) => { gg.fillStyle = look[1]; rr(gg, 0, 0, w, h, 30); gg.fill(); gg.fillStyle = '#fbf8f0'; gg.font = `76px ${FONT_D}`; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText(MG[id] ? MG[id].name : id, w / 2, h / 2 + 4); }), transparent: true,
       }));
       sign.position.set(0, 172, 96); sign.rotation.y = PI;
-      g.add(rug, top, fl, leg, props, sign); this.scene.add(g); this.stations.set(id, { g, props, parts: {} });
-      this.pendant(f.x, f.z, .8, look[0]);
+      g.add(rug, top, fl, leg, props, sign); this.scene.add(g); this.stations.set(id, { g, props, parts: {}, lamp: this.pendant(f.x, f.z, .8, look[0]) });
     });
   }
   private stationSeat(id: MgId, i: number): THREE.Vector3 {
@@ -891,10 +892,15 @@ export class World {
 
   /* ---------------- 카메라 ---------------- */
   shot(name: ShotName, speed = 2.6): void { this.camS.shot = name; this.camS.speed = speed; }
-  goStation(id: MgId): boolean { if (!this.stations.has(id)) return false; this.stationShot(id); this.shot('station', 1.4); return true; }
+  goStation(id: MgId): boolean {
+    if (!this.stations.has(id)) return false; this.stationShot(id); this.shot('station', 1.4);
+    // 위에서 내려다보는 시점이라 그 테이블 위 전등이 화면을 가린다: 미니게임 중엔 숨긴다(빛은 따로 비추는 조명이 맡는다)
+    for (const [k, s] of this.stations) if (s.lamp) s.lamp.visible = k !== id;
+    return true;
+  }
   /** 꾸미기: 가운데 테이블 천 색 (내 화면에만) */
   setFelt(hex: string): void { this.feltMat?.color.set(hex); }
-  lightsMain(): void { if (this.mgSpot) this.mgSpot.intensity = 0; }
+  lightsMain(): void { if (this.mgSpot) this.mgSpot.intensity = 0; for (const [, s] of this.stations) if (s.lamp) s.lamp.visible = true; }
   resetLook(): void { this.yaw = 0; this.pitch = 0; this.lookT.yaw = 0; this.lookT.pitch = 0; }
   private cursorLook(x: number, y: number): void {
     const nx = x / this.W * 2 - 1, ny = y / this.H * 2 - 1; const dz = (v: number, e: number) => Math.sign(v) * Math.max(0, Math.abs(v) - e) / (1 - e);

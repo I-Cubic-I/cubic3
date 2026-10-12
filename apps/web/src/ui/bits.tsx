@@ -24,7 +24,9 @@ export function MCard({ c, cls = '', onClick, hand = false, ...rest }: { c: Card
   );
 }
 
-export const handSort = (h: Card[]) => h.slice().sort((a, b) => (U(a) > U(b) ? 1 : U(a) < U(b) ? -1 : R(a) - R(b)));
+/** 손패 정렬: 문양별(♠♥♦♣)로 묶고, 같은 문양은 숫자 순 */
+const SUIT_ORD: Record<string, number> = { S: 0, H: 1, D: 2, C: 3 };
+export const handSort = (h: Card[]) => h.slice().sort((a, b) => SUIT_ORD[U(a)] - SUIT_ORD[U(b)] || R(a) - R(b));
 export const Nm = ({ S, i }: { S: GameState; i: number }) => <>{seatName(S, i)}</>;
 export const names = (S: GameState, is: number[]) => is.map(i => seatName(S, i)).join(' · ');
 export const Tok = ({ s }: { s: string }) => <span className={`tok ${s}`} />;

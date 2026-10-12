@@ -104,8 +104,9 @@ export function App() {
     return useStore.subscribe((s, p) => {
       if (s.devPreview && s.S && p.S?.phase === 'mg' && s.S.phase !== 'mg') {
         useStore.getState().set({ devPreview: false }); leaving = true;
-        // 결과 화면이 뜰 틈을 조금 두고, 안 떴으면 바로 나간다
-        setTimeout(() => { if (leaving && !useStore.getState().results) leave(); }, 300);
+        // 결과 화면이 뜰 틈을 두고(앞선 연출이 끝나야 뜬다), 안 떴으면 나간다
+        const wait = (n: number) => setTimeout(() => { if (!leaving || useStore.getState().results) return; if (n > 0) wait(n - 1); else leave(); }, 300);
+        wait(40);
       } else if (leaving && p.results && !s.results) leave();
     });
   }, []);
