@@ -1,6 +1,6 @@
 /* 개발 서버 전용: 미니게임 미리보기. 내 자리 3개로 게임을 시작하고, 고른 미니게임의 규칙 설명 단계로 바로 보낸다.
    자리마다 아이템(J·Q·K)을 쥐여 줘서 아이템 카드 화면도 볼 수 있다. 화면 위 "자리 1·2·3"으로 조종할 자리를 바꾼다 */
-import { type Card, type GameState, MG, type MgId, R, U, draw, shuffle } from '@cubic3/engine';
+import { type Card, type GameState, INSTANT, MG, type MgId, R, U, draw, reclaim, shuffle, startMinigame } from '@cubic3/engine';
 import type { Room } from './net/room';
 
 export const MG_IDS = Object.keys(MG) as MgId[];
@@ -26,5 +26,7 @@ export async function setupMgPreview(r: Room, id: MgId, name: string): Promise<v
       const j = takeJ(); if (j) p.hand.push(j);
       const qk = (k % 2 ? S.kPile : S.qPile).pop(); if (qk) p.hand.push(qk);
     });
+    // 즉시 시작 미니게임(눈치 게임)은 규칙 설명 없이 바로
+    if (INSTANT.includes(id)) { reclaim(S); startMinigame(S); }
   });
 }

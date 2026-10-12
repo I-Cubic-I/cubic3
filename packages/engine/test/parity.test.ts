@@ -202,6 +202,16 @@ function playOne(n: number, seed: number): { steps: number; phases: Set<string> 
 
 describe('시험판 엔진과 대조', () => {
   it('2~5인 무작위 대국 400판에서 매 행동 뒤 상태가 같다', () => {
+    // 시험판에는 처음 8개 미니게임만 있다. 그 뒤에 추가한 미니게임은 이 대조에서 잠시 뺀다(미니게임 판 6장 뽑기가 같아지게)
+    const OLD_IDS = ['hold', 'bomb', 'auction', 'balloon', 'rps', 'vault', 'count', 'race'];
+    const MG = TS.MG as Record<string, unknown>; const saved: Record<string, unknown> = {};
+    for (const k of Object.keys(MG)) if (!OLD_IDS.includes(k)) { saved[k] = MG[k]; delete MG[k]; }
+    try { runParity(); } finally { Object.assign(MG, saved); }
+  }, 300_000);
+});
+
+function runParity(): void {
+  {
     const seen = new Set<string>(); let ended = 0;
     for (let g = 0; g < 400; g++) {
       const n = 2 + (g % 4);
@@ -214,5 +224,5 @@ describe('시험판 엔진과 대조', () => {
       if (!seen.has(p)) throw new Error('나오지 않은 단계: ' + p);
     }
     if (ended < 300) throw new Error('끝난 판이 너무 적다: ' + ended);
-  }, 300_000);
-});
+  }
+}

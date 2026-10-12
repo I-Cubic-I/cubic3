@@ -4,6 +4,9 @@ import { MG } from './mginfo';
 import {
   auctionOpen, balloonStart, bombLay, countStart, ovnStart, raceStart,
 } from './minigames';
+import {
+  advanceMg2, chainStart, curlingStart, duelStart, foldStart, lineStart, midStart, speedStart, updownStart,
+} from './minigames2';
 import type { Card, Fx, GameState, MgId, Suit } from './types';
 
 export function log(S: GameState, msg: string): void {
@@ -77,6 +80,13 @@ export function rollBoard(S: GameState): void {
   S.die = d6(); S.phase = 'clubs'; S.deadline = null; S.ready = {};
   log(S, `${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[boardMg(S)].name}`);
   fx(S, { t: 'dice', v: S.die, mg: boardMg(S) });
+  instantStart(S);
+}
+/** 즉시 시작하는 미니게임(눈치 게임): 뽑히면 규칙 설명 시간 없이 바로 시작한다. ♣를 쓸 틈도 없다 */
+export const INSTANT: MgId[] = ['nunchi'];
+function instantStart(S: GameState): void {
+  if (!INSTANT.includes(boardMg(S))) return;
+  S.deadline = null; S.ready = {}; reclaim(S); log(S, `${MG[boardMg(S)].name}: 즉시 시작!`); startMinigame(S);
 }
 export function useClub(S: GameState, i: number, c: Card, arg?: number): void {
   const p = S.seats[i]; p.hand.splice(p.hand.indexOf(c), 1); p.front.push(c);
@@ -95,6 +105,7 @@ export function useClub(S: GameState, i: number, c: Card, arg?: number): void {
   log(S, `이번 미니게임: ${MG[boardMg(S)].name}`); S.ready = {};
   if (r === 11) fx(S, { t: 'dice', v: S.die, mg: boardMg(S), seats: [i], club: c });
   else fx(S, { t: 'banner', text: `${cname(c)} → ${S.die}번 ${MG[boardMg(S)].name}`, seats: [i], club: c, v: S.die });
+  instantStart(S);
 }
 export function startMain(S: GameState): void {
   S.phase = 'main'; S.deadline = null;
@@ -241,6 +252,7 @@ export function clubPick(S: GameState, k: number): void {
   const cc = S.clubChoose!; S.clubChoose = null; S.die = k; S.ready = {};
   log(S, `자리 ${cc.seat + 1}: ${cname(cc.card)}로 ${k}번 칸 → 이번 미니게임: ${MG[boardMg(S)].name}`);
   fx(S, { t: 'pick', v: k, mg: boardMg(S), seats: [cc.seat] });
+  instantStart(S);
 }
 
 /* ---- 규칙 설명 시간: 모두 준비하면 시작 (♣는 그동안 언제든) ---- */
@@ -274,6 +286,14 @@ export function startMinigame(S: GameState): void {
   if (id === 'rps' || id === 'vault') ovnStart(S, id);
   if (id === 'count') countStart(S, ord);
   if (id === 'race') raceStart(S, ord);
+  if (id === 'nunchi') duelStart(S);
+  if (id === 'updown') updownStart(S);
+  if (id === 'curling') curlingStart(S);
+  if (id === 'line') lineStart(S);
+  if (id === 'speed') speedStart(S);
+  if (id === 'fold') foldStart(S);
+  if (id === 'chain') chainStart(S);
+  if (id === 'mid') midStart(S);
   log(S, `미니게임 시작: ${MG[id].name}`); fx(S, { t: 'title', mg: id });
 }
 /** scores: {seat:value} → 순위 그룹 [[seat..],..] */
@@ -339,5 +359,5 @@ export function advanceTimers(S: GameState): boolean {
   if (S.phase === 'defense' && S.pending && t >= S.pending.deadline) { resolveAttack(S); return true; }
   // 눈치 경매(디지털판): 아이템 낼 시간이 지나면 입찰로
   if (S.phase === 'mg' && S.mg?.id === 'auction' && S.mg.step === 'pre' && S.mg.until && t >= S.mg.until) { S.mg.step = 'bid'; return true; }
-  return false;
+  return advanceMg2(S, t);
 }

@@ -9,7 +9,11 @@ import {
   auctionBid, auctionItem, auctionReady, balloonPlay, bombArm, bombFlip, countAnswer, countArm, countOpenAt, holdRoll, holdStop,
   ovnSave, raceBet, raceFlip, raceSwap, rpsArm, rpsPass, rpsPick, vaultArm, vaultGuard, vaultHide,
 } from './minigames';
-import type { Card, GameState, Hand, Suit } from './types';
+import {
+  chainAim, chainFingers, chainPass, chainTwo, curlNoWall, curlShot, curlTurn, duelFake, duelHit, foldAnswer, foldIsDup, foldSafe, foldSay,
+  lineGo, linePeek, linePlay, midCrit, midPick, speedFits, speedPile, speedPlay, udCall, udCaller, udGrip, udRegrip, udShout, udShouter,
+} from './minigames2';
+import type { Card, CurlShot, GameState, Hand, MidCrit, Suit } from './types';
 
 export const MAX_SEATS = 5;
 export const HAND_LIMIT = 6;
@@ -60,7 +64,28 @@ export type Action =
   | { type: 'countArm'; seat: number; item: Card }
   | { type: 'raceBet'; seat: number; suit: Suit }
   | { type: 'raceSwap'; seat: number; item: Card; suit: Suit }
-  | { type: 'raceFlip'; seat: number };
+  | { type: 'raceFlip'; seat: number }
+  | { type: 'duelHit'; seat: number; ms: number | null }
+  | { type: 'duelFake'; seat: number; item: Card }
+  | { type: 'udGrip'; seat: number; n: number }
+  | { type: 'udCall'; seat: number; n: number }
+  | { type: 'udRegrip'; seat: number; item: Card; n: number }
+  | { type: 'udShout'; seat: number; up: boolean }
+  | { type: 'curlShot'; seat: number; shot: CurlShot }
+  | { type: 'curlNoWall'; seat: number; item: Card }
+  | { type: 'linePlay'; seat: number }
+  | { type: 'linePeek'; seat: number; item: Card }
+  | { type: 'lineGo'; seat: number }
+  | { type: 'speedPlay'; seat: number; card: Card; pile: number }
+  | { type: 'speedPile'; seat: number; item: Card; card: Card }
+  | { type: 'foldSay'; seat: number; text: string }
+  | { type: 'foldAnswer'; seat: number; yes: boolean }
+  | { type: 'foldSafe'; seat: number; item: Card }
+  | { type: 'chainTwo'; seat: number; item: Card }
+  | { type: 'chainAim'; seat: number; targets: number[] }
+  | { type: 'chainPass'; seat: number; k: number }
+  | { type: 'midCrit'; seat: number; item: Card; crit: MidCrit }
+  | { type: 'midPick'; seat: number; card: Card };
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -196,6 +221,37 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'raceSwap': return S.phase === 'mg' && mg?.id === 'race' && mg.step === 'race' && (a.seat in mg.bet) && mg.bet[a.seat] !== a.suit && SUIT_SET.has(a.suit) && holds(a.seat, a.item) && isItem(a.item) ? null : '지금은 아이템을 쓸 수 없어요.';
     case 'raceFlip': return S.phase === 'mg' && mg?.id === 'race' && mg.step === 'race' && a.seat === S.first ? null : '지금은 뒤집을 수 없어요.';
   }
+  // 2026-10-12 추가 미니게임
+  if ('item' in a && !(holds(a.seat, a.item) && isItem(a.item))) return '아이템 카드가 아니에요.';
+  if (S.phase !== 'mg' || !mg) return '지금은 할 수 없어요.';
+  switch (a.type) {
+    case 'duelHit': return mg.id === 'nunchi' && (a.seat in mg.pts) && !(a.seat in mg.res) && (a.ms == null || (Number.isFinite(a.ms) && a.ms >= 0)) ? null : '지금은 쏠 수 없어요.';
+    case 'duelFake': return mg.id === 'nunchi' && !mg.fakes.includes(a.seat) && !(a.seat in mg.res) && now() <= mg.t0 + mg.lead + mg.sig - 250 ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'udGrip': return mg.id === 'updown' && mg.step === 'grip' && mg.ord.includes(a.seat) && !(a.seat in mg.grip) && Number.isInteger(a.n) && a.n >= 0 && a.n <= mg.coins ? null : '지금은 쥘 수 없어요.';
+    case 'udCall': return mg.id === 'updown' && mg.step === 'call' && udCaller(mg) === a.seat && Number.isInteger(a.n) && a.n >= 0 && a.n <= mg.coins * mg.ord.length ? null : '지금은 부를 수 없어요.';
+    case 'udRegrip': return mg.id === 'updown' && mg.step === 'shout' && udShouter(mg) === a.seat && !mg.regrip && Number.isInteger(a.n) && a.n >= 0 && a.n <= mg.coins ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'udShout': return mg.id === 'updown' && mg.step === 'shout' && udShouter(mg) === a.seat ? null : '지금은 외칠 수 없어요.';
+    case 'curlShot': return mg.id === 'curling' && curlTurn(mg) === a.seat ? (now() < mg.until ? '말이 멈출 때까지 기다리세요.' : null) : '내 차례가 아니에요.';
+    case 'curlNoWall': return mg.id === 'curling' && curlTurn(mg) === a.seat && !mg.noWall ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'linePlay': return mg.id === 'line' && mg.step === 'play' && (mg.hands[a.seat] || []).length > 0 ? null : '지금은 낼 수 없어요.';
+    case 'linePeek': return mg.id === 'line' && mg.step === 'play' && (a.seat in mg.won) ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'lineGo': return mg.id === 'line' && mg.step === 'pause' && mg.pause?.seat === a.seat ? null : '지금은 할 수 없어요.';
+    case 'speedPlay': return mg.id === 'speed' && mg.step === 'play' && (mg.hands[a.seat] || []).includes(a.card) && !!mg.piles[a.pile] ? (speedFits(mg.piles[a.pile][mg.piles[a.pile].length - 1], a.card) ? null : '그 더미에는 낼 수 없어요.') : '지금은 낼 수 없어요.';
+    case 'speedPile': return mg.id === 'speed' && mg.step === 'pre' && (mg.hands[a.seat] || []).includes(a.card) ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'foldSay': return mg.id === 'fold' && mg.step === 'say' && mg.ord[mg.ci] === a.seat && typeof a.text === 'string' && a.text.trim().length > 0 ? (foldIsDup(mg, a.text) ? '이미 나온 조건이에요.' : null) : '지금은 말할 수 없어요.';
+    case 'foldAnswer': return mg.id === 'fold' && mg.step === 'answer' && mg.ord.includes(a.seat) && !(a.seat in mg.ans) ? null : '지금은 답할 수 없어요.';
+    case 'foldSafe': return mg.id === 'fold' && mg.step === 'answer' && mg.ord.includes(a.seat) && !(a.seat in mg.ans) && !mg.safe[a.seat] ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'chainTwo': return mg.id === 'chain' && mg.step === 'pre' && mg.ord.includes(a.seat) && !mg.two[a.seat] ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'chainAim': {
+      if (!(mg.id === 'chain' && mg.step === 'point' && mg.ord.includes(a.seat) && !(a.seat in mg.aim))) return '지금은 가리킬 수 없어요.';
+      const t = a.targets; const n = chainFingers(mg, a.seat);
+      return Array.isArray(t) && t.length === n && new Set(t).size === t.length && t.every(x => x !== a.seat && mg.ord.includes(x)) ? null : `서로 다른 ${n}명을 고르세요.`;
+    }
+    case 'chainPass': return mg.id === 'chain' && mg.step === 'pass' && mg.cur === a.seat && mg.bent[a.seat]?.[a.k] === false ? null : '지금은 넘길 수 없어요.';
+    case 'midCrit': return mg.id === 'mid' && mg.step === 'pre' && (a.seat in mg.hands) && mg.crit !== a.crit && ['mid', 'hi', 'lo'].includes(a.crit) ? null : '지금은 아이템을 쓸 수 없어요.';
+    case 'midPick': return mg.id === 'mid' && mg.step === 'pick' && !(a.seat in mg.picks) && (mg.hands[a.seat] || []).includes(a.card) ? null : '지금은 낼 수 없어요.';
+  }
+  return null;
 }
 
 /* ---------- 대기실 의자 ---------- */
@@ -286,5 +342,26 @@ function run(S: GameState, uid: string, a: Action): false | void {
     case 'raceBet': return raceBet(S, a.seat, a.suit);
     case 'raceSwap': return raceSwap(S, a.seat, a.item, a.suit);
     case 'raceFlip': return raceFlip(S, a.seat);
+    case 'duelHit': return duelHit(S, a.seat, a.ms);
+    case 'duelFake': return duelFake(S, a.seat, a.item);
+    case 'udGrip': return udGrip(S, a.seat, a.n);
+    case 'udCall': return udCall(S, a.seat, a.n);
+    case 'udRegrip': return udRegrip(S, a.seat, a.item, a.n);
+    case 'udShout': return udShout(S, a.seat, !!a.up);
+    case 'curlShot': return curlShot(S, a.seat, a.shot);
+    case 'curlNoWall': return curlNoWall(S, a.seat, a.item);
+    case 'linePlay': return linePlay(S, a.seat);
+    case 'linePeek': return linePeek(S, a.seat, a.item);
+    case 'lineGo': return lineGo(S, a.seat);
+    case 'speedPlay': return speedPlay(S, a.seat, a.card, a.pile);
+    case 'speedPile': return speedPile(S, a.seat, a.item, a.card);
+    case 'foldSay': { const r = foldSay(S, a.seat, a.text); return r === false || r === 'dup' ? false : undefined; }
+    case 'foldAnswer': return foldAnswer(S, a.seat, !!a.yes);
+    case 'foldSafe': return foldSafe(S, a.seat, a.item);
+    case 'chainTwo': return chainTwo(S, a.seat, a.item);
+    case 'chainAim': return chainAim(S, a.seat, a.targets);
+    case 'chainPass': return chainPass(S, a.seat, a.k);
+    case 'midCrit': return midCrit(S, a.seat, a.item, a.crit);
+    case 'midPick': return midPick(S, a.seat, a.card);
   }
 }

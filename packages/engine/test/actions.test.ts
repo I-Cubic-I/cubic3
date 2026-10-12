@@ -1,7 +1,7 @@
 /* applyAction 시험: 판정이 허용한 행동만 실행해 무작위 대국을 끝까지 돌리고, 카드가 사라지거나 생기지 않는지 본다. */
 import { describe, expect, it } from 'vitest';
 import {
-  type Action, type Card, type CountMg, type GameState, type HoldMg, U, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
+  type Action, type Card, type CountMg, type GameState, type HoldMg, type MgId, MG, R, U, advanceTimers, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
 } from '../src/index';
 
 function mulberry32(seed: number) {
@@ -25,10 +25,13 @@ function allCards(S: GameState): Card[] {
   const m = S.mg as unknown as Record<string, unknown> | null;
   if (m) {
     const arr = (x: unknown) => (Array.isArray(x) ? x : []) as unknown[];
-    out.push(...(arr(m.bundle) as Card[]), ...(arr(m.lay).filter(Boolean) as Card[]), ...(arr(m.spent) as Card[]), ...(arr(m.pile) as Card[]), ...(arr(m.seq) as Card[]));
+    out.push(...(arr(m.bundle) as Card[]), ...(arr(m.lay).filter(Boolean) as Card[]), ...(arr(m.spent) as Card[]), ...(arr(m.pile) as Card[]), ...(m.id === 'count' ? arr(m.seq) as Card[] : []));
     if (m.dec) out.push(m.dec as Card);
     if (m.bids) out.push(...Object.values(m.bids as Record<string, Card>));
     for (const k of ['hands', 'won']) if (m[k]) Object.values(m[k] as Record<string, Card[]>).forEach(h => out.push(...h));
+    if (m.piles) (m.piles as Card[][]).forEach(p => out.push(...p));
+    if (m.deckCard) out.push(m.deckCard as Card);
+    if (m.id === 'mid') out.push(...Object.values(m.picks as Record<string, Card>));
     if (m.flip) Object.values(m.flip as Record<string, { c: Card }>).forEach(f => out.push(f.c));
     arr(m.prizes).forEach(p => p && out.push((p as { c: Card }).c));
     arr(m.pot).forEach(p => out.push((p as { c: Card }).c));
@@ -36,6 +39,7 @@ function allCards(S: GameState): Card[] {
   return out;
 }
 
+let rng: () => number = Math.random;
 /** 지금 상태에서 시도해 볼 행동 후보 (판정이 걸러 낸다) */
 function candidates(S: GameState, seat: number): Action[] {
   const p = S.seats[seat]; const hand = p.hand; const its = hand.filter(isItem);
@@ -72,12 +76,30 @@ function candidates(S: GameState, seat: number): Action[] {
   for (const z of [1, 2, 3]) c.push({ type: 'vaultHide', seat, zone: z }, { type: 'vaultGuard', seat, zones: [z] }, { type: 'vaultGuard', seat, zones: [z, (z % 3) + 1] });
   for (let n = 0; n <= 6; n++) c.push({ type: 'countAnswer', seat, n });
   for (const su of ['S', 'H', 'D', 'C'] as const) c.push({ type: 'raceBet', seat, suit: su });
+  // 2026-10-12 추가 미니게임
+  c.push({ type: 'duelHit', seat, ms: rng() < .2 ? null : Math.floor(rng() * 600) });
+  for (let n = 0; n <= 3; n++) c.push({ type: 'udGrip', seat, n });
+  for (let n = 0; n <= 15; n++) c.push({ type: 'udCall', seat, n });
+  c.push({ type: 'udShout', seat, up: true }, { type: 'udShout', seat, up: false });
+  c.push({ type: 'curlShot', seat, shot: { x: rng() * 16 - 8, angle: rng() * 1.6 - .8, power: rng() } });
+  c.push({ type: 'linePlay', seat }, { type: 'lineGo', seat });
+  if (m?.id === 'speed') (m.hands[seat] || []).forEach(card => m.piles.forEach((_, k) => c.push({ type: 'speedPlay', seat, card, pile: k })));
+  c.push({ type: 'foldSay', seat, text: '조건 ' + Math.floor(rng() * 1e6) }, { type: 'foldAnswer', seat, yes: rng() < .5 });
+  for (let a = 0; a < S.seats.length; a++) { c.push({ type: 'chainAim', seat, targets: [a] }); for (let b = 0; b < S.seats.length; b++) c.push({ type: 'chainAim', seat, targets: [a, b] }); }
+  c.push({ type: 'chainPass', seat, k: 0 }, { type: 'chainPass', seat, k: 1 });
+  if (m?.id === 'mid') (m.hands[seat] || []).forEach(card => c.push({ type: 'midPick', seat, card }));
+  for (const it of its) {
+    c.push({ type: 'duelFake', seat, item: it }, { type: 'udRegrip', seat, item: it, n: Math.floor(rng() * 4) }, { type: 'curlNoWall', seat, item: it },
+      { type: 'linePeek', seat, item: it }, { type: 'foldSafe', seat, item: it }, { type: 'chainTwo', seat, item: it },
+      { type: 'midCrit', seat, item: it, crit: 'hi' }, { type: 'midCrit', seat, item: it, crit: 'lo' }, { type: 'midCrit', seat, item: it, crit: 'mid' });
+    if (m?.id === 'speed') (m.hands[seat] || []).forEach(card => c.push({ type: 'speedPile', seat, item: it, card }));
+  }
   return c;
 }
 
 function play(n: number, seed: number) {
   let T = 1_000_000; setClock(() => T); setRng(mulberry32(seed));
-  const pick = mulberry32(seed + 77);
+  const pick = mulberry32(seed + 77); rng = pick;
   const S = newLobby();
   for (let k = 0; k < n; k++) expect(applyAction(S, 'u' + k, { type: 'sit', name: 'P' + k })).toEqual({ ok: true });
   expect(applyAction(S, 'u0', { type: 'start' }).ok).toBe(true);
@@ -87,8 +109,11 @@ function play(n: number, seed: number) {
   for (; steps < 6000 && S.phase !== 'ended'; steps++) {
     if (S.mg?.id === 'count') T = Math.max(T, countOpenAt(S.mg) + 1);
     if (S.phase === 'defense' && pick() < 0.3) T = S.pending!.deadline + 1;
+    // 시간이 흐르는 단계(타이머)는 가끔, 할 행동이 없으면 반드시 시간을 보낸다
+    if (pick() < 0.1) { T += 800; advanceTimers(S); }
     const opts: [string, Action][] = [];
     for (let k = 0; k < n; k++) for (const a of candidates(S, k)) if (!canAct(S, 'u' + k, a)) opts.push(['u' + k, a]);
+    if (!opts.length && S.phase === 'mg') { T += 1000; advanceTimers(S); continue; }
     if (!opts.length) throw new Error(`할 수 있는 행동이 없음: ${S.phase} ${S.mg?.id ?? ''} (seed ${seed}) ${JSON.stringify({ turn: S.turn, deck: S.deck.length, row: S.row, hands: S.seats.map(p => p.hand), front: S.seats.map(p => p.front) })}`);
     // 줍기·턴 넘기기가 너무 자주 뽑히지 않게 토큰·종료를 우선
     const pref = opts.filter(([, a]) => a.type === 'token' || a.type === 'trim');
@@ -99,6 +124,35 @@ function play(n: number, seed: number) {
     if (now_ !== total) throw new Error(`카드 수 ${total} → ${now_}: ${JSON.stringify(a)} / ${S.phase} ${S.mg?.id ?? ''} (seed ${seed}, step ${steps})`);
   }
   return { ended: S.phase === 'ended', steps };
+}
+
+/** 미니게임 하나만: 미니게임 판 6칸을 모두 그 게임으로 두고 굴려서 시작, 보상 단계까지 */
+function playMg(id: MgId, n: number, seed: number) {
+  let T = 1_000_000; setClock(() => T); setRng(mulberry32(seed));
+  const pick = mulberry32(seed + 77); rng = pick;
+  const S = newLobby();
+  for (let k = 0; k < n; k++) applyAction(S, 'u' + k, { type: 'sit' });
+  applyAction(S, 'u0', { type: 'start' });
+  // 아이템도 써 보게 자리마다 J를 하나씩
+  S.seats.forEach(p => { const k = S.deck.findIndex(c => R(c) === 11); if (k >= 0) p.hand.push(S.deck.splice(k, 1)[0]); });
+  const ph = (): string => S.phase;
+  S.phase = 'roll'; S.turn = null; S.board = Array(6).fill(id); S.rewardDisp = [];
+  const total = allCards(S).length;
+  applyAction(S, S.seats[S.first].uid, { type: 'roll', seat: S.first });
+  for (let k = 0; k < n && ph() === 'clubs'; k++) applyAction(S, 'u' + k, { type: 'ready' });
+  expect(ph()).toBe('mg');
+  for (let steps = 0; steps < 8000 && ph() === 'mg'; steps++) {
+    if (pick() < 0.1) { T += 800; advanceTimers(S); }
+    const opts: [string, Action][] = [];
+    for (let k = 0; k < n; k++) for (const a of candidates(S, k)) if (!canAct(S, 'u' + k, a)) opts.push(['u' + k, a]);
+    if (!opts.length) { T += 1000; advanceTimers(S); continue; }
+    const [uid, a] = opts[Math.floor(pick() * opts.length)];
+    const r = applyAction(S, uid, a);
+    if (!r.ok) throw new Error(`${id}: 판정은 허용했는데 실패: ${JSON.stringify(a)} ${r.error}`);
+    const now_ = allCards(S).length;
+    if (now_ !== total) throw new Error(`${id} ${n}인: 카드 수 ${total} → ${now_}: ${JSON.stringify(a)} (seed ${seed}, step ${steps})`);
+  }
+  return { done: ph() === 'reward' || ph() === 'main' };
 }
 
 describe('applyAction', () => {
@@ -192,6 +246,43 @@ describe('applyAction', () => {
     S.turn = { ...S.turn!, picked: true, mustDiscard: true };
     expect(applyAction(S, uid, { type: 'token', seat: i, cards: ['H2', 'H3', 'H4'] }).ok).toBe(true);
     expect(S.seats[i].tokens).toEqual(['H']);
+  });
+
+  it('새 미니게임 8개: 인원마다 판정이 허용한 행동만으로 끝까지 가고 카드 수가 보존된다', () => {
+    const ids: MgId[] = ['nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid'];
+    for (const id of ids) for (let n = MG[id].min; n <= MG[id].max; n++) for (let g = 0; g < 6; g++) {
+      const r = playMg(id, n, 9000 + g * 31 + n);
+      if (!r.done) throw new Error(`${id} ${n}인: 끝나지 않음 (seed ${9000 + g * 31 + n})`);
+    }
+  }, 300_000);
+
+  it('눈치 게임은 뽑히면 규칙 설명 없이 바로 시작한다', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(3));
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.phase = 'roll'; S.turn = null; S.board = Array(6).fill('nunchi'); S.rewardDisp = [];
+    expect(applyAction(S, S.seats[S.first].uid, { type: 'roll', seat: S.first }).ok).toBe(true);
+    expect(S.phase).toBe('mg'); expect(S.mg?.id).toBe('nunchi');
+  });
+
+  it('조용한 줄 서기: 더 작은 카드를 든 사람이 있으면 낸 사람과 멈춘 사람이 벌점, 같은 숫자는 괜찮다', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(4));
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.board = Array(6).fill('line'); S.die = 1; S.phase = 'clubs'; S.turn = null; startMinigame(S);
+    const m = S.mg as unknown as { hands: Record<number, Card[]>; won: Record<number, Card[]>; pile: Card[]; step: string };
+    m.step = 'play'; m.hands = { 0: ['S7', 'S9'], 1: ['H3', 'H12'], 2: ['D7'] };
+    expect(applyAction(S, 'u0', { type: 'linePlay', seat: 0 }).ok).toBe(true);
+    expect(m.won[0]).toEqual(['S7']); expect(m.won[1]).toEqual(['H3']); expect(m.won[2]).toEqual([]); expect(m.hands[2]).toEqual(['D7']);
+  });
+
+  it('가운데 숫자: 기준에 맞는 숫자를 낸 사람이 모두 1점, 4인 덱 카드가 걸리면 무산', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(5));
+    const S = newLobby(); for (let k = 0; k < 4; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.board = Array(6).fill('mid'); S.die = 1; S.phase = 'clubs'; S.turn = null; startMinigame(S);
+    const m = S.mg as unknown as { hands: Record<number, Card[]>; won: Record<number, Card[]>; step: string; deckCard: Card | null; crit: string };
+    m.step = 'pick'; m.deckCard = 'S5'; m.hands = { 0: ['H2'], 1: ['H5'], 2: ['H9'], 3: ['D9'] };
+    [0, 1, 2, 3].forEach(k => applyAction(S, 'u' + k, { type: 'midPick', seat: k, card: m.hands[k][0] }));
+    // 2·5·5(덱)·9·9 → 가운데 5는 덱 카드와 같아 무산
+    expect(Object.values(m.won).every(w => !w.length)).toBe(true);
   });
 
   it('판정이 허용한 행동만으로 2~5인 대국이 오류 없이 끝나고 카드 수가 보존된다', () => {

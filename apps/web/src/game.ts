@@ -1,5 +1,5 @@
 /* 상태를 읽는 도우미 (누구 차례인지, 내 자리, 이름) */
-import { type GameState, countOpenAt, now } from '@cubic3/engine';
+import { type GameState, countOpenAt, curlTurn, now, udCaller, udShouter } from '@cubic3/engine';
 
 export const SEATCOL = ['#2f5fc8', '#d3302f', '#e0b100', '#2e9450', '#8a5cc8'];
 export const SUITCOL: Record<string, string> = { S: '#2f5fc8', H: '#d3302f', D: '#e0b100', C: '#2e9450' };
@@ -42,6 +42,14 @@ export function whoActs(S: GameState | null, me: string): number | null {
       return pickOne(Object.keys(m.hits).map(Number).filter(k => !(k in m.ans)));
     }
     if (m.id === 'race') return m.step === 'bet' ? m.order[m.pi] : S.first;
+    if (m.id === 'nunchi') return pickOne(Object.keys(m.pts).map(Number).filter(k => !(k in m.res)));
+    if (m.id === 'updown') return m.step === 'grip' ? pickOne(m.ord.filter(k => !(k in m.grip))) : m.step === 'call' ? udCaller(m) : udShouter(m);
+    if (m.id === 'curling') return curlTurn(m);
+    if (m.id === 'line') return m.step === 'pause' ? m.pause!.seat : pickOne(m.ord.filter(k => m.hands[k]?.length));
+    if (m.id === 'speed') return pickOne(m.ord.filter(k => m.hands[k]?.length));
+    if (m.id === 'fold') return m.step === 'say' ? m.ord[m.ci] : pickOne(m.ord.filter(k => !(k in m.ans)));
+    if (m.id === 'chain') return m.step === 'point' ? pickOne(m.ord.filter(k => !(k in m.aim))) : m.step === 'pass' ? m.cur : null;
+    if (m.id === 'mid') return m.step === 'pick' ? pickOne(m.ord.filter(k => !(k in m.picks))) : null;
   }
   return null;
 }

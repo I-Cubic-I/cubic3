@@ -7,6 +7,10 @@ import { MCard, handSort, names } from './bits';
 import { useEffect, useRef, useState } from 'react';
 import { mgLook } from '../scene/textures';
 import { digitalRules } from './mgtext';
+import { CurlPractice } from './CurlPad';
+
+/** 미니게임 카드 앞면 도구 아이콘 → 이름 */
+const TOOL: Record<string, string> = { '🂠': '카드', '🎲': '주사위', '✊': '손', '🪙': '동전', '1·2·3': '판 뒷면', '🗣': '말하기', '✋': '손가락' };
 
 export function RulesScreen({ S }: { S: GameState }) {
   const me = useStore(s => s.me); const i = useStore(s => s.ctl); const ui = useStore(s => s.ui);
@@ -26,12 +30,13 @@ export function RulesScreen({ S }: { S: GameState }) {
         <div className="scr-body">
           <div className="scr-art" style={{ background: `linear-gradient(170deg,${fld},${body})` }}>
             <div className="ttl">{def.name}</div>
-            <div className="tags"><span>{def.icon.replace(/🂠|🎲|✊/g, '').trim() || '카드 없음'}</span><span>{def.min}~{def.max}인</span></div>
+            <div className="tags"><span>{def.icon.split(' ').map(x => TOOL[x] || x).join(' · ')}</span><span>{def.min}~{def.max}인</span></div>
           </div>
           <div className="scr-rules">{rows}</div>
         </div>
         <div className="scr-foot">
-          <div aria-hidden="true" />
+          {/* 말 컬링: 규칙 설명 시간에 연습해 볼 수 있다(내 화면에만) */}
+          {id === 'curling' && i != null ? <CurlPractice seat={i} /> : <div aria-hidden="true" />}
           <div className="scr-box readybox"><span className="lbl">준비 상태</span>
             <div className="readys">{S.seats.map((_, k) => <span key={k} className={`ready${rd[k] ? ' ok' : ''}`} aria-label={`${nm(k)}${rd[k] ? ' 준비 완료' : ''}`}><i style={{ background: SEATCOL[k % 5] }} aria-hidden="true">{rd[k] ? '✓' : ''}</i>{nm(k)}</span>)}</div>
             {mineLeft.length ? <button className="readybtn" onClick={() => cmd('ready')}>준비 완료{mineLeft.length > 1 ? ` (내 자리 ${mineLeft.length}개)` : ''}</button>
@@ -93,7 +98,39 @@ export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
       <div className="s">{f.win != null ? nm(f.win as number) + ' 낙찰!' : '모두 지워졌다'}</div></>;
   } else if (f.t === 'token') { cls += ' good'; inner = <><span className={`cube ${f.col}`} style={{ width: 56, height: 56, borderRadius: 12 }} /><div className="b">토큰 {String(f.n)}개째!</div>{who}</>; }
   else if (f.t === 'attack') { cls += ' bad'; inner = <><div className="b">{cname(f.card as Card)} 공격!</div><div className="s">{nm(f.seats![0])} → {nm(f.seats![1])}</div></>; }
-  else if (f.t === 'rank') inner = <><div className="k">미니게임 결과</div>{(f.groups as number[][]).map((g, k) => <div key={k} className="rk"><b>{k + 1}위</b>{names(S, g)}</div>)}</>;
+  else if (f.t === 'duel') {
+    const res = f.res as Record<number, number | 'fs'>; const gain = f.gain as Record<number, number>;
+    const ks = Object.keys(gain).map(Number).sort((a, b) => gain[b] - gain[a]);
+    inner = <><div className="k">{String(f.pan)}판 결과</div>
+      <div className="s" style={{ display: 'grid', gap: 4 }}>{ks.map(k => <span key={k}>{nm(k)} · {res[k] === 'fs' ? '부정출발' : `${((res[k] as number) / 1000).toFixed(3)}초`} · {gain[k] > 0 ? '+' : ''}{gain[k]}점</span>)}</div>
+      {!ks.length && <div className="s">아무도 쏘지 않았다</div>}</>;
+  } else if (f.t === 'updown') {
+    const grip = f.grip as Record<number, number>;
+    inner = <><div className="k">{nm(f.caller as number)} {String(f.call)} · {nm(f.shouter as number)} "{f.up ? '위' : '아래'}!"</div>
+      <div className="b">합 {String(f.sum)}</div>
+      <div className="s">{Object.keys(grip).map(k => `${nm(+k)} ${'🪙'.repeat(grip[+k]) || '0'}`).join(' · ')}</div>
+      <div className="s">{nm(f.who as number)} +{String(f.gain)}점</div></>;
+  } else if (f.t === 'curl') {
+    const got = f.got as Record<number, number>;
+    inner = <><div className="k">{String(f.end)}판 점수</div><div className="s">{Object.keys(got).map(k => `${nm(+k)} ${got[+k]}점`).join(' · ')}</div></>;
+  } else if (f.t === 'fold') {
+    const folded = f.folded as number[]; const safe = f.safe as number[];
+    inner = <><div className="k">"{String(f.text)} 접어!"</div><div className="b">{folded.length ? `${folded.length}명 접음` : '아무도 안 접음'}</div>
+      {folded.length > 0 && <div className="s">{names(S, folded)}</div>}{safe.length > 0 && <div className="s">아이템으로 버팀: {names(S, safe)}</div>}</>;
+  } else if (f.t === 'chainAim') {
+    const aim = f.aim as Record<number, number[]>;
+    inner = <><div className="k">가리켰다!</div><div className="s" style={{ display: 'grid', gap: 3 }}>{Object.keys(aim).map(k => <span key={k}>{nm(+k)} 👉 {aim[+k].map(nm).join(', ')}</span>)}</div></>;
+  } else if (f.t === 'mid') {
+    const picks = f.picks as Record<number, Card>; const win = f.win as number[]; const dc = f.deckCard as Card | null;
+    const ks = Object.keys(picks).map(Number).sort((a, b) => R(picks[a]) - R(picks[b]));
+    inner = <><div className="k">공개! · {({ mid: '가운데', hi: '가장 큰', lo: '가장 작은' } as Record<string, string>)[f.crit as string]} 숫자 {String(f.target)}</div>
+      <div className="mini-cards">{ks.map(k => <div key={k} className="col" style={{ opacity: win.includes(k) ? 1 : .55 }}><MCard c={picks[k]} /><small>{nm(k)}</small></div>)}{dc && <div className="col"><MCard c={dc} /><small>덱</small></div>}</div>
+      <div className="s">{f.void ? '덱 카드가 걸려 무산!' : win.length ? names(S, win) + ' 1점' : '아무도 없음'}</div></>;
+  } else if (f.t === 'line') {
+    const stop = f.stop as Record<number, Card>;
+    inner = <><div className="b">멈춰!</div><div className="s">{nm(f.seat as number)} {cname(f.c as Card)} · 더 작은 카드: {Object.keys(stop).map(k => `${nm(+k)} ${cname(stop[+k])}`).join(', ')}</div></>;
+    cls += ' bad';
+  } else if (f.t === 'rank') inner = <><div className="k">미니게임 결과</div>{(f.groups as number[][]).map((g, k) => <div key={k} className="rk"><b>{k + 1}위</b>{names(S, g)}</div>)}</>;
   else if (f.t === 'win') { cls += ' win'; inner = <><div className="k">우승</div><div className="b">{names(S, f.seats!)}</div></>; }
   else inner = <><div className="b">{String(f.text || '')}</div>{who}</>;
   return <div className={cls + (out ? ' out' : '')}>{inner}</div>;

@@ -1,6 +1,6 @@
 /* 흐름: 상태·연출 이벤트 → 3D 연출과 화면. 버튼·테이블 조작을 행동으로 바꾼다. */
 import {
-  type Action, type Card, type Fx, type GameState, type Hand, type MgId, R, SNAME, type Suit, U, canMakeToken, clubChoices, cname, costFor, isItem,
+  type Action, type Card, type Fx, type GameState, type Hand, type MgId, type MidCrit, R, SNAME, type Suit, U, canMakeToken, chainFingers, clubChoices, cname, costFor, isItem,
 } from '@cubic3/engine';
 import { mine, mySeats, seatName, whoActs } from './game';
 import { useStore, viewSeat } from './store';
@@ -29,7 +29,7 @@ function nextFx(): void {
   setTimeout(() => { st().set({ fxShow: { f, out: true } }); setTimeout(nextFx, 260); }, dur);
 }
 function fxDuration(f: Fx): number {
-  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200 } as Record<string, number>)[f.t] || 1300;
+  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200, duel: 2600, updown: 2600, curl: 2200, fold: 2200, chainAim: 1500, mid: 2600, line: 1700 } as Record<string, number>)[f.t] || 1300;
 }
 function shakes(f: Fx): boolean {
   if (f.t === 'dice') return !!f.bust;
@@ -55,12 +55,13 @@ async function runClub(f: Fx): Promise<void> {
     st().set({ cutin: null, screenAlert: false, rulesShown: false });
     choosing = true;
     // ♣Q·♣K: 쓰고 나면 미니게임 선택 화면(디스크가 늘어선 테이블)으로. 고르면 pick 연출이 이어진다
-    if (f.choose) world?.playSelect();
+    if (S()?.phase === 'mg') { /* 즉시 시작 미니게임으로 바뀌었다: 고르기 연출 없이 바로 */ }
+    else if (f.choose) world?.playSelect();
     else await world?.playChoose(f.v as number, { restore: true, roll: R(f.club as Card) === 11 });
   } finally { clubBusy = false; st().set({ clubPlaying: false }); }
   const nx = clubQ.shift(); if (nx) { if (nx.t === 'pick') runPick(nx); else runClub(nx); }
 }
-function runPick(f: Fx): void { choosing = true; st().set({ rulesShown: false }); void world?.playChoose(f.v as number, {}); }
+function runPick(f: Fx): void { if (S()?.phase === 'mg') return; choosing = true; st().set({ rulesShown: false }); void world?.playChoose(f.v as number, {}); }
 function pumpFx(s: GameState): Fx[] {
   const list = s.fx || [];
   if (lastFx === null) { lastFx = s.fxn || 0; return []; }
@@ -90,6 +91,8 @@ export function onState(s: GameState): void {
     // 미니게임이 끝나면 순위 결과 화면(잠깐 뜨는 알림 대신)
     if (f.t === 'rank') { st().set({ results: { mg: lastMgId, groups: f.groups as number[][], rolls: (f.rolls || {}) as Record<number, number[]>, order: (f.order || []) as number[] } }); continue; }
     if (f.club || f.t === 'pick') { if (clubBusy) clubQ.push(f); else if (f.t === 'pick') runPick(f); else runClub(f); continue; }
+    // 즉시 시작 미니게임(눈치 게임)이 뽑혔으면 디스크 고르기 연출 없이 바로 미니게임으로
+    if (f.t === 'dice' && f.mg && ph === 'mg') { queueFx({ ...f, t: 'banner', text: `${f.v}번 · 바로 시작!`, tone: 'bad' }); continue; }
     if (f.t === 'dice' && f.mg) { choosing = true; st().set({ rulesShown: false }); W.playChoose(f.v as number, { roll: true }); continue; }
     queueFx(f);
   }
@@ -294,6 +297,32 @@ export function cmd(a: string, d: D = {}): void {
     case 'rbet': act({ type: 'raceBet', seat: i, suit: d.s as Suit }); break;
     case 'rswap': act({ type: 'raceSwap', seat: i, item: sel[0], suit: d.s as Suit }); break;
     case 'rflip': act({ type: 'raceFlip', seat: i }); break;
+    // 2026-10-12 추가 미니게임
+    case 'dfake': act({ type: 'duelFake', seat: i, item: sel[0] }); break;
+    case 'udgrip': act({ type: 'udGrip', seat: i, n: +d.n! }); break;
+    case 'udcall': act({ type: 'udCall', seat: i, n: +d.n! }); break;
+    case 'udre': act({ type: 'udRegrip', seat: i, item: sel[0], n: +d.n! }); break;
+    case 'udshout': act({ type: 'udShout', seat: i, up: !!+d.up! }); break;
+    case 'cnowall': act({ type: 'curlNoWall', seat: i, item: sel[0] }); break;
+    case 'cshot': act({ type: 'curlShot', seat: i, shot: { x: +d.x!, angle: +d.a!, power: +d.p! } }); break;
+    case 'lplay': act({ type: 'linePlay', seat: i }); break;
+    case 'lpeek': act({ type: 'linePeek', seat: i, item: sel[0] }); break;
+    case 'lgo': act({ type: 'lineGo', seat: i }); break;
+    case 'spc': store.patchUi({ spc: d.c ? String(d.c) : undefined }); break;
+    case 'splay': store.patchUi({ spc: undefined }); void store.act({ type: 'speedPlay', seat: i, card: String(d.c), pile: +d.k! }).then(ok => { if (!ok) toast('늦었어요!'); }); break;
+    case 'spile': act({ type: 'speedPile', seat: i, item: sel[0], card: String(d.c) }); break;
+    case 'fsay': act({ type: 'foldSay', seat: i, text: String(d.t) }); break;
+    case 'fans': act({ type: 'foldAnswer', seat: i, yes: !!+d.y! }); break;
+    case 'fsafe': act({ type: 'foldSafe', seat: i, item: sel[0] }); break;
+    case 'ctwo': act({ type: 'chainTwo', seat: i, item: sel[0] }); break;
+    case 'caim': {
+      if (s?.mg?.id !== 'chain') break; const need = chainFingers(s.mg, i); const k = +d.k!;
+      let a = (ui.aim || []).slice(); a = a.includes(k) ? a.filter(x => x !== k) : [...a, k].slice(-need); store.patchUi({ aim: a }); break;
+    }
+    case 'caimgo': { const a = (ui.aim || []).slice(); store.patchUi({ aim: [] }); act({ type: 'chainAim', seat: i, targets: a }); break; }
+    case 'cpass': act({ type: 'chainPass', seat: i, k: +d.k! }); break;
+    case 'mcrit': act({ type: 'midCrit', seat: i, item: sel[0], crit: d.c as MidCrit }); break;
+    case 'mpick': act({ type: 'midPick', seat: i, card: String(d.c) }); break;
   }
 }
 

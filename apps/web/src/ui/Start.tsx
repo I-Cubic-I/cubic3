@@ -43,7 +43,7 @@ export function Start({ msg, busy, onPick, onDevMg }: { msg: string; busy: strin
           : view === 'mgdev' && onDevMg && !busy ? <div className="optpanel">
             <div className="opthead"><button className="iconbtn" aria-label="뒤로" onClick={back}>{MI.back}</button><h2>미니게임 미리보기</h2></div>
             <p className="optnote" style={{ marginTop: 0 }}>개발 서버 전용 · 내 자리 3개, 아이템을 쥔 채로 규칙 설명부터 시작해요. 위의 "자리 1·2·3"으로 조종할 자리를 바꿔요.</p>
-            <div className="menulist" style={{ marginTop: 8 }}>{(Object.keys(MG) as MgId[]).map(id => <button key={id} className="mbtn" onClick={() => onDevMg(id)}>{MG[id].name}</button>)}</div>
+            <div className="menulist" style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, overflowY: 'auto', minHeight: 0, pointerEvents: 'auto' }}>{(Object.keys(MG) as MgId[]).map(id => <button key={id} className="mbtn mgpick" onClick={() => onDevMg(id)}><span>{MG[id].name}</span><span className="mgtag">{MG[id].min}~{MG[id].max}인</span></button>)}</div>
           </div>
           : busy ? <p className="menubusy" role="status">{busy}</p>
           : <nav className="menulist" aria-label="메인 메뉴">

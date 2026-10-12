@@ -2,8 +2,9 @@
    (시험판 game/src/scene.js를 옮긴 것. 부분별로 R3F 컴포넌트로 다듬어 간다) */
 import * as THREE from 'three';
 import {
-  BLIMIT, CFLIP, type Card, type GameState, MAX_SEATS, fullDeck, MG, type MgId, R, SUITS, SYM, type Suit, U, chairOf, countOpenAt, isItem, now,
+  BLIMIT, CFLIP, CURL, type Card, type GameState, MAX_SEATS, fullDeck, MG, type MgId, R, SUITS, SYM, type Suit, U, chairOf, countOpenAt, isItem, now,
 } from '@cubic3/engine';
+import { curlFrames } from '../ui/CurlPad';
 import { SEATCOL, SUITCOL } from '../game';
 import { feltColor, prefs } from '../prefs';
 import { type BurnU, Burns, burnable } from './burn';
@@ -205,13 +206,19 @@ function setFan(av: THREE.Group, n: number): void {
 }
 
 /* ---------------- 미니게임 테이블 배치 ---------------- */
-const ST_IDS: MgId[] = ['balloon', 'vault', 'race', 'count', 'hold', 'bomb', 'auction', 'rps'];
-const ST_R = 500;
+// 미니게임 테이블: 안쪽 원 8개 + 바깥 원 8개(2026-10-12 추가분)
+const ST_IDS: MgId[] = ['balloon', 'vault', 'race', 'count', 'hold', 'bomb', 'auction', 'rps', 'nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid'];
+const ST_R = [440, 720];
 const STYLE: Record<MgId, { felt: string; wood: string; shape: 'round' | 'octa' | 'square' | 'long' }> = {
   balloon: { felt: '#7a3b22', wood: '#c99a6a', shape: 'round' }, vault: { felt: '#30363f', wood: '#1f2329', shape: 'square' }, race: { felt: '#2c5a3c', wood: '#5b3b23', shape: 'long' }, count: { felt: '#23405e', wood: '#3a2a1c', shape: 'round' },
   hold: { felt: '#5a2626', wood: '#2a1a12', shape: 'octa' }, bomb: { felt: '#3a1414', wood: '#1a1a1a', shape: 'round' }, auction: { felt: '#4a3a12', wood: '#6b4a2a', shape: 'square' }, rps: { felt: '#2e2e5a', wood: '#c9c2b4', shape: 'round' },
+  nunchi: { felt: '#7a4a22', wood: '#4a2c18', shape: 'round' }, updown: { felt: '#2f4a3a', wood: '#3a2a1c', shape: 'round' }, curling: { felt: '#2a3442', wood: '#5b3b23', shape: 'long' }, line: { felt: '#22303f', wood: '#2a1f18', shape: 'square' },
+  speed: { felt: '#4a1f3a', wood: '#2a1a20', shape: 'round' }, fold: { felt: '#4a3a5a', wood: '#3a2a3a', shape: 'octa' }, chain: { felt: '#3a4a2a', wood: '#2a2a1a', shape: 'octa' }, mid: { felt: '#2a3a5a', wood: '#1f2a3a', shape: 'square' },
 };
-function stFrame(id: MgId) { const k = ST_IDS.indexOf(id); const a = k * 2 * PI / ST_IDS.length + PI / ST_IDS.length; const x = Math.sin(a) * ST_R, z = Math.cos(a) * ST_R; return { x, z, ry: Math.atan2(-x, -z) }; }
+function stFrame(id: MgId) { const k = ST_IDS.indexOf(id); const ring = k < 8 ? 0 : 1; const a = (k % 8) * 2 * PI / 8 + PI / 8; const x = Math.sin(a) * ST_R[ring], z = Math.cos(a) * ST_R[ring]; return { x, z, ry: Math.atan2(-x, -z) }; }
+/** 말 컬링 판 좌표(cm, x 폭·y 길이) → 미니게임 테이블 위 위치. 화면 아래쪽이 출발 가장자리, 위쪽이 끝 벽 */
+const CS = 3;
+const curlLocal = (x: number, y: number): [number, number] => [-x * CS, (y - CURL.L / 2) * CS];
 function stLocal(id: MgId, lx: number, ly: number, lz: number) { const f = stFrame(id); const c = Math.cos(f.ry), s = Math.sin(f.ry); return V(f.x + lx * c + lz * s, ly, f.z - lx * s + lz * c); }
 const HALL = 900;
 const SLOTX = (k: number) => -27.5 + k * 11;
@@ -501,6 +508,55 @@ export class World {
       // 12장을 다 넘긴 뒤 뒤집는 정답 문양 카드는 옆에 따로 놓아, 세는 카드와 헷갈리지 않게
       if (now() >= countOpenAt(m) && m.dec) this.propCard(id, 'cdec' + m.dec, m.dec, 34, 0, -4, 0, 2.2);
     }
+    if (m.id === 'curling') {
+      if (!P.cboard) {
+        const { W, L } = CURL;
+        const bd = new T.Mesh(new T.BoxGeometry(W * CS, 1.2, L * CS), [mat('#3a2a1c'), mat('#3a2a1c'), new T.MeshStandardMaterial({
+          map: ctex('curlboard', 170, 300, (gg, w, h) => {
+            [['#e9dfc8', '1'], ['#e2d3b2', '2'], ['#d9c596', '3']].forEach(([c, z], k) => { gg.fillStyle = c; gg.fillRect(0, h - (k + 1) * 100, w, 100); gg.fillStyle = 'rgba(80,60,30,.35)'; gg.font = `64px ${FONT_D}`; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText(z, w / 2, h - k * 100 - 50); });
+            gg.fillStyle = 'rgba(80,60,30,.5)'; gg.fillRect(0, 99, w, 2); gg.fillRect(0, 199, w, 2);
+          }), roughness: .35,
+        }), mat('#3a2a1c'), mat('#3a2a1c'), mat('#3a2a1c')]);
+        // 텍스처의 위쪽(3번 구역)이 판 끝(+z)으로 오게
+        bd.position.set(0, TY + .6, 0); bd.rotation.y = PI; bd.receiveShadow = true; st0.props.add(bd); P.cboard = bd;
+        const wall = new T.Mesh(new T.BoxGeometry(W * CS + 8, 14, 4), mat('#6b4a2a', { roughness: .6 })); wall.position.set(0, TY + 7, L / 2 * CS + 2); wall.castShadow = true; st0.props.add(wall); P.cwall = wall;
+        P.cstones = new Map<string, THREE.Mesh>();
+      }
+      P.cwall.visible = !m.noWall;
+      P.cm = m;
+    }
+    if (m.id === 'line') {
+      m.pile.slice(-5).forEach((c, k) => this.propCard(id, 'lp' + c, c, (k - 2) * 1.2, k * .05, -2 + ((k * 13) % 4), ((k * 37) % 11 - 5) * .08, 1.6));
+      m.ord.forEach(j => m.won[j].forEach((c, k) => {
+        const sp = this.stationSeat(id, j); const v = sp.clone().sub(stLocal(id, 0, 0, 0)).multiplyScalar(.6); const p = stLocal(id, 0, 0, 0).add(v);
+        this.want('m:lw' + c, () => makeCard(c), V(p.x + k * 1.5, TY + .6 + k * .05, p.z), [-PI / 2, 0, Math.atan2(v.x, v.z) + PI], .9, { lift: 8 });
+      }));
+    }
+    if (m.id === 'speed') {
+      m.piles.forEach((p, k) => { const c = p[p.length - 1]; this.propCard(id, 'sp' + k + '_' + c, c, (k - (m.piles.length - 1) / 2) * 13, 0, 0, 0, 1.5); });
+      m.ord.forEach(j => m.won[j].forEach((c, k) => {
+        const sp = this.stationSeat(id, j); const v = sp.clone().sub(stLocal(id, 0, 0, 0)).multiplyScalar(.62); const p = stLocal(id, 0, 0, 0).add(v);
+        this.want('m:sw' + c, () => makeCard(null), V(p.x + k * 1.2, TY + .6 + k * .05, p.z), [PI / 2, 0, -(Math.atan2(v.x, v.z) + PI)], .8, { lift: 8 });
+      }));
+    }
+    if (m.id === 'mid') {
+      if (m.deckCard) this.propCard(id, 'md' + m.deckCard, m.deckCard, 0, 0, 22, 0, 1.4);
+      // 직전 판에 낸 카드: 크기 순으로 한 줄
+      const L = m.last; if (L) {
+        const cs = Object.values(L.picks).concat(L.deckCard ? [L.deckCard] : []).sort((a, b) => R(a) - R(b));
+        cs.forEach((c, k) => this.propCard(id, 'ml' + c, c, (k - (cs.length - 1) / 2) * 9, 0, -6, 0, 1.3));
+      }
+    }
+    if (m.id === 'updown' && m.last) {
+      // 직전 판에 쥐었던 동전: 각자 앞에
+      if (!P.coinGeo) { P.coinGeo = new T.CylinderGeometry(2.2, 2.2, .5, 24); P.coinMat = mat('#d9b24a', { roughness: .35, metalness: .7 }); }
+      while (P.coins?.children.length) P.coins.remove(P.coins.children[0]);
+      if (!P.coins) { P.coins = new T.Group(); st0.props.add(P.coins); }
+      Object.keys(m.last.grip).forEach(j => {
+        const sp = this.stationSeat(id, +j); const v = sp.clone().sub(stLocal(id, 0, 0, 0)).multiplyScalar(.55); const p = stLocal(id, 0, 0, 0).add(v);
+        for (let k = 0; k < m.last!.grip[+j]; k++) { const c = new T.Mesh(P.coinGeo, P.coinMat); c.position.set(p.x + (k % 2) * 5, TY + .9 + Math.floor(k / 2) * .6, p.z); c.castShadow = true; P.coins.add(c); }
+      });
+    }
     if (m.id === 'race') {
       if (!P.board) {
         const bd = new T.Mesh(new T.PlaneGeometry(120, 70), new T.MeshStandardMaterial({
@@ -520,6 +576,24 @@ export class World {
   private tickMG(dt: number, t: number): void {
     const S = this.ctx.S(); if (!S || S.phase !== 'mg' || !S.mg) return; const m = S.mg; const st0 = this.stations.get(m.id); if (!st0) return;
     const P = st0.parts; const a = 1 - Math.exp(-dt * 6);
+    if (m.id === 'curling' && P.cstones) {
+      // 직전 샷이 굴러가는 중이면 그 프레임, 아니면 상태의 말 위치
+      let list: { seat: number; x: number; y: number; out?: boolean }[] = m.stones;
+      const fr = m.si > 0 || m.step === 'score' ? curlFrames(m) : null; const key = m.last ? `${m.end}:${m.last.n}` : '';
+      if (fr && key) {
+        if (P.animKey !== key) { P.animKey = key; P.animT0 = performance.now(); }
+        const el = (performance.now() - P.animT0) / 1000;
+        if (el < fr.secs) { const f = fr.frames.find(x => x.t >= el) || fr.frames[fr.frames.length - 1]; list = f.st; }
+      }
+      const used = new Set<string>(); const cnt: Record<number, number> = {};
+      list.forEach(s => {
+        if (s.out) return; cnt[s.seat] = (cnt[s.seat] || 0) + 1; const k = s.seat + ':' + cnt[s.seat]; used.add(k);
+        let mesh = P.cstones.get(k) as THREE.Mesh | undefined;
+        if (!mesh) { mesh = new T.Mesh(new T.CylinderGeometry(CURL.R * CS, CURL.R * CS * 1.05, 2.4 * CS / 2, 28), mat(SEATCOL[s.seat % 5], { roughness: .35 })); mesh.castShadow = true; st0.props.add(mesh); P.cstones.set(k, mesh); }
+        const [lx, lz] = curlLocal(s.x, s.y); mesh.position.copy(stLocal(m.id, lx, TY + 1.2 + 1.8, lz)); mesh.visible = true;
+      });
+      for (const [k, mesh] of P.cstones as Map<string, THREE.Mesh>) if (!used.has(k)) mesh.visible = false;
+    }
     if (P.bal) { const s = P.bal.scale.x + ((P.bal.userData.ts || 1) - P.bal.scale.x) * a; P.bal.scale.set(s, s * 1.12, s); P.bal.position.x = Math.sin(t * 1.3) * .8; P.bal.rotation.z = Math.sin(t * 1.1) * .05; }
     if (P.horse) for (const s of SUITS) { const h = P.horse[s]; if (h.userData.tp) { h.position.lerp(h.userData.tp, a); h.position.y = h.userData.tp.y + Math.max(0, Math.sin(t * 6 + SUITS.indexOf(s))) * .6; } }
     if (P.card && m.id === 'count') {

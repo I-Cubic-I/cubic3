@@ -14,6 +14,10 @@ export interface UiMode {
   cards?: Card[];
   bsub?: boolean;
   vz?: number[];
+  /** 손가락 사슬: 가리킬 사람들 */
+  aim?: number[];
+  /** 스피드: 골라 둔 손패 */
+  spc?: Card;
   showHand?: boolean;
   rulesAgain?: boolean;
   log?: boolean;
@@ -77,7 +81,7 @@ export const useStore = create<Store>((set, get) => ({
   receive: S => {
     const { me, lastKey } = get();
     const m = S.mg as unknown as Record<string, unknown> | null;
-    const key = S.phase + '|' + (S.turn ? S.turn.seat + ':' + S.ti : '') + '|' + (m ? `${m.id}${m.ci || 0}${m.step || ''}${m.round || ''}${m.pan || ''}` : '') + '|' + S.round;
+    const key = S.phase + '|' + (S.turn ? S.turn.seat + ':' + S.ti : '') + '|' + (m ? `${m.id}${m.ci || 0}${m.step || ''}${m.round || ''}${m.pan || ''}${m.turn ?? ''}${m.si ?? ''}${m.end ?? ''}` : '') + '|' + S.round;
     const patch: Partial<Store> = { S };
     if (key !== lastKey) { patch.sel = []; patch.ui = {}; patch.lastKey = key; }
     // 조작할 자리 고르기

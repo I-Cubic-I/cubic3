@@ -26,6 +26,16 @@ function candidates(S: GameState, seat: number): Action[] {
   for (const z of [1, 2, 3]) c.push({ type: 'vaultHide', seat, zone: z }, { type: 'vaultGuard', seat, zones: [z] });
   for (let n = 0; n <= 6; n++) c.push({ type: 'countAnswer', seat, n });
   for (const su of ['S', 'H', 'D', 'C'] as const) c.push({ type: 'raceBet', seat, suit: su });
+  // 2026-10-12 추가 미니게임 (남은 자리 자동 진행용)
+  if (m?.id === 'nunchi') c.push({ type: 'duelHit', seat, ms: 150 + Math.floor(Math.random() * 400) });
+  for (let n = 0; n <= 3; n++) c.push({ type: 'udGrip', seat, n });
+  for (let n = 0; n <= 15; n++) c.push({ type: 'udCall', seat, n });
+  c.push({ type: 'udShout', seat, up: Math.random() < .5 }, { type: 'linePlay', seat }, { type: 'lineGo', seat }, { type: 'foldAnswer', seat, yes: Math.random() < .5 });
+  if (m?.id === 'curling') c.push({ type: 'curlShot', seat, shot: { x: Math.random() * 10 - 5, angle: Math.random() * .6 - .3, power: .5 + Math.random() * .25 } });
+  if (m?.id === 'speed') (m.hands[seat] || []).forEach(card => m.piles.forEach((_, k) => c.push({ type: 'speedPlay', seat, card, pile: k })));
+  if (m?.id === 'fold') c.push({ type: 'foldSay', seat, text: '테스트 조건 ' + Math.floor(Math.random() * 1e5) });
+  if (m?.id === 'chain') { const o = m.ord.filter(x => x !== seat); c.push({ type: 'chainAim', seat, targets: o.slice(0, 2) }, { type: 'chainAim', seat, targets: o.slice(0, 1) }, { type: 'chainPass', seat, k: 0 }, { type: 'chainPass', seat, k: 1 }); }
+  if (m?.id === 'mid') (m.hands[seat] || []).forEach(card => c.push({ type: 'midPick', seat, card }));
   return c;
 }
 

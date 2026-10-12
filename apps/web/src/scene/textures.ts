@@ -56,6 +56,8 @@ export function setCardBack(id: string): void {
 const MGLOOK: Record<string, [string, string]> = {
   hold: ['#f0b48f', '#cf6f48'], bomb: ['#f7a3a3', '#c94242'], auction: ['#f2d27a', '#c79a1c'], balloon: ['#ffb35c', '#e8853a'],
   rps: ['#a9bdff', '#6a7fe0'], vault: ['#b9c3d6', '#6f7d99'], count: ['#9cc3ea', '#4f86c6'], race: ['#8fd0a4', '#3f9a63'],
+  nunchi: ['#ffc58a', '#d9822b'], updown: ['#e6d38a', '#a8902a'], curling: ['#b8e0f0', '#4a9cc0'], line: ['#d0c4f0', '#7d68c4'],
+  speed: ['#ffa8c8', '#d04a7e'], fold: ['#f0c0a8', '#c47458'], chain: ['#c8e8a0', '#6aa040'], mid: ['#a8e0dc', '#3a9a94'],
 };
 export const mgLook = (id: string): [string, string] => MGLOOK[id] || ['#cfd4dc', '#7b8494'];
 export function floppyTex(id: MgId): THREE.CanvasTexture {
@@ -67,7 +69,7 @@ export function floppyTex(id: MgId): THREE.CanvasTexture {
     g.fillStyle = sg; rr(g, 66, -6, 124, 92, 6); g.fill(); g.fillStyle = '#2a2a2e'; rr(g, 140, 14, 26, 58, 4); g.fill();
     g.fillStyle = '#fbf8f0'; rr(g, 22, 108, w - 44, h - 120, 8); g.fill(); g.fillStyle = fld; g.fillRect(22, 108, w - 44, 12);
     g.fillStyle = '#1b2230'; g.textAlign = 'center'; g.textBaseline = 'middle'; const nm = MG[id] ? MG[id].name : id;
-    g.font = `${nm.length > 5 ? 34 : 40}px ${FONT_D}`; g.fillText(nm, w / 2, 180);
+    g.font = `${nm.length > 6 ? 28 : nm.length > 5 ? 34 : 40}px ${FONT_D}`; g.fillText(nm, w / 2, 180);
     g.font = `22px ${FONT_M}`; g.fillStyle = '#8a7f6a'; g.fillText('CUBIC DISK', w / 2, 236);
   });
 }
