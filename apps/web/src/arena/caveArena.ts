@@ -51,6 +51,8 @@ export class CaveArena {
   private chunks: { m: THREE.Mesh; v: THREE.Vector3; p0: THREE.Vector3 }[] = [];
   private gems: THREE.Mesh[] = [];
   private flash!: THREE.PointLight; private burst!: THREE.Mesh;
+  /** 1이 빠질 때마다 한 겹씩 내려오는 천장 층(지반이 내려앉듯이) */
+  private sag: { g: THREE.Group; at: number; on: boolean }[] = [];
   private sign!: THREE.Mesh; private signN = -1; private entrance!: THREE.Group;
   private fade: THREE.Mesh; private sides: THREE.Mesh;
   private prev: { pan: number; inside: number[]; step: string } | null = null;
@@ -174,11 +176,18 @@ export class CaveArena {
     for (let k = 0; k < 3; k++) { const g = crystal(cc[k]); g.scale.setScalar(0.6); g.visible = false; sc.add(g); this.gems.push(g); }
     this.flash = new THREE.PointLight('#ffd9a0', 0, 10, 1.4); this.flash.position.set(ROCK_X, 1.8, 1.2); sc.add(this.flash);
     this.burst = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), glow('#ffc070', 1)); (this.burst.material as THREE.MeshBasicMaterial).map = softTex(); this.burst.visible = false; sc.add(this.burst);
+    // 내려앉는 천장 층 3겹: 납작한 바위를 줄지어 + 짧은 종유석. 겹마다 조금 더 낮게(무리 위쪽 앞뒤로)
+    for (let k = 0; k < 3; k++) {
+      const g = new THREE.Group(); g.visible = false; sc.add(g);
+      for (let i = 0; i < 9; i++) { const sx = 1.4 + r() * 0.8; const b = new THREE.Mesh(rockGeo(1000 + k * 20 + i, 1, 0.35), rockMat(shades[(i + k) % 4])); b.position.set(-8 + i * 2.1 + r() * 0.5, 0.35 + r() * 0.2, -1.6 + r() * 2.8); b.scale.set(sx, 0.65 + r() * 0.3, 1.1 + r() * 0.5); b.rotation.set(r() * 0.3, r() * 6, r() * 0.3); g.add(b); }
+      for (let i = 0; i < 10; i++) { const st = new THREE.Mesh(stalGeo(1100 + k * 20 + i, 0.15 + r() * 0.25, 0.3 + r() * 0.7), rockMat(shades[(i + 1) % 4])); st.position.set(-8 + r() * 17, 0.1, -1.4 + r() * 2.6); g.add(st); }
+      this.sag.push({ g, at: -9, on: false });
+    }
   }
   private buildCrack() {
     // 천장 아래 뒤쪽에 걸린 균열(틈으로 빛이 샌다)
     const m = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.7), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, fog: false }));
-    m.position.set(CX, CEIL - 0.5, -1.7); m.visible = false; this.scene.add(m);
+    m.position.set(CX, CEIL - 0.5, 1.5); m.visible = false; this.scene.add(m);
     return { m, stage: 0 };
   }
   private setCrack(stage: number): void {
@@ -224,6 +233,15 @@ export class CaveArena {
     const lost = L ? L.faces.filter(v => v === 1).length - L.kept : 0;
     const crackN = m.step === 'show' && L ? (showS >= RT.hit ? L.ones : L.ones - lost) : m.ones;
     this.setCrack(Math.max(0, Math.min(3, crackN)));
+    // 균열은 가장 낮게 내려온 천장 층 바로 아래, 앞쪽에
+    this.crack.m.position.y = CEIL - 0.55 - Math.max(0, Math.min(3, crackN) - 1) * 0.5;
+    // 천장 층: 빠진 1만큼 한 겹씩 위에서 쿵 내려와 쌓인다(새 판이면 모두 걷힌다)
+    this.sag.forEach((L, k) => {
+      const on = crackN > k; if (on && !L.on) L.at = t; L.on = on; L.g.visible = on;
+      if (!on) return;
+      const u = clamp01((t - L.at) / 0.45); const target = CEIL - 0.1 - k * 0.5;
+      L.g.position.y = target + (1 - u * u) * 1.8 - (u > 0.85 ? Math.sin((u - 0.85) / 0.15 * Math.PI) * 0.06 : 0);
+    });
     if (this.crack.m.visible) (this.crack.m.material as THREE.MeshBasicMaterial).opacity = 0.85 + Math.sin(t * 6) * 0.15;
     if (m.step === 'show' && L && showS >= RT.hit && showS < RT.hit + dt * 1.5 && lost > 0) { this.kick(L.collapse ? 0.16 : 0.07); this.dropPebbles(); }
     this.drawWizards(m, t, dt, showS, collapse, moving);
@@ -278,7 +296,8 @@ export class CaveArena {
       else z.pos.x += (slot - z.pos.x) * Math.min(1, dt * 6);
       if (walking || inP < 1.2 || (moving && showS >= RT.out && showS < RT.inEnd)) z.pos.x = x;
       z.pos.z = k % 2 ? -0.35 : 0.2;
-      const cast = moving && showS >= RT.blast - 0.15 && showS < RT.out;
+      const thrower = m.inside.includes(m.ord[0]) ? m.ord[0] : m.inside[0];
+      const cast = (moving && showS >= RT.blast - 0.15 && showS < RT.out) || (m.step === 'show' && j === thrower && showS >= 0 && showS < RT.land);
       const down = collapse && k >= 0 && showS >= RT.buried;
       w.root.position.set(z.pos.x, walking ? Math.abs(Math.sin(t * 10 + j)) * 0.1 : 0, z.pos.z);
       w.root.scale.set(1, down ? 0.2 : 1, 1); w.root.visible = !down || showS < RT.buried + 0.3;
@@ -319,14 +338,14 @@ export class CaveArena {
   private drawDice(m: CaveMg, t: number, showS: number, moving: boolean): void {
     const L = m.last;
     this.dice.forEach(d => d.visible = false); this.diceGlow.forEach(g => g.visible = false); this.shields.forEach(s => s.visible = false);
-    const thrower = m.inside.includes(m.ord[0]) ? m.ord[0] : m.inside[0];
-    const tw = thrower != null ? this.wiz.get(thrower) : null;
-    const hand = tw ? tw.pos.clone().add(new THREE.Vector3(0.5, 1.35, 0.5)) : new THREE.Vector3(CX, 1.3, 0.5);
+    // 굴릴 주사위가 떠 있는 자리: 무리 오른쪽 빈 곳(마법사에 가리지 않게)
+    const hand = new THREE.Vector3(CX + 2.3, 1.5, 0.9);
     // 나온 눈이 카메라를 보게: 윗면(+y)을 앞(+z)으로
     const faceFront = (d: THREE.Group, k: number) => d.rotation.set(Math.PI / 2, 0, (k - 1) * 0.12);
-    if (m.step === 'pre') {
+    // 고르는 동안·굴리기 직전: 다음에 굴릴 주사위(최대 3개)를 굴릴 사람 손 위에 띄워 둔다(몇 개 굴리는지 보이게, 사용자 2026-10-14)
+    if (m.step === 'pre' || m.step === 'decide') {
       const nd = Math.min(3, m.pool + 1);
-      for (let k = 0; k < nd; k++) { const d = this.dice[k]; d.visible = true; d.scale.setScalar(0.32); d.position.copy(hand).add(new THREE.Vector3((k - (nd - 1) / 2) * 0.34, 0.25 + Math.sin(t * 3 + k) * 0.05, 0)); d.rotation.set(t + k, t * 1.3, 0); }
+      for (let k = 0; k < nd; k++) { const d = this.dice[k]; d.visible = true; d.scale.setScalar(0.45); d.position.copy(hand).add(new THREE.Vector3((k - (nd - 1) / 2) * 0.62, Math.sin(t * 2.4 + k * 1.3) * 0.08, 0)); d.rotation.set(t * 0.7 + k, t * 0.9 + k, 0); }
       return;
     }
     if (m.step !== 'show' || !L || showS < 0 || (moving && showS >= RT.out)) return;
