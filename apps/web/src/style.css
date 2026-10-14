@@ -742,9 +742,9 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .sl-score .gem{width:1em;height:1em;box-sizing:border-box;border-radius:50%;border:2px solid #140e0a;box-shadow:inset 2px 2px 0 rgba(255,255,255,.45)}
 .sl-score .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
 .sl-score .st{display:inline-flex;align-items:center;justify-content:center;width:1.3em;height:1.3em}
-.sl-score .st.ok{border-radius:50%;background:rgba(80,140,70,.35)}
-.sl-score .st .think circle{animation:thinkdot 1.2s infinite ease-in-out}
-.sl-score .st .think circle:nth-child(2){animation-delay:.2s}.sl-score .st .think circle:nth-child(3){animation-delay:.4s}
+.sl-score .st svg{overflow:visible}
+.sl-score .st .dots circle{animation:thinkdot 1.2s infinite ease-in-out}
+.sl-score .st .dots circle:nth-child(2){animation-delay:.2s}.sl-score .st .dots circle:nth-child(3){animation-delay:.4s}
 @keyframes thinkdot{0%,60%,100%{opacity:.35}30%{opacity:1}}
 .sl-score b{font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:1.5em;min-width:1em;text-align:right;color:#1e150f}
 .sl-score b.top{color:#8a5a0a}
@@ -791,3 +791,6 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .escbox.stone{color:#2a1f17;background:linear-gradient(180deg,#ab9c86,#8b7d69);border:3px solid #140e0a;box-shadow:inset 0 0 0 2px rgba(255,240,215,.25),0 10px 30px rgba(0,0,0,.5)}
 .escbox.stone .btn{background:#3a2616;color:#ffd98a;border:2px solid #c99a3e}
 .escbox.stone .btn.primary{background:#5a3a1a}
+
+/* 손가락으로만 조작하는 기기: 키보드 단축키 표시를 숨긴다(ui/device.ts) */
+.no-keys kbd{display:none!important}

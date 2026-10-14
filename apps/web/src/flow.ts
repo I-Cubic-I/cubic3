@@ -19,6 +19,8 @@ const act = (a: Action) => st().act(a);
 
 /* ---------------- 연출 이벤트 큐 ---------------- */
 let fxq: Fx[] = [], fxBusy = false;
+/** 아직 띄우지 않은 연출 중에 조건에 맞는 것이 있는지(아레나가 컷신 뒤로 연출을 미룰 때) */
+export const fxQueued = (p: (f: Fx) => boolean): boolean => fxq.some(p);
 function queueFx(f: Fx): void { fxq.push(f); while (fxq.length > 4) fxq.shift(); if (!fxBusy) nextFx(); }
 function nextFx(): void {
   const f = fxq.shift();

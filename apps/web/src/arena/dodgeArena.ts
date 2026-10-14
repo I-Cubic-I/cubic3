@@ -3,14 +3,15 @@
 import * as THREE from 'three';
 import { DODGE_SHAPES, DODGE_SHOW, type DodgeMg, R as rankOf, dodgeAtk, dodgeCanBlock, dodgeCanGo, dodgeDefs, now } from '@cubic3/engine';
 import { SEATCOL } from '../game';
-import { cmd } from '../flow';
+import { cmd, fxQueued } from '../flow';
 import { useStore } from '../store';
 import { preview } from '../ui/MgPanel4';
-import { type OldHand, type Wizard, buildArrow, buildBulb, buildStay, buildCloud, buildDie, buildDots, buildHand, buildHead, buildWizard, curlHand, glowDisc, keyCap, lightColumn, magicCircle, magicTex, portalDisc, setDie, softTex } from './props';
+import { type OldHand, type Wizard, buildArrow, buildBulb, buildStay, buildCloud, buildDie, buildHand, buildHead, buildWizard, curlHand, glowDisc, keyCap, lightColumn, magicCircle, magicTex, portalDisc, setDie, softTex } from './props';
 import { type Pillar, T, TOP, buildTower, cellPos } from './tower';
 import { INK, INK_U, backOut, canvasTex, clamp01, ease, glow, ink, toon, wobbleLine } from './toon';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import { slabH, uiScale } from '../ui/scale';
+import { noKeys } from '../ui/device';
 
 const col = (j: number) => SEATCOL[j % 5];
 /** 통제실 책상: 카메라 앞 높이·크기 */
@@ -20,6 +21,8 @@ const DESK_Y = -0.64, DESK_S = 0.4, HAND = 1.05;
 const DIE_TILT = 0.75;
 /** 탑 뒤 하늘의 주사위 별자리 자리 */
 const PEEK_RED = new THREE.Color('#ff5a46');
+/** 엿보기 연출 시각(컷신이 끝난 뒤부터, 초): 전구가 뜨고 → star부터 별자리 강조 → bulbOut에 전구가 사라진다 */
+const PEEK_T = { star: 0.7, starDur: 0.6, bulbOut: 1.7 };
 const STAR_Y = 4.4, STAR_Z = -5.4, STAR_S = 1.7, STAR_GAP = 3.3;
 /** 별자리 자리: 넓은 화면은 아레나 왼쪽·위·오른쪽, 좁은 화면은 위쪽 한 줄(사용자 2026-10-14) */
 const starSpots = (a: number): THREE.Vector3[] => a >= 1.25
@@ -49,7 +52,9 @@ interface Wiz {
   /** 한 칸에 여럿이면 작게(부드럽게 바뀜) */
   cs?: number;
   portal: THREE.Mesh; column: THREE.Mesh;
-  dots: THREE.Group; bulb: THREE.Group; peekAt: number;
+  bulb: THREE.Group;
+  /** 엿보기 연출 시작 시각(컷신이 끝난 뒤). 기다리는 중이면 peekWait */
+  peekAt: number; peekWait: number; peekCut: boolean;
   fly: THREE.Vector3;
 }
 
@@ -215,13 +220,12 @@ export class DodgeArena {
     st.body.traverse(x => x.layers.set(2));
   }
   /** 수비자 시점의 별자리·현실화 연출 */
-  private peekT = -1;
   private drawStars(m: DodgeMg, i: number | null, t: number, showS: number): void {
     const sk = m.step === 'show' && m.shot && m.last ? m.shot.k : -1;
     // 엿보기(사용자 2026-10-14): 쓴 사람에게만, 공격자가 고른 주사위의 별자리가 붉게 빛나며 커지고 나머지는 흐려진다
     const pkK = m.step === 'pick' && m.shot && i != null && i !== dodgeAtk(m) && m.peek[i] ? m.shot.k : -1;
-    if (pkK < 0) this.peekT = -1; else if (this.peekT < 0) this.peekT = t;
-    const pe = pkK < 0 ? 0 : ease(clamp01((t - this.peekT - 1.2) / 0.6));
+    const zi = pkK < 0 ? null : this.wiz.get(i!);
+    const pe = !zi || zi.peekWait >= 0 || zi.peekAt <= -99 ? 0 : ease(clamp01((t - zi.peekAt - PEEK_T.star) / PEEK_T.starDur));
     const spots = starSpots(this.camera.aspect || 1.6);
     this.stars.forEach((st, j) => {
       st.g.position.copy(spots[j]);
@@ -455,19 +459,27 @@ export class DodgeArena {
     // 엿보기
     const pp = this.prev && this.prev.turn === m.turn && this.prev.ai === m.ai ? this.prev.peek : {};
     for (const k in m.peek) if (m.peek[k] && !pp[k]) {
-      const j = +k; const z = this.wiz.get(j); if (z) z.peekAt = t;
+      const j = +k; const z = this.wiz.get(j); if (z) { z.peekWait = t; z.peekCut = false; z.peekAt = -99; }
       if (i === dodgeAtk(m) && m.shot) this.peekQ.push({ seat: j, die: m.shot.die });
     }
     this.prev = { ai: m.ai, blocked: m.blocked.slice(), peek: { ...m.peek }, turn: m.turn };
+    // 엿보기 연출은 아이템 컷신이 끝난 뒤에 시작한다(사용자 2026-10-14). 컷신이 안 보이면 잠시 뒤 그냥 시작
+    const fs = useStore.getState().fxShow;
+    for (const [j, z] of this.wiz) {
+      if (z.peekWait < 0) continue;
+      const mine = (f: { t: string; seats?: unknown }) => f.t === 'item' && (f.seats as number[] | undefined)?.[0] === j;
+      const cut = !!fs && mine(fs.f) && !fs.out; const queued = fxQueued(mine);
+      if (cut) z.peekCut = true;
+      if ((!cut && !queued && (z.peekCut || t - z.peekWait > 0.5)) || t - z.peekWait > 8) { z.peekAt = t; z.peekWait = -1; }
+    }
   }
 
   private makeWiz(j: number): Wiz {
     const w = buildWizard(col(j)); this.scene.add(w.root);
     const portal = portalDisc(col(j), 1.8); portal.rotation.x = -Math.PI / 2; portal.visible = false; this.scene.add(portal);
     const column = lightColumn(col(j), 0.75, 6); column.visible = false; this.scene.add(column);
-    const dots = buildDots(); dots.visible = false; w.above.add(dots);
     const bulb = buildBulb(); bulb.visible = false; w.above.add(bulb);
-    const z: Wiz = { seat: j, w, born: 0, leaving: 0, portal, column, dots, bulb, peekAt: -99, fly: new THREE.Vector3() };
+    const z: Wiz = { seat: j, w, born: 0, leaving: 0, portal, column, bulb, peekAt: -99, peekWait: -1, peekCut: false, fly: new THREE.Vector3() };
     // 날아갈 방향: 탑 바깥쪽(가운데 칸이면 자리마다 다른 쪽)
     const a = j * 2.1 + 0.7; z.fly.set(Math.cos(a), 0, Math.sin(a));
     this.wiz.set(j, z); return z;
@@ -516,18 +528,17 @@ export class DodgeArena {
         z.portal.position.set(at.x, TOP + 0.05, at.z); z.portal.rotation.z = t * 4; z.portal.scale.setScalar(ease(portalK));
         z.column.position.set(at.x, TOP, at.z); z.column.scale.set(ease(portalK), 1, ease(portalK)); (z.column.material as THREE.MeshBasicMaterial).opacity = 0.7 * portalK;
       }
-      // 엿보기: 눈을 감고 생각(…) → 전구(수비자 모두에게 같게. 쓴 사람에게만 별자리가 바뀐다)
-      const pk = t - z.peekAt; const peeking = m.step === 'pick' && !!m.peek[j];
-      const think = peeking && pk < 1.5;
-      z.dots.visible = think && i !== dodgeAtk(m); if (think) z.dots.children.forEach((d, k) => { d.position.y = Math.max(0, Math.sin(t * 7 - k * 0.8)) * 0.15; });
-      const lit = peeking && !think && i !== dodgeAtk(m);
+      // 엿보기(사용자 2026-10-14): 컷신 → 전구(수비자 모두에게 같게) → 쓴 사람에게만 별자리 강조 → 강조가 끝나면 전구도 사라진다
+      const pk = t - z.peekAt; const peeking = m.step === 'pick' && !!m.peek[j] && z.peekWait < 0 && z.peekAt > -99;
+      const lit = peeking && pk < PEEK_T.bulbOut + 0.3 && i !== dodgeAtk(m);
       z.bulb.visible = lit;
       if (lit) {
-        const k = backOut(clamp01((pk - 1.5) / 0.35)); z.bulb.scale.setScalar(Math.max(0.001, k)); z.bulb.position.y = Math.sin(t * 2.5) * 0.06;
+        const k = pk < PEEK_T.bulbOut ? backOut(clamp01(pk / 0.35)) : 1 - ease(clamp01((pk - PEEK_T.bulbOut) / 0.3));
+        z.bulb.scale.setScalar(Math.max(0.001, k)); z.bulb.position.y = Math.sin(t * 2.5) * 0.06;
         const halo = z.bulb.getObjectByName('halo'); if (halo) halo.scale.setScalar(1 + Math.sin(t * 5) * 0.08);
       }
       w.above.lookAt(this.camera.position.x, w.above.getWorldPosition(new THREE.Vector3()).y, this.camera.position.z);
-      w.eyesShut.visible = shut || think; w.eyesOpen.visible = !w.eyesShut.visible;
+      w.eyesShut.visible = shut; w.eyesOpen.visible = !w.eyesShut.visible;
       // 가끔 눈 깜박
       if (!w.eyesShut.visible && ((t + j * 1.3) % 4) < 0.12) { w.eyesOpen.visible = false; w.eyesShut.visible = true; }
     }
@@ -615,9 +626,11 @@ export class DodgeArena {
     const selK = m.shot ? m.shot.k : pv?.k ?? -1;
     // 키캡: 고를 수 있을 때만
     // 1·2·3 키캡은 주사위를 따라가지 않고 쟁반의 칸(주사위가 원래 있던 자리)에 고정
-    this.caps.dice.forEach((s, k) => { const h = cp.diceHome[k]; s.visible = aiming; s.position.set(h.x, h.y + 0.02, h.z + 0.42); });
+    // 손가락 기기에서는 단축키 표시를 숨긴다
+    const keys = !noKeys();
+    this.caps.dice.forEach((s, k) => { const h = cp.diceHome[k]; s.visible = aiming && keys; s.position.set(h.x, h.y + 0.02, h.z + 0.42); });
     const many = !!pv && pv.groups.length > 1;
-    this.caps.rot.visible = aiming && many; this.caps.rot.position.set(DEV_X + 0.62, 0.5, 0.36);
+    this.caps.rot.visible = aiming && many && keys; this.caps.rot.position.set(DEV_X + 0.62, 0.5, 0.36);
     // 주사위: 쟁반 ↔ 소켓, 끄는 중이면 손에 들린다.
     // 발동하면 고른 주사위가 수정구로 빨려 들어가 사라지고(소모), 공개가 끝날 무렵 빈자리에 마법진과 함께 새 주사위가 나타나
     // 한 번 떠올라 돌다가 눈이 정해지고, 정해진 눈은 잠깐 확대해 강조한다. 공격자가 바뀌면 3개 모두 차례로 나타난다
