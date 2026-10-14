@@ -14,7 +14,7 @@ export function setWorld(w: World | null): void { world = w; }
 
 const st = () => useStore.getState();
 const S = () => st().S;
-const toast = (m: string) => st().showToast(m);
+export const toast = (m: string) => st().showToast(m);
 const act = (a: Action) => st().act(a);
 
 /* ---------------- 연출 이벤트 큐 ---------------- */
@@ -218,6 +218,8 @@ export function cmd(a: string, d: D = {}): void {
     // 미니게임만 하기(멀티 전용)
     case 'solo': act({ type: 'startSolo', id: String(d.id) as MgId }); break;
     case 'restart': act({ type: 'restart' }); break;
+    case 'fresh': act({ type: 'restart', fresh: true }); break;
+    case 'lready': act({ type: 'lobbyReady', on: !!d.on }); break;
     case 'tolobby': act({ type: 'toLobby' }); break;
     case 'reset1': store.patchUi({ confirmReset: true }); break;
     case 'reset2': store.patchUi({ log: false }); act({ type: 'reset' }); break;
@@ -372,7 +374,6 @@ export function cmd(a: string, d: D = {}): void {
     }
     case 'dmove': act({ type: 'dodgeMove', seat: i, cell: +d.c! }); break;
     case 'dlock': act({ type: 'dodgeLock', seat: i }); break;
-    case 'dgo': act({ type: 'dodgeGo', seat: i }); break;
     case 'dblock': {
       const it = sel.find(isItem); if (!it) { toast('아이템 카드를 먼저 고르세요'); break; }
       // 쓴 카드는 손패에서 빠지므로 골라 둔 것도 지운다(다음 칸을 막으려면 다른 아이템을 다시 고른다)

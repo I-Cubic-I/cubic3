@@ -295,7 +295,7 @@ export interface DodgeMg {
   pos: Record<number, number>;
   /** 봉쇄된 칸(공격자 아이템). 그 공격자의 차례가 끝날 때까지 */
   blocked: number[];
-  step: 'block' | 'pick' | 'show';
+  step: 'pick' | 'show';
   /** block: 봉쇄 시간 끝 / pick: 공격자 마감 / show: 결과를 보여 주는 시간 끝 (방장 시계) */
   until: number;
   /** 수비자 마감(공격자보다 5초 늦다) */
@@ -323,6 +323,10 @@ export interface GameState {
   seats: Seat[];
   log: string[];
   names?: Record<string, string>;
+  /** 방장 uid(방이 넣는다). 있으면 게임 시작은 방장만 할 수 있다 */
+  host?: string;
+  /** 대기실 준비(플레이어 uid → 준비). 방장이 아닌 사람이 모두 준비해야 방장이 시작할 수 있다 */
+  lobbyReady?: Record<string, boolean>;
   decks: number;
   qPile: Card[];
   kPile: Card[];
@@ -356,6 +360,12 @@ export interface GameState {
   recentMg?: MgId[];
   /** 미니게임만 하기(디지털 멀티 전용): 메인 턴 없이 이 미니게임 1종만 한다 */
   solo?: MgId | null;
+  /** 미니게임만 하기: 이 판의 시드가 된 손패(자리 순서). 같은 손패 = 같은 판 */
+  soloHands?: Card[][] | null;
+  /** 미니게임 아이템: 쓴 뒤 대상을 고르기를 기다리는 것(자리 → 카드·마감) */
+  mgItems?: Record<number, { card: Card; until: number }> | null;
+  /** 미니게임만 하기: 시드 무작위 상태 */
+  rng?: { s: number } | null;
   /** 미니게임이 끝났다: 마지막 결과를 보여 주는 동안(at까지, 방장 시계) 미니게임 화면에 머문 뒤 순위·보상으로 넘어간다 */
   mgEnd?: { groups: number[][]; at: number } | null;
   rewardDisp?: Card[] | null;

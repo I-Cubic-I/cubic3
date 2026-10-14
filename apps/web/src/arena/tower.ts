@@ -1,10 +1,10 @@
-/* 고대 탑 꼭대기: 둥근 돌 바닥 가운데 3×3 돌기둥 발판(기둥은 탑 속까지 이어진다), 무너진 성가퀴, 화로, 노을 하늘과 구름 바다 */
+/* 고대 탑 꼭대기: 탑 자체가 3×3 — 꼭대기 전체가 돌기둥 발판(기둥은 탑 속까지 이어진다), 네모난 석탑 몸통, 모서리 화로, 노을 하늘과 구름 바다 */
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import { INK, canvasTex, glow, ink, toon, wobbleLine } from './toon';
 
-/** 칸 간격·탑 반지름 */
-export const T = 2, R = 7.4;
+/** 칸 간격 */
+export const T = 2;
 /** 칸 번호(0~8, 행×3+열, 0이 안쪽 왼쪽) → 바닥 위 자리 */
 export const cellPos = (c: number, y = 0): THREE.Vector3 => new THREE.Vector3(((c % 3) - 1) * T, y, (Math.floor(c / 3) - 1) * T);
 /** 발판 윗면 높이 */
@@ -34,29 +34,6 @@ function brickTex(): THREE.CanvasTexture {
   });
   t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
-function floorTex(): THREE.CanvasTexture {
-  return canvasTex(1024, 1024, g => {
-    const c = 512; g.fillStyle = '#8f8372'; g.fillRect(0, 0, 1024, 1024);
-    let s = 7; const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
-    for (let k = 0; k < 120; k++) { g.fillStyle = `rgba(${rnd() < .6 ? '20,12,6' : '255,240,220'},${0.03 + rnd() * 0.05})`; g.beginPath(); g.arc(rnd() * 1024, rnd() * 1024, 10 + rnd() * 50, 0, Math.PI * 2); g.fill(); }
-    // 이끼
-    for (let k = 0; k < 30; k++) { g.fillStyle = `rgba(70,96,48,${0.12 + rnd() * 0.15})`; const a = rnd() * Math.PI * 2, r = 380 + rnd() * 120; g.beginPath(); g.arc(c + Math.cos(a) * r, c + Math.sin(a) * r, 8 + rnd() * 26, 0, Math.PI * 2); g.fill(); }
-    // 동심원 줄 + 방사 줄로 나눈 판석
-    g.strokeStyle = INK; g.lineCap = 'round';
-    const rings = [250, 330, 420, 505];
-    rings.forEach((r, k) => {
-      g.lineWidth = 6; const pts: [number, number][] = []; for (let a = 0; a <= 64; a++) { const t = a / 64 * Math.PI * 2; pts.push([c + Math.cos(t) * r, c + Math.sin(t) * r]); } wobbleLine(g, pts, 3);
-      if (k === 0) return; const r0 = rings[k - 1]; const n = 10 + k * 6;
-      for (let j = 0; j < n; j++) { const t = (j + (k % 2) * 0.5 + rnd() * 0.2) / n * Math.PI * 2; g.lineWidth = 5; wobbleLine(g, [[c + Math.cos(t) * r0, c + Math.sin(t) * r0], [c + Math.cos(t) * r, c + Math.sin(t) * r]], 3); }
-    });
-    // 안쪽 네모 둘레의 판석(구멍 바깥)
-    g.lineWidth = 5;
-    for (let j = 0; j < 16; j++) { const t = j / 16 * Math.PI * 2; wobbleLine(g, [[c + Math.cos(t) * 180, c + Math.sin(t) * 180], [c + Math.cos(t) * 250, c + Math.sin(t) * 250]], 3); }
-    // 금
-    g.lineWidth = 3; for (let k = 0; k < 14; k++) { let x = rnd() * 1024, y = rnd() * 1024; const pts: [number, number][] = [[x, y]]; for (let j = 0; j < 3; j++) { x += (rnd() - .5) * 60; y += (rnd() - .5) * 60; pts.push([x, y]); } wobbleLine(g, pts, 3); }
-  });
-}
-
 /** 발판 하나: 윗돌 + 탑 속까지 이어진 기둥 마디들. 무너질 때 윗돌은 네 조각으로 갈라진다 */
 export class Pillar {
   root = new THREE.Group();
@@ -144,46 +121,56 @@ export function buildTower(): Tower {
   moon.position.set(-90, 70, -260); moon.lookAt(0, 0, 0); root.add(moon);
   const moonGlow = new THREE.Mesh(new THREE.CircleGeometry(34, 40), glow('#ffd9a0', 0.18)); moonGlow.position.copy(moon.position).multiplyScalar(1.01); moonGlow.lookAt(0, 0, 0); root.add(moonGlow);
 
-  // 바닥: 둥근 판에 가운데 네모 구멍(3×3 기둥이 들어간다)
-  const shape = new THREE.Shape(); shape.absarc(0, 0, R, 0, Math.PI * 2, false);
-  const hw = 1.5 * T + 0.02; const hole = new THREE.Path(); hole.moveTo(-hw, -hw); hole.lineTo(hw, -hw); hole.lineTo(hw, hw); hole.lineTo(-hw, hw); hole.closePath(); shape.holes.push(hole);
-  const fgeo = new THREE.ExtrudeGeometry(shape, { depth: 1.0, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 2, curveSegments: 64 });
-  fgeo.rotateX(-Math.PI / 2); fgeo.translate(0, -1.0, 0);
-  const ft = floorTex(); ft.repeat.set(1 / (2 * R), 1 / (2 * R)); ft.offset.set(0.5, 0.5);
-  const floor = ink(fgeo, toon('#ffffff', { map: ft }), 0.06); floor.position.y = -0.02; root.add(floor);
-  // 구멍 속: 어둠
-  const pit = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 14, hw * 2), new THREE.MeshBasicMaterial({ color: '#0b0705', side: THREE.BackSide })); pit.position.y = -7.1; root.add(pit);
-  // 탑 몸통
-  const bt = brickTex(); bt.repeat.set(10, 5);
-  const wall = ink(new THREE.CylinderGeometry(R - 0.05, R + 0.9, 30, 48, 1, true), toon('#ffffff', { map: bt }), 0.0); wall.position.y = -16.1; root.add(wall);
-  const lip = ink(new THREE.TorusGeometry(R + 0.06, 0.22, 8, 64), toon('#7d7262'), 0.05); lip.rotation.x = Math.PI / 2; lip.position.y = -1.25; root.add(lip);
-
-  // 성가퀴: 둘레의 돌 이빨. 앞쪽 몇 개는 부서져 없다
-  const mer = toon('#857a69'); const mgeo = new RoundedBoxGeometry(1.15, 1.0, 0.75, 2, 0.08);
-  const n = 18;
-  for (let k = 0; k < n; k++) {
-    const a = k / n * Math.PI * 2; const front = Math.sin(a) > 0.55;
-    if (front && k % 3 !== 0) continue;
-    const m = ink(mgeo, mer, 0.05); const r = R - 0.42;
-    m.position.set(Math.cos(a) * r, 0.42, Math.sin(a) * r); m.rotation.y = -a + Math.PI / 2;
-    // 부서진 이빨: 낮고 기울었다
-    if (front || k % 5 === 2) { m.scale.y = 0.45 + (k % 3) * 0.12; m.position.y = 0.2; m.rotation.z = (k % 2 ? 1 : -1) * 0.12; }
-    root.add(m);
+  // 탑 자체가 3×3: 꼭대기 전체가 발판이고, 몸통은 발판을 꼭 감싸는 네모난 석탑(사용자 2026-10-14)
+  const hw = 1.5 * T + 0.02, WT = 0.42, out = hw + WT;
+  const bt = brickTex(); bt.repeat.set(2.5, 4);
+  const wallM = toon('#ffffff', { map: bt }), rimM = toon('#8a7e6c'), darkM = toon('#5e5446');
+  // 위층 벽: 속이 빈 네 벽(발판이 무너지면 탑 속 어둠이 보인다)
+  const H1 = 10;
+  for (const s2 of [-1, 1]) {
+    const ns = ink(new RoundedBoxGeometry(out * 2, H1, WT, 2, 0.06), wallM, 0.05); ns.position.set(0, TOP - H1 / 2, s2 * (hw + WT / 2)); root.add(ns);
+    const ew = ink(new RoundedBoxGeometry(WT, H1, hw * 2, 2, 0.06), wallM, 0.05); ew.position.set(s2 * (hw + WT / 2), TOP - H1 / 2, 0); root.add(ew);
   }
-  // 바닥에 흩어진 돌 부스러기
-  const rub = new THREE.IcosahedronGeometry(0.22, 0);
-  for (let k = 0; k < 14; k++) { const a = k * 2.39, r = 4.8 + (k % 4) * 0.55; const s = ink(rub, mer, 0.03); s.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r); s.scale.setScalar(0.6 + (k % 3) * 0.35); s.rotation.set(k, k * 2, 0); root.add(s); }
+  // 처마돌: 꼭대기 둘레를 두르는 돌 테두리(발판보다 살짝 높다)
+  const cw = WT + 0.42, cy = TOP + 0.1 - 0.18;
+  for (const s2 of [-1, 1]) {
+    const ns = ink(new RoundedBoxGeometry((hw + cw) * 2, 0.36, cw, 2, 0.07), rimM, 0.05); ns.position.set(0, cy, s2 * (hw + cw / 2)); root.add(ns);
+    const ew = ink(new RoundedBoxGeometry(cw, 0.36, hw * 2, 2, 0.07), rimM, 0.05); ew.position.set(s2 * (hw + cw / 2), cy, 0); root.add(ew);
+  }
+  // 처마 아래 띠
+  for (const s2 of [-1, 1]) {
+    const ns = ink(new RoundedBoxGeometry(out * 2 + 0.24, 0.22, 0.2, 2, 0.05), darkM, 0.04); ns.position.set(0, -1.6, s2 * (out + 0.06)); root.add(ns);
+    const ew = ink(new RoundedBoxGeometry(0.2, 0.22, out * 2, 2, 0.05), darkM, 0.04); ew.position.set(s2 * (out + 0.06), -1.6, 0); root.add(ew);
+  }
+  // 아래로 갈수록 넓어지는 층(네모난 사다리꼴 + 곧은 몸통)
+  const sq = (half: number) => half * Math.SQRT2;
+  let y = TOP - H1; let half = out;
+  for (const [grow, h] of [[0.8, 9], [0.8, 26]] as [number, number][]) {
+    const slope = ink(new THREE.CylinderGeometry(sq(half), sq(half + grow), 1.0, 4, 1, false), rimM, 0.05); slope.rotation.y = Math.PI / 4; slope.position.y = y - 0.5; root.add(slope);
+    y -= 1.0; half += grow;
+    const t2 = bt.clone(); t2.needsUpdate = true; t2.repeat.set(half * 0.8, h / 3);
+    const body = ink(new THREE.CylinderGeometry(sq(half), sq(half), h, 4, 1, true), toon('#ffffff', { map: t2 }), 0.05); body.rotation.y = Math.PI / 4; body.position.y = y - h / 2; root.add(body);
+    y -= h;
+  }
+  // 탑 속: 어둠
+  const pit = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 14, hw * 2), new THREE.MeshBasicMaterial({ color: '#0b0705', side: THREE.BackSide })); pit.position.y = -7.1; root.add(pit);
+  // 모서리 돌 부스러기
+  const rub = new THREE.IcosahedronGeometry(0.16, 0);
+  for (const [x, z, k] of [[-1, -0.3, 0], [1, 0.4, 1], [-0.2, 1, 2], [0.5, -1, 3]] as [number, number, number][]) { const r = ink(rub, rimM, 0.03); r.position.set(x * (hw + 0.25) + (k % 2) * 0.3, TOP + 0.2, z * (hw + 0.25)); r.rotation.set(k, k * 2, 0); root.add(r); }
 
-  // 화로 4개(뒤쪽과 옆): 흔들리는 불꽃 + 따뜻한 빛
+  // 화로 4개: 네 모서리의 낮은 돌기둥 위(앞쪽 둘은 판을 가리지 않게 더 낮다)
   const flames: THREE.Object3D[] = [];
-  for (const [x, z] of [[-5.2, -3.6], [5.2, -3.6], [-5.9, 1.6], [5.9, 1.6]]) {
-    const b = new THREE.Group(); b.position.set(x, 0, z); root.add(b);
-    const stand = ink(new THREE.CylinderGeometry(0.16, 0.3, 0.9, 10), toon('#3a2e26'), 0.04); stand.position.y = 0.45; b.add(stand);
-    const bowl = ink(new THREE.LatheGeometry([new THREE.Vector2(0, 0), new THREE.Vector2(0.45, 0.05), new THREE.Vector2(0.6, 0.35), new THREE.Vector2(0.55, 0.38), new THREE.Vector2(0, 0.3)], 20), toon('#5b4a3a'), 0.04); bowl.position.y = 0.9; b.add(bowl);
-    const f = new THREE.Group(); f.position.y = 1.2; b.add(f); flames.push(f);
-    const f1 = ink(new THREE.ConeGeometry(0.42, 1.0, 10), toon('#ff8a2a', { fresh: true, emissive: '#ff6a1a', ei: 1 }), 0.04); f1.position.y = 0.4; f.add(f1);
-    const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 10), toon('#ffe27a', { fresh: true, emissive: '#ffd040', ei: 1.2 })); f2.position.set(0, 0.28, 0.12); f.add(f2);
-    const pl = new THREE.PointLight('#ff9a4a', 4, 8, 1.6); pl.position.set(0, 0.8, 0); f.add(pl);
+  const corner = hw + cw / 2;
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const ph = z > 0 ? 0.45 : 1.2;
+    const b = new THREE.Group(); b.position.set(x * corner, TOP, z * corner); root.add(b);
+    const post = ink(new RoundedBoxGeometry(cw + 0.12, ph, cw + 0.12, 2, 0.06), rimM, 0.05); post.position.y = ph / 2; b.add(post);
+    const cap = ink(new RoundedBoxGeometry(cw + 0.3, 0.16, cw + 0.3, 2, 0.05), darkM, 0.04); cap.position.y = ph + 0.08; b.add(cap);
+    const bowl = ink(new THREE.LatheGeometry([new THREE.Vector2(0, 0), new THREE.Vector2(0.32, 0.04), new THREE.Vector2(0.44, 0.26), new THREE.Vector2(0.4, 0.29), new THREE.Vector2(0, 0.22)], 20), toon('#5b4a3a'), 0.04); bowl.position.y = ph + 0.16; b.add(bowl);
+    const f = new THREE.Group(); f.position.y = ph + 0.4; b.add(f); flames.push(f);
+    const f1 = ink(new THREE.ConeGeometry(0.32, 0.8, 10), toon('#ff8a2a', { fresh: true, emissive: '#ff6a1a', ei: 1 }), 0.04); f1.position.y = 0.3; f.add(f1);
+    const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.48, 10), toon('#ffe27a', { fresh: true, emissive: '#ffd040', ei: 1.2 })); f2.position.set(0, 0.22, 0.1); f.add(f2);
+    const pl = new THREE.PointLight('#ff9a4a', 3, 7, 1.6); pl.position.set(0, 0.7, 0); f.add(pl);
   }
 
   // 기둥 발판 9개

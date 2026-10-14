@@ -52,12 +52,12 @@ button:disabled{cursor:default;opacity:.45}
 .plate.target{cursor:pointer;border-color:#ff8080;box-shadow:0 0 0 3px rgba(255,80,80,.35)}
 
 /* hand overlay */
-.hand{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:min(860px,100vw);height:230px;pointer-events:none}
+.hand{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:min(860px,100vw);height:calc(230px*var(--kc,1));pointer-events:none}
 .hand.tuck{height:0}
-.hcard{position:absolute;bottom:-34px;width:118px;height:166px;border-radius:12px;background:var(--ivory);border:1px solid #d8d1c4;color:#1b2230;font-family:'Black Han Sans',sans-serif;box-shadow:0 14px 30px rgba(0,0,0,.5);transform-origin:50% 120%;transition:transform .22s cubic-bezier(.2,.9,.3,1.2),box-shadow .2s;pointer-events:auto;cursor:pointer;user-select:none}
-.hcard .rk{position:absolute;left:10px;top:8px;font-size:26px;line-height:1}
-.hcard .su{position:absolute;left:0;right:0;top:44px;text-align:center;font-size:62px;line-height:1}
-.hcard .tg{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-family:'IBM Plex Sans KR',sans-serif;font-size:12px;font-weight:700;color:#8a6a10}
+.hcard{position:absolute;bottom:calc(-34px*var(--kc,1));width:calc(118px*var(--kc,1));height:calc(166px*var(--kc,1));border-radius:calc(12px*var(--kc,1));background:var(--ivory);border:1px solid #d8d1c4;color:#1b2230;font-family:'Black Han Sans',sans-serif;box-shadow:0 14px 30px rgba(0,0,0,.5);transform-origin:50% 120%;transition:transform .22s cubic-bezier(.2,.9,.3,1.2),box-shadow .2s;pointer-events:auto;cursor:pointer;user-select:none}
+.hcard .rk{position:absolute;left:calc(10px*var(--kc,1));top:calc(8px*var(--kc,1));font-size:calc(26px*var(--kc,1));line-height:1}
+.hcard .su{position:absolute;left:0;right:0;top:calc(44px*var(--kc,1));text-align:center;font-size:calc(62px*var(--kc,1));line-height:1}
+.hcard .tg{position:absolute;left:0;right:0;bottom:calc(14px*var(--kc,1));text-align:center;font-family:'IBM Plex Sans KR',sans-serif;font-size:max(9px,calc(12px*var(--kc,1)));font-weight:700;color:#8a6a10}
 .hcard.S{color:var(--S)}.hcard.H{color:var(--H)}.hcard.D{color:var(--D)}.hcard.C{color:var(--C)}
 .hcard.item{border:3px solid rgba(232,184,74,.55)}
 /* 지금 쓸 수 있는 아이템만 빛난다 */
@@ -231,9 +231,6 @@ button:disabled{cursor:default;opacity:.45}
   .topl .chip{font-size:12px;padding:3px 8px}
   .pill{font-size:15px;padding:8px 14px}
   .prompt{top:62px}
-  .hcard{width:84px;height:118px}
-  .hcard .su{font-size:42px;top:34px}.hcard .rk{font-size:20px}
-  .hand{height:170px}
   .acts{bottom:150px;right:12px}
   .tray{display:none}
   .scr-body{grid-template-columns:1fr;top:80px;bottom:300px}
@@ -287,6 +284,8 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 /* ³: 큐빅과 같은 시계로 문양 4색이 바뀐다 */
 .lobby h1.logo3d sup{color:var(--brand,#2f5fc8)}
 .logohost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;will-change:transform;transform-origin:0 0}
+/* 3D 로고는 그림일 뿐: 안쪽 캔버스도 클릭을 막지 않는다(아래 게임 아이콘 = 메뉴 버튼이 눌리게) */
+.logohost *{pointer-events:none!important}
 
 /* ---------- 메인 화면: 왼쪽 메뉴, 오른쪽 테이블 ---------- */
 .menu{position:fixed;inset:0;z-index:40;pointer-events:none;background:linear-gradient(90deg,rgba(10,8,6,.88) 0,rgba(10,8,6,.62) 360px,rgba(10,8,6,0) 640px)}
@@ -407,9 +406,8 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 @media (max-height:520px){.pcard{width:84px;height:118px}.pcard .su{font-size:42px;top:34px}.pcard .rk{font-size:20px}.pcard+.pcard{margin-left:-24px}}
 
 /* 아이템 손패: 왼쪽 아래. 숨은 카드는 윗부분만 살짝 나와 있다 */
-.ihand{position:absolute;left:24px;bottom:0;height:200px;pointer-events:none;z-index:6}
+.ihand{position:absolute;left:calc(24px*var(--kc,1));bottom:0;height:calc(200px*var(--kc,1));pointer-events:none;z-index:6}
 .ihand .hcard{transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .2s,border-color .2s}
-@media (max-width:720px),(max-height:520px){.ihand .hcard{width:84px;height:118px}.ihand .hcard .su{font-size:42px;top:34px}.ihand .hcard .rk{font-size:20px}}
 /* 규칙 설명: ♣Q·♣K 고르기 창 */
 .clubpop{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4;display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 26px;border-radius:20px;background:rgba(8,16,28,.95);border:1px solid rgba(232,184,74,.6);box-shadow:0 20px 60px rgba(0,0,0,.6);max-width:min(640px,90vw)}
 .clubpop .ttl{font-size:18px;font-weight:700;color:#ffe2a0}
@@ -689,11 +687,6 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .arena-warp{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,#fff 0,#c9b2ff 18%,rgba(110,70,200,.6) 40%,rgba(20,10,30,0) 70%);animation:arenawarp 1s ease-out forwards}
 @keyframes arenain{from{opacity:0}to{opacity:1}}
 @keyframes arenawarp{0%{opacity:1;transform:scale(.2)}50%{opacity:.9;transform:scale(1.6)}100%{opacity:0;transform:scale(2.4)}}
-.dbar{position:absolute;left:50%;top:58px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;max-width:min(860px,96vw);padding:8px 14px;border-radius:16px;background:rgba(18,12,10,.78);border:1px solid rgba(232,184,74,.35);pointer-events:auto;text-align:center;font-size:14px}
-.dbar .line{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
-.dbar .chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
-.dbar .dt{color:#ffb070;font-weight:700}
-@media (max-height:520px){.dbar{top:44px;padding:3px 8px;font-size:11px;gap:2px;border-radius:12px;background:rgba(18,12,10,.68)}.dbar .line:first-child{display:none}.dbar .chips .chip{font-size:10px;padding:1px 6px}.dbar .btn.sm{padding:2px 8px;font-size:11px}.dbar kbd{display:none}}
 
 /* 미니게임만 하기: 로비에서 고르는 판 */
 .solopick{position:absolute;left:50%;top:50%;transform:translate(-50%,-56%);width:min(720px,calc(100vw - 32px));max-height:min(70vh,560px);display:flex;flex-direction:column;gap:10px;pointer-events:auto;z-index:8}
@@ -706,3 +699,95 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .spbtn .ic{font-size:16px;text-align:center;white-space:nowrap;min-width:24px}
 .spbtn .ct{font-size:11px;color:var(--dim)}
 @media (max-height:520px){.solopick{top:8px;transform:translateX(-50%);max-height:calc(100vh - 130px)}.spbtn{padding:6px 8px;font-size:13px}}
+
+.seedrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;margin:-4px 0 14px;font-size:12px;color:var(--muted)}
+.seedrow .lbl{margin-right:2px}
+.seedp{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:var(--glass);border:1px solid var(--line);color:var(--ink)}
+.seedp i{width:8px;height:8px;border-radius:50%}
+
+/* 대기실 준비 상태 */
+.readyrow{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.rchip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--glass);border:1px solid var(--line);font-size:13px}
+.rchip i{width:9px;height:9px;border-radius:50%}
+.rchip b{font-size:11px;font-weight:700;color:var(--dim)}
+.rchip.on{border-color:rgba(120,200,120,.7)}
+.rchip.on b{color:#8fd88f}
+.rchip.host b{color:var(--brass)}
+
+#hud.arena-on .acts{bottom:16px}
+#hud.arena-on .acts .btn{font-size:calc(14px*var(--k,1));padding:calc(7px*var(--k,1)) calc(12px*var(--k,1))}
+
+/* 석판 점수판: 화면에 고정된 UI(아레나 오른쪽). 돌 질감 + 새긴 글자 + 잉크 테두리 */
+/* 점수판: 글자 크기(em) 하나로 전체가 화면 크기에 맞춰 함께 줄어든다 */
+.slate{position:absolute;right:12px;top:max(58px,calc(68px*var(--k,1)));width:12.5em;max-height:calc(100% - 140px);overflow-y:auto;box-sizing:border-box;padding:.7em .8em;border-radius:1em 1em .7em .7em;z-index:2;pointer-events:auto;
+  color:#2a1f17;font-size:calc(14px*var(--k,1));text-shadow:0 1px 0 rgba(255,240,215,.35);
+  background:radial-gradient(circle at 20% 15%,rgba(255,245,225,.18),transparent 40%),radial-gradient(circle at 80% 70%,rgba(30,20,10,.12),transparent 45%),linear-gradient(180deg,#a99a84,#8b7d69);
+  border:3px solid #140e0a;box-shadow:inset 0 0 0 2px rgba(255,240,215,.25),inset 0 -6px 0 rgba(40,28,18,.25),0 8px 22px rgba(0,0,0,.45)}
+.slate::before{content:'';position:absolute;inset:.4em;border:2px solid rgba(20,14,10,.45);border-radius:.7em;pointer-events:none}
+.sl-h{display:flex;flex-direction:column;align-items:center;gap:1px;padding:.1em 0 .45em;margin-bottom:.45em;border-bottom:2px solid rgba(20,14,10,.55)}
+.sl-h strong{font-family:'Black Han Sans',sans-serif;font-size:19px;font-weight:400;color:#1e150f}
+.sl-h span{font-size:.85em;color:#4a3c2e}
+.sl-now{display:flex;align-items:center;gap:8px;min-height:40px}
+.sl-lines{flex:1;display:grid;gap:2px;font-size:13px;color:#3a2d22}
+.sl-lines .lead{font-family:'Black Han Sans',sans-serif;font-size:16px;color:#1e150f}
+.sl-t{flex:none;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:rgba(30,15,8,.65);color:#ffcf7a;font-family:'Black Han Sans',sans-serif;font-size:22px;text-shadow:none}
+.sl-t.hot{color:#ff7a4a}
+.sl-btns{display:flex;gap:6px;margin-top:8px}
+.rune{flex:1;padding:8px 6px;border-radius:10px;border:2px solid #c99a3e;background:#3a2616;color:#ffd98a;font-family:'Black Han Sans',sans-serif;font-size:15px;cursor:pointer;text-shadow:none;box-shadow:inset 0 0 0 2px #241509}
+.rune:hover{background:#5a3a1a;border-color:#ffd36a}
+.sl-score{list-style:none;margin:0;padding:0;display:grid;gap:.2em}
+.sl-score li{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:.4em;padding:.35em .45em;border-radius:.55em}
+.sl-score li.me{background:rgba(255,240,215,.22)}
+.sl-score li.atk{background:rgba(200,150,60,.28)}
+.sl-score .gem{width:1em;height:1em;box-sizing:border-box;border-radius:50%;border:2px solid #140e0a;box-shadow:inset 2px 2px 0 rgba(255,255,255,.45)}
+.sl-score .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.sl-score .st{display:inline-flex;align-items:center;justify-content:center;width:1.3em;height:1.3em}
+.sl-score .st.ok{border-radius:50%;background:rgba(80,140,70,.35)}
+.sl-score .st .think circle{animation:thinkdot 1.2s infinite ease-in-out}
+.sl-score .st .think circle:nth-child(2){animation-delay:.2s}.sl-score .st .think circle:nth-child(3){animation-delay:.4s}
+@keyframes thinkdot{0%,60%,100%{opacity:.35}30%{opacity:1}}
+.sl-score b{font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:1.5em;min-width:1em;text-align:right;color:#1e150f}
+.sl-score b.top{color:#8a5a0a}
+.sl-rw{margin-top:8px;font-size:12px;color:#4a3c2e;text-align:center}
+
+/* 위쪽 석판 한 장: 양끝은 얇고 가운데로 부드럽게 두꺼워진다(SVG 윤곽). 왼쪽 위 = 게임 이름, 가운데 = 지금 할 일, 오른쪽 위 = 이번 보상 */
+.sh{position:absolute;left:0;right:0;top:0;height:calc(120px*var(--k,1));z-index:2;pointer-events:none;color:#2a1f17;text-shadow:0 1px 0 rgba(255,240,215,.35)}
+.sh-stone{position:absolute;left:0;top:0;overflow:visible;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+.sh-title{position:absolute;left:12px;top:0;display:flex;align-items:center}
+.sh-title strong{font-family:'Black Han Sans',sans-serif;font-weight:400;color:#1e150f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sh-now{position:absolute;top:2px;display:flex;align-items:center;justify-content:center;gap:12px;pointer-events:auto;text-align:center}
+.pq-lines{display:flex;flex-direction:column;align-items:center;font-size:calc(15px*var(--k,1));color:#3a2d22;line-height:1.25}
+.pq-lines .lead{font-family:'Black Han Sans',sans-serif;font-size:calc(25px*var(--k,1));line-height:1.15;color:#1e150f}
+.sh-now{gap:calc(14px*var(--k,1))}
+.sh-now .sl-t{width:calc(48px*var(--k,1));height:calc(48px*var(--k,1));font-size:calc(25px*var(--k,1))}
+.sh-now .rune{flex:none;padding:calc(8px*var(--k,1)) calc(16px*var(--k,1));font-size:calc(18px*var(--k,1))}
+.sh-reward{position:absolute;right:8px;top:0;display:flex;align-items:center;justify-content:flex-end;flex-wrap:nowrap;gap:3px;overflow:hidden}
+.sh-reward .lbl{font-size:max(9px,calc(11px*var(--k,1)));color:#4a3c2e;margin-right:4px;white-space:nowrap}
+.sh-reward .mc{flex:none;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;font-style:normal;font-family:'Black Han Sans',sans-serif;line-height:1;border-radius:3px;background:#f4ead6;border:1.5px solid #140e0a;text-shadow:none;box-shadow:0 1px 0 rgba(0,0,0,.35)}
+.sh-reward .mc b{font-weight:400}
+.sh-reward .mc span{font-size:.9em}
+/* 아레나 중: 칩·아이콘은 석판 아래로, 보상 줄은 석판이 대신 */
+/* 아레나 중: 게임 아이콘(메뉴 버튼)은 석판 띠 왼쪽 끝. 오른쪽 위 테이블 카메라 버튼·칩·핑은 숨긴다(기록·설정은 메뉴, 자리 바꾸기는 점수판 줄을 눌러서) */
+#hud.arena-on .topl{top:calc(8px*var(--k,1));left:8px;height:calc(40px*var(--k,1));z-index:4}
+#hud.arena-on .topl>:not(.logo){display:none}
+#hud.arena-on .topl .logo{font-size:calc(30px*var(--k,1))}
+#hud.arena-on .topr{display:none}
+.sl-score li.mine{cursor:pointer}
+.sl-score li.mine:hover{outline:2px solid rgba(20,14,10,.5)}
+#hud.arena-on .rewardstrip{display:none}
+@media (max-height:520px){.sh-now{top:1px;gap:2px 8px;flex-wrap:wrap;align-content:center}.sh-now .pq-lines{flex-basis:100%}.pq-lines .lead{white-space:nowrap}.pq-lines .lead+span{display:none}.slate{max-height:calc(100% - 110px)}}
+/* 세로에 가까운 창: 가운데 칸이 좁아지므로 글자를 줄인다 */
+@media (max-aspect-ratio:4/3){.sh-now{flex-wrap:wrap;align-content:center;gap:4px 10px}.sh-now .pq-lines{flex-basis:100%}.pq-lines .lead{white-space:nowrap}.slate{top:max(82px,calc(100px*var(--k,1)))}}
+
+.rune kbd{margin-left:6px;padding:1px 5px;border-radius:4px;background:#f4ead6;color:#140e0a;border:1.5px solid #140e0a;font-family:'IBM Plex Sans KR',sans-serif;font-size:.6em;vertical-align:middle}
+
+/* 게임 아이콘 = 메뉴 버튼, Esc 메뉴 */
+.logobtn{background:none;border:0;padding:0 2px;cursor:pointer;pointer-events:auto;line-height:1}
+.logobtn:hover{filter:brightness(1.2)}
+.escmenu{position:absolute;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:rgba(6,5,4,.45);pointer-events:auto;animation:fadein .15s}
+.escbox{display:flex;flex-direction:column;gap:10px;min-width:240px;padding:18px 20px}
+.escbox .eh{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.escbox .eh strong{font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:20px}
+.escbox.stone{color:#2a1f17;background:linear-gradient(180deg,#ab9c86,#8b7d69);border:3px solid #140e0a;box-shadow:inset 0 0 0 2px rgba(255,240,215,.25),0 10px 30px rgba(0,0,0,.5)}
+.escbox.stone .btn{background:#3a2616;color:#ffd98a;border:2px solid #c99a3e}
+.escbox.stone .btn.primary{background:#5a3a1a}

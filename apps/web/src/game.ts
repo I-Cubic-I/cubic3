@@ -62,7 +62,7 @@ export function whoActs(S: GameState | null, me: string): number | null {
     if (m.id === 'liar') return m.step === 'bid' ? liarTurn(m) : null;
     if (m.id === 'fore') return foreTurn(m);
     if (m.id === 'fork') return m.step === 'pick' ? pickOne(m.ord.filter(k => !(k in m.picks))) : null;
-    if (m.id === 'dodge') return m.step === 'block' ? dodgeAtk(m) : m.step === 'pick' ? pickOne([...(m.shot ? [] : [dodgeAtk(m)]), ...dodgeDefs(m).filter(k => !m.done[k])]) : null;
+    if (m.id === 'dodge') return m.step === 'pick' ? pickOne([...(m.shot ? [] : [dodgeAtk(m)]), ...dodgeDefs(m).filter(k => !m.done[k])]) : null;
   }
   return null;
 }

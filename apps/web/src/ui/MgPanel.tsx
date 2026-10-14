@@ -4,7 +4,7 @@ import {
   BLIMIT, CFLIP, type Card, type GameState, type Hand, MG, R, RLIMIT, RPSN, SUITS, SYM, U, cname, countOpenAt, isItem, now,
 } from '@cubic3/engine';
 import { SUITCOL, seatName } from '../game';
-import { cmd } from '../flow';
+import { cmd, toast } from '../flow';
 import { type UiMode, useStore } from '../store';
 import { MCard } from './bits';
 import { digitalRules } from './mgtext';
@@ -41,13 +41,13 @@ export function mgItemUse(S: GameState, i: number | null): ItemUse {
   }
   return mgItemUse2(S, i, no, now_, pick) ?? mgItemUse3(S, i, no, now_, pick) ?? mgItemUse4(S, i, no, now_, pick) ?? no('이 미니게임에는 아이템이 없어요');
 }
-/** 아이템 카드를 눌렀을 때 */
-export function pressItemCard(S: GameState, i: number | null, c: Card): void {
-  const u = mgItemUse(S, i); const st = useStore.getState(); if (!u.ok) return;
+/** 미니게임 아이템 쓰기(사용자 2026-10-14): 카드를 위로 끌어 올리면 쓴다(모든 미니게임 공통). 모두에게 컷신.
+    대상이 필요한 아이템은 쓴 뒤 10초 안에 대상을 고른다(안 고르면 무작위) */
+export function useItemUp(S: GameState, i: number | null, c: Card): void {
+  const u = mgItemUse(S, i); const st = useStore.getState();
+  if (!u.ok || i == null) { toast(u.why); return; }
   if (u.mode === 'now') { st.set({ sel: [c] }); cmd(u.run!); return; }
-  // 골라 두기: 같은 카드를 다시 누르면 취소
-  const on = st.sel.includes(c);
-  st.set({ sel: on ? [] : [c], ui: { ...st.ui, bsub: !on && S.mg?.id === 'balloon' } });
+  void st.act({ type: 'mgItemDeclare', seat: i, item: c });
 }
 
 /** 시간이 흐르는 화면(몇 장이었지)은 주기적으로 다시 그린다 */

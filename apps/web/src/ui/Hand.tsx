@@ -5,11 +5,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { type Card, type GameState, R, RL, SUITS, SYM, U, canAct, cname, costFor, isItem } from '@cubic3/engine';
 import { SUITCOL } from '../game';
+import { cardScale } from './scale';
 import { useStore } from '../store';
-import { type Drop, cmd, dropCard, getWorld } from '../flow';
+import { type Drop, cmd, dropCard, getWorld, toast } from '../flow';
 import { Tok, handSort } from './bits';
 import { setDragging } from './tip';
-import { mgItemUse, pressItemCard } from './MgPanel';
+import { mgItemUse, useItemUp } from './MgPanel';
 
 function dropZone(x: number, y: number): Drop {
   const el = document.elementFromPoint(x, y);
@@ -62,8 +63,8 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
   const box = useRef<HTMLDivElement>(null);
   const items = kind === 'item';
   const h = handSort(S.seats[seat].hand).filter(c => isItem(c) === items); const n = h.length;
-  const narrow = window.innerWidth <= 720 || window.innerHeight <= 520;
-  const cw = narrow ? 84 : 118, ch = narrow ? 118 : 166;
+  // 카드 크기는 화면 크기에 비례(공통 UI 배율)
+  const k = cardScale(); const cw = Math.round(118 * k), ch = Math.round(166 * k);
   // 숫자 손패는 왼쪽 아이템 손패와 오른쪽 토큰 칸 사이의 빈 곳 가운데에 놓는다(겹치지 않게)
   const nI = S.seats[seat].hand.filter(isItem).length;
   // 아이템 손패는 화면 폭의 30%를 넘지 않게 겹쳐 쌓는다
@@ -115,7 +116,7 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
         const g = d.el.cloneNode(true) as HTMLElement; g.classList.add('ghost'); g.classList.remove('new', 'sel'); g.style.transform = ''; document.body.appendChild(g); d.g = g;
         d.el.style.opacity = '.25'; document.body.classList.add('dragging');
       }
-      d.g!.style.left = (e.clientX - 59) + 'px'; d.g!.style.top = (e.clientY - 83) + 'px';
+      d.g!.style.left = (e.clientX - d.el.offsetWidth / 2) + 'px'; d.g!.style.top = (e.clientY - d.el.offsetHeight / 2) + 'px';
       const z = dropZone(e.clientX, e.clientY);
       document.querySelectorAll<HTMLElement>('.dz').forEach(x => x.classList.toggle('hot', x.dataset.dz === z.kind));
       d.g!.classList.toggle('over', z.kind !== 'hand'); e.preventDefault();
@@ -127,6 +128,8 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
       document.querySelectorAll('.dz.hot').forEach(x => x.classList.remove('hot'));
       const st = useStore.getState(); const S_ = st.S;
       if (S_?.phase === 'clubs') { if (st.ctl != null) dropClub(S_, st.ctl, d.c, e.clientX, e.clientY); return; }
+      // 미니게임 아이템: 위로 충분히 끌어 올렸으면 쓴다
+      if (S_?.phase === 'mg' && isItem(d.c)) { if (e.clientY < d.y - 70) useItemUp(S_, st.ctl, d.c); return; }
       dropCard(d.c, dropZone(e.clientX, e.clientY));
     };
     window.addEventListener('pointermove', move, { passive: false }); window.addEventListener('pointerup', up);
@@ -137,11 +140,13 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
   const press = (c: Card) => {
     if (swallow) { swallow = false; return; }
     // 미니게임 아이템은 누르면 쓴다. 그 밖에는 고르기
-    if (items && S.phase === 'mg') { pressItemCard(S, seat, c); return; }
+    // 미니게임 아이템은 위로 끌어 올려 쓴다(누르기만 하면 안내)
+    if (items && S.phase === 'mg') { toast('아이템은 위로 끌어 올려 쓰세요'); return; }
     if (items && S.phase === 'clubs') return;
     toggleSel(c);
   };
-  const note = items && S.phase === 'mg' ? mgItemUse(S, seat).why : undefined;
+  const iu = items && S.phase === 'mg' ? mgItemUse(S, seat) : null;
+  const note = iu ? (iu.ok ? '위로 끌어 올려 쓰세요' + (iu.mode === 'pick' ? ' · 쓴 뒤 10초 안에 대상을 고르세요' : '') : iu.why) : undefined;
   return (
     <div ref={box} className={items ? 'ihand' : 'hand'} aria-label={items ? '내 아이템' : '내 손패'} style={items ? { width: w } : { left: leftPad + avail / 2, width: w }}>
       {h.map((c, k) => {
@@ -154,9 +159,9 @@ export function Hand({ seat, kind = 'res' }: { seat: number; kind?: 'res' | 'ite
         return (
           <div key={c} className={`hcard ${U(c)}${isItem(c) ? ' item' : ''}${look.lit ? ' lit' : ''}${tokOf(c) ? ' tokc' : ''}${s ? ' sel' : ''}${isNew ? ' new' : ''}`} data-h={c} data-note={note} tabIndex={0} role="button" aria-pressed={s} aria-label={cname(c)}
             style={style}
-            onPointerDown={e => { if (e.button > 0) return; if (items && S.phase === 'mg') return; drag.current = { c, el: e.currentTarget, x: e.clientX, y: e.clientY, on: false }; }}
+            onPointerDown={e => { if (e.button > 0) return; drag.current = { c, el: e.currentTarget, x: e.clientX, y: e.clientY, on: false }; }}
             onClick={() => press(c)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); press(c); } }}>
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (items && S.phase === 'mg') useItemUp(S, seat, c); else press(c); } }}>
             <span className="rk">{RL(R(c))}</span><span className="su">{SYM[U(c)]}</span>{isItem(c) && <span className="tg">아이템</span>}
           </div>
         );

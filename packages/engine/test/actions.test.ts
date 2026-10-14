@@ -49,6 +49,7 @@ function candidates(S: GameState, seat: number): Action[] {
   const c: Action[] = [
     { type: 'roll', seat }, { type: 'ready' }, { type: 'noDefend', seat }, { type: 'pickDeck', seat }, { type: 'endTurn', seat },
     { type: 'holdStop', seat }, { type: 'auctionReady', seat }, { type: 'raceFlip', seat },
+    ...its.map(item => ({ type: 'mgItemDeclare', seat, item }) as Action),
   ];
   for (const card of hand) {
     c.push({ type: 'discard', seat, card }, { type: 'club', seat, card, arg: 1 }, { type: 'club', seat, card, arg: -1 }, { type: 'club', seat, card, arg: 3 },
@@ -104,7 +105,7 @@ function candidates(S: GameState, seat: number): Action[] {
   // 2026-10-14 디지털 전용
   if (m?.id === 'dodge') {
     for (let x = 0; x < 9; x++) c.push({ type: 'dodgeMove', seat, cell: x });
-    c.push({ type: 'dodgeLock', seat }, { type: 'dodgeGo', seat });
+    c.push({ type: 'dodgeLock', seat });
     m.dice.forEach((d, k) => { const all = DODGE_SHAPES[d].flat(); c.push({ type: 'dodgeShot', seat, k, cells: all[Math.floor(rng() * all.length)] }, { type: 'dodgeShot', seat, k, cells: [0, 1, 2, 3, 4, 5, 6, 7] }); });
     for (const it of its) { c.push({ type: 'dodgeBlock', seat, item: it, cell: Math.floor(rng() * 9) }, { type: 'dodgePeek', seat, item: it }); }
   }  for (const it of its) {
@@ -403,27 +404,60 @@ describe('applyAction', () => {
     T += DODGE_SHOW + 100; advanceTimers(S); expect(m.turn).toBe(2);
   });
 
-  it('주사위 눈 피하기: 봉쇄는 빈 칸만, 막힌 칸으로는 못 가고, 공격자가 바뀌면 풀린다. 2인은 5턴', () => {
+  it('주사위 눈 피하기: 봉쇄는 공격 시간 안에 언제든 빈 칸만, 쓰면 시간 +10초, 그 칸으로 가려던 수비자는 취소, 막힌 칸으로는 못 가고, 공격자가 바뀌면 풀린다. 2인은 5턴', () => {
     let T = 1_000_000; setClock(() => T); setRng(mulberry32(42));
     const S = newLobby(); for (let k = 0; k < 2; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
     S.first = 0; S.board = Array(6).fill('dodge'); S.die = 1; S.phase = 'clubs'; S.turn = null;
     S.seats[0].hand.push('S11b', 'S12b'); startMinigame(S);
-    const m = S.mg as DodgeMg; expect(m.turns).toBe(5); expect(m.step).toBe('block'); expect(m.pos[1]).toBe(4);
+    const m = S.mg as DodgeMg; expect(m.turns).toBe(5); expect(m.step).toBe('pick'); expect(m.pos[1]).toBe(4);
+    // 수비자가 1번 칸으로 가기로 하고 확정한 뒤, 공격자가 1번 칸을 막는다 → 그 이동은 취소
+    applyAction(S, 'u1', { type: 'dodgeMove', seat: 1, cell: 1 }); applyAction(S, 'u1', { type: 'dodgeLock', seat: 1 });
+    expect(m.done[1]).toBe(true);
+    T += 20_000; const u0 = m.until, d0 = m.dUntil;
+    // 아이템은 먼저 쓰고(컷신·시간 +10초) 그 뒤 대상을 고른다. 고르기 전에는 공격자의 다른 행동이 막힌다
+    expect(applyAction(S, 'u0', { type: 'mgItemDeclare', seat: 0, item: 'S11b' }).ok).toBe(true);
+    expect(m.until).toBe(u0 + 10_000); expect(m.dUntil).toBe(d0 + 10_000);
+    expect((S.fx || []).some(f => f.t === 'item' && f.eff === '칸 봉쇄')).toBe(true);
+    expect(applyAction(S, 'u0', { type: 'dodgeShot', seat: 0, k: 0, cells: DODGE_SHAPES[m.dice[0]][0][0] }).ok).toBe(false);
     expect(applyAction(S, 'u0', { type: 'dodgeBlock', seat: 0, item: 'S11b', cell: 4 }).ok).toBe(false); // 사람이 있는 칸
     expect(applyAction(S, 'u0', { type: 'dodgeBlock', seat: 0, item: 'S11b', cell: 1 }).ok).toBe(true);
-    expect(applyAction(S, 'u0', { type: 'dodgeGo', seat: 0 }).ok).toBe(true);
+    expect(S.mgItems?.[0]).toBeFalsy();
+    expect((S.fx || []).filter(f => f.t === 'item').length).toBe(1);   // 컷신은 쓸 때 한 번만
+    expect(m.done[1]).toBeFalsy(); expect(1 in m.moves).toBe(false);
+    T += 15_000; advanceTimers(S); expect(m.shot).toBeNull();          // 늘어난 시간 덕에 아직 시간 초과가 아니다
     expect(applyAction(S, 'u1', { type: 'dodgeMove', seat: 1, cell: 1 }).ok).toBe(false);
     expect(applyAction(S, 'u1', { type: 'dodgeMove', seat: 1, cell: 3 }).ok).toBe(true);
     // 엿보기는 공격자가 확정한 뒤에만
     S.seats[1].hand.push('H11b');
     expect(applyAction(S, 'u1', { type: 'dodgePeek', seat: 1, item: 'H11b' }).ok).toBe(false);
-    T += 31_000; advanceTimers(S);                      // 공격자 시간 초과 → 무작위로 떨어진다
+    T += 6_000; advanceTimers(S);                       // 공격자 시간 초과 → 무작위로 떨어진다
     expect(m.shot?.auto).toBe(true);
+    expect(applyAction(S, 'u0', { type: 'dodgeBlock', seat: 0, item: 'S12b', cell: 2 }).ok).toBe(false); // 확정(발동) 뒤에는 못 쓴다
     expect(applyAction(S, 'u1', { type: 'dodgePeek', seat: 1, item: 'H11b' }).ok).toBe(true);
     applyAction(S, 'u1', { type: 'dodgeLock', seat: 1 });
     expect(m.step).toBe('show');
     for (let k = 0; k < 40 && m.ai === 0; k++) { T += 40_000; advanceTimers(S); }
     expect(m.ai).toBe(1); expect(m.blocked).toEqual([]); expect(m.pos[0]).toBe(4);
+  });
+  it('미니게임 아이템: 대상을 10초 안에 안 고르면 무작위로, 바로 쓰는 아이템도 컷신', () => {
+    let T = 5_000_000; setClock(() => T); setRng(mulberry32(9));
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.first = 0; S.board = Array(6).fill('dodge'); S.die = 1; S.phase = 'clubs'; S.turn = null;
+    S.seats[0].hand.push('S11b'); S.seats[1].hand.push('H11b'); startMinigame(S);
+    const m = S.mg as DodgeMg;
+    expect(applyAction(S, 'u1', { type: 'mgItemDeclare', seat: 1, item: 'H11b' }).ok).toBe(false);   // 수비자 엿보기는 대상이 없다
+    expect(applyAction(S, 'u0', { type: 'mgItemDeclare', seat: 0, item: 'S11b' }).ok).toBe(true);
+    T += 9_000; advanceTimers(S); expect(m.blocked).toEqual([]);
+    T += 1_500; advanceTimers(S);
+    expect(m.blocked.length).toBe(1); expect(S.seats[0].front).toContain('S11b'); expect(S.mgItems?.[0]).toBeFalsy();
+    // 바로 쓰는 아이템(엿보기)에도 컷신
+    applyAction(S, 'u0', { type: 'dodgeShot', seat: 0, k: 0, cells: DODGE_SHAPES[m.dice[0]][0][0] });
+    const n0 = (S.fx || []).filter(f => f.t === 'item').length, d0 = m.dUntil;
+    S.seats[2].hand.push('C11b'); applyAction(S, 'u2', { type: 'dodgeLock', seat: 2 });
+    expect(applyAction(S, 'u2', { type: 'dodgePeek', seat: 2, item: 'C11b' }).ok).toBe(false);   // 확정한 뒤에는 못 쓴다
+    expect(applyAction(S, 'u1', { type: 'dodgePeek', seat: 1, item: 'H11b' }).ok).toBe(true);
+    expect((S.fx || []).filter(f => f.t === 'item').length).toBe(n0 + 1);
+    expect(m.dUntil).toBe(d0 + 5_000);                                         // 엿보기를 쓰면 수비자 시간 +5초
   });
   it('미니게임만 하기: 인원 확인, 규칙 설명 → 미니게임 → 보상 없이 끝, 한 번 더, ♣ 바꾸기 없음, 카드 수 보존', () => {
     let T = 2_000_000; setClock(() => T); setRng(mulberry32(7));
@@ -450,6 +484,59 @@ describe('applyAction', () => {
     expect(S.phase).toBe('lobby'); expect(S.solo).toBeFalsy(); expect(S.seats.length).toBe(3);
     // 즉시 시작 미니게임(눈치 게임)은 규칙 설명 없이 바로
     expect(applyAction(S, 'u0', { type: 'startSolo', id: 'nunchi' }).ok).toBe(true); expect(S.phase).toBe('mg');
+  });
+  it('미니게임만 하기: 손패가 시드 — 같은 손패면 같은 판, 방장 새로고침(상태 복사)에도 같은 흐름', () => {
+    let T = 3_000_000; setClock(() => T); setRng(Math.random);
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' });
+    applyAction(S, 'u0', { type: 'startSolo', id: 'dodge' });
+    S.seats.forEach(p => expect(p.hand.filter(c => R(c) <= 10)).toHaveLength(2));
+    const hands = JSON.stringify(S.soloHands), hand0 = JSON.stringify(S.seats.map(p => p.hand)), first = S.first, deck0 = S.deck.join();
+    const snap = () => { const m = S.mg as DodgeMg; return JSON.stringify({ d: m.dice, p: m.pos, o: m.ord }); };
+    for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'ready' });
+    const m1 = snap();
+    // 몇 턴 진행(시간 초과로 자동) 뒤의 상태도 같아야 한다
+    const run = (X: GameState) => { for (let k = 0; k < 6; k++) { T += 40_000; advanceTimers(X); } return JSON.stringify((X.mg as DodgeMg).dice) + JSON.stringify((X.mg as DodgeMg).pts); };
+    const r1 = run(S);
+    for (let k = 0; k < 400 && S.phase === 'mg'; k++) { T += 40_000; advanceTimers(S); }
+    expect(S.phase).toBe('ended');
+    // 같은 판 다시
+    applyAction(S, 'u0', { type: 'restart' });
+    expect(JSON.stringify(S.soloHands)).toBe(hands); expect(JSON.stringify(S.seats.map(p => p.hand))).toBe(hand0);
+    expect(S.first).toBe(first); expect(S.deck.join()).toBe(deck0);
+    for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'ready' });
+    expect(snap()).toBe(m1);
+    // 새로고침: 상태를 복사한 새 객체로 이어 가도 같은 흐름
+    const C = JSON.parse(JSON.stringify(S)) as GameState;
+    const r2 = run(C);
+    expect(r2).toBe(r1);
+    // 새 판(fresh)은 새 손패
+    for (let k = 0; k < 400 && C.phase === 'mg'; k++) { T += 40_000; advanceTimers(C); }
+    let changed = false;
+    for (let t = 0; t < 5 && !changed; t++) { applyAction(C, 'u0', { type: 'restart', fresh: true }); changed = JSON.stringify(C.soloHands) !== hands; C.phase = 'ended'; }
+    expect(changed).toBe(true);
+    applyAction(C, 'u0', { type: 'toLobby' }); expect(C.rng).toBeFalsy();
+  });
+  it('시작은 방장만, 방장이 아닌 사람이 모두 준비해야 시작(일반·미니게임만 하기), 로비로 돌아가면 준비가 풀린다', () => {
+    setClock(() => 4_000_000); setRng(mulberry32(3));
+    const S = newLobby(); S.host = 'h';
+    applyAction(S, 'h', { type: 'sit' }); applyAction(S, 'a', { type: 'sit' }); applyAction(S, 'b', { type: 'sit' }); applyAction(S, 'b', { type: 'sit' });
+    expect(applyAction(S, 'h', { type: 'lobbyReady', on: true }).ok).toBe(false);          // 방장은 준비 없음
+    expect(applyAction(S, 'x', { type: 'lobbyReady', on: true }).ok).toBe(false);          // 안 앉은 사람
+    expect(applyAction(S, 'h', { type: 'start' }).ok).toBe(false);                         // 아직 아무도 준비 안 함
+    applyAction(S, 'a', { type: 'lobbyReady', on: true });
+    expect(applyAction(S, 'h', { type: 'startSolo', id: 'dodge' }).ok).toBe(false);        // b가 아직
+    applyAction(S, 'b', { type: 'lobbyReady', on: true });
+    expect(applyAction(S, 'a', { type: 'start' }).ok).toBe(false);                         // 방장이 아님
+    applyAction(S, 'b', { type: 'lobbyReady', on: false });
+    expect(applyAction(S, 'h', { type: 'start' }).ok).toBe(false);
+    applyAction(S, 'b', { type: 'lobbyReady', on: true });
+    expect(applyAction(S, 'h', { type: 'startSolo', id: 'dodge' }).ok).toBe(true);
+    S.phase = 'ended';
+    expect(applyAction(S, 'a', { type: 'restart' }).ok).toBe(false);
+    expect(applyAction(S, 'h', { type: 'restart' }).ok).toBe(true);
+    applyAction(S, 'a', { type: 'toLobby' });
+    expect(S.host).toBe('h'); expect(S.lobbyReady).toBeFalsy();
+    expect(applyAction(S, 'h', { type: 'start' }).ok).toBe(false);
   });
   it('판정이 허용한 행동만으로 2~5인 대국이 오류 없이 끝나고 카드 수가 보존된다', () => {
     let ended = 0;

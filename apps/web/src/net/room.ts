@@ -58,6 +58,8 @@ export async function hostRoom(net: Transport, code: string, myUid: string): Pro
   let S: GameState = newLobby();
   const saved = LS.get(hostKey(code));
   if (saved) { try { S = JSON.parse(saved); } catch { /* 망가진 저장은 버린다 */ } }
+  // 시작은 방장만: 엔진이 방장을 알 수 있게 넣어 둔다
+  S.host = myUid;
   const subs = new Set<(S: GameState) => void>();
   const who = new Map<string, string>(); // 연결 → uid
   let link: HostLink | null = null;

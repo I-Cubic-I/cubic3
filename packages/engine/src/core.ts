@@ -1,5 +1,5 @@
 /* 메인 게임 (순수 함수: 상태를 받아 고친다) */
-import { DEF_MS, R, SNAME, U, cname, d6, fullDeck, isItem, now, rnd, shuffle } from './cards';
+import { DEF_MS, R, SNAME, U, bindSeed, cname, d6, fullDeck, hashSeed, isItem, now, rnd, shuffle } from './cards';
 import { MG } from './mginfo';
 import {
   auctionOpen, balloonStart, bombLay, countStart, ovnStart, raceStart,
@@ -82,15 +82,23 @@ const boardMg = (S: GameState): MgId => S.board![S.die! - 1];
 
 /** 미니게임만 하기(디지털 멀티 전용, 사용자 2026-10-14): 메인 턴 없이 고른 미니게임 1종만 한다.
     규칙 설명 → 미니게임 → 순위 결과 → 끝('ended'). 보상·토큰은 없다.
-    [제안] 공정하게 모두 손패 숫자 카드 2장 + 아이템 J 1장(♣ 아님: ♣로 미니게임을 바꾸는 일은 없다) */
-export function startSolo(S: GameState, id: MgId): void {
-  startGame(S);
-  S.seats.forEach(p => { S.deck.push(...p.hand.splice(0)); }); shuffle(S.deck);
+    **손패 숫자 카드 2장이 이 판의 시드**(사용자 2026-10-14): 손패(와 미니게임)로 무작위를 정해, 같은 손패로 다시 하면 같은 판이 나온다.
+    hands를 주면 그 손패로(같은 판 다시), 없으면 새로 나눈다.
+    아이템은 공정하게 모두 J 1장(사용자 2026-10-14, ♣ 아님: ♣로 미니게임을 바꾸는 일은 없다) */
+export function startSolo(S: GameState, id: MgId, hands?: Card[][] | null): void {
+  bindSeed(null); S.rng = null;
+  startGame(S); const n = N(S);
+  // 덱을 정해진 순서로 되돌린 뒤 손패(시드)를 고른다
+  S.seats.forEach(p => { S.deck.push(...p.hand.splice(0)); }); S.deck.sort();
   const take = (f: (c: Card) => boolean): Card | null => { const k = S.deck.findIndex(f); return k < 0 ? null : S.deck.splice(k, 1)[0]; };
-  S.seats.forEach(p => {
-    for (let k = 0; k < 2; k++) { const c = take(c => R(c) <= 10); if (c) p.hand.push(c); }
-    const j = take(c => R(c) === 11 && U(c) !== 'C'); if (j) p.hand.push(j);
-  });
+  const same = !!hands && hands.length === n && hands.every(h => h.length === 2 && h.every(c => R(c) <= 10)) && hands.flat().every((c, k, a) => S.deck.includes(c) && a.indexOf(c) === k);
+  if (same) hands!.forEach((h, i) => h.forEach(c => S.seats[i].hand.push(take(x => x === c)!)));
+  else { shuffle(S.deck); S.seats.forEach(p => { for (let k = 0; k < 2; k++) { const c = take(c => R(c) <= 10); if (c) p.hand.push(c); } }); S.deck.sort(); }
+  S.soloHands = S.seats.map(p => p.hand.slice());
+  // 여기부터는 시드 무작위: 덱 섞기·첫 선·미니게임 안의 모든 무작위
+  S.rng = { s: hashSeed(id + '|' + S.soloHands.map(h => h.join(',')).join('/')) }; bindSeed(S.rng);
+  shuffle(S.deck); S.first = rnd(n);
+  S.seats.forEach(p => { const j = take(c => R(c) === 11 && U(c) !== 'C'); if (j) p.hand.push(j); });
   S.solo = id; S.turn = null; S.order = []; S.ti = 0; S.pending = null; S.deadline = null;
   S.board = [id, id, id, id, id, id]; S.die = 1; S.round = 1; S.phase = 'clubs'; S.ready = {}; S.rewardDisp = []; S.clubChoose = null;
   S.log = []; log(S, `미니게임만 하기: ${MG[id].name} (${N(S)}명)`);
@@ -414,10 +422,15 @@ export function finishReward(S: GameState): void {
 }
 
 /** 시간 지난 단계 넘기기 (방장 기기에서) */
+/** 미니게임 아이템 대상 고르기 시간 초과(actions.ts가 넣는다: 행동 판정을 거쳐야 해서) */
+let itemTick: ((S: GameState) => boolean) | null = null;
+export function setItemTick(f: (S: GameState) => boolean): void { itemTick = f; }
 export function advanceTimers(S: GameState): boolean {
+  bindSeed(S.rng);
   const t = now();
   // 미니게임이 끝나 결과를 보여 주는 중: 시간이 되면 순위로. 그동안 미니게임 타이머는 멈춘다
   if (S.mgEnd) { if (t < S.mgEnd.at) return false; finishMinigame(S); return true; }
+  if (S.mgItems && itemTick && itemTick(S)) return true;
   if (S.phase === 'clubs' && S.deadline && t >= S.deadline && !S.clubChoose) {
     S.deadline = null; reclaim(S); log(S, '버림 줄과 앞의 아이템을 거둬 덱에 섞었다.');
     startMinigame(S); return true;

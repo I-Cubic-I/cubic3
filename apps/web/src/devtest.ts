@@ -45,7 +45,7 @@ function candidates(S: GameState, seat: number): Action[] {
   if (m?.id === 'liar') { const n = (m.bid?.n || 0) + 1; c.push({ type: 'liarBid', seat, suit: (['S', 'H', 'D', 'C'] as const)[Math.floor(Math.random() * 4)], n }); if (Math.random() < .4) c.push({ type: 'liarCall', seat }); }
   if (m?.id === 'fore') c.push({ type: 'foreAct', seat, go: Math.random() < .6 });
   if (m?.id === 'fork') for (let k = 0; k < m.row.length; k++) c.push({ type: 'forkPick', seat, k });
-  if (m?.id === 'dodge') { for (let x = 0; x < 9; x++) c.push({ type: 'dodgeMove', seat, cell: x }); c.push({ type: 'dodgeLock', seat }, { type: 'dodgeGo', seat }); m.dice.forEach((d, k) => { const all = DODGE_SHAPES[d].flat(); c.push({ type: 'dodgeShot', seat, k, cells: all[Math.floor(Math.random() * all.length)] }); }); }
+  if (m?.id === 'dodge') { for (let x = 0; x < 9; x++) c.push({ type: 'dodgeMove', seat, cell: x }); c.push({ type: 'dodgeLock', seat }); m.dice.forEach((d, k) => { const all = DODGE_SHAPES[d].flat(); c.push({ type: 'dodgeShot', seat, k, cells: all[Math.floor(Math.random() * all.length)] }); }); }
   if (m?.id === 'balance') { c.push({ type: 'balSay', seat, opts: m.three ? ['산', '바다', '강'] : ['산', '바다'] }); for (let k = 0; k < 3; k++) c.push({ type: 'balPick', seat, k }); }
   return c;
 }

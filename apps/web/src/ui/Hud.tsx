@@ -1,13 +1,12 @@
 /* 화면 위 UI 전체 (테이블 장면 위에 겹친다) */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { type GameState, MAX_SEATS, MG, type MgId, R, U, chairOf, cname, isItem, now } from '@cubic3/engine';
+import { type GameState, MAX_SEATS, MG, type MgId, R, lobbyWaiting, U, chairOf, cname, isItem, now } from '@cubic3/engine';
 import { SEATCOL, mySeats, seatName, whoActs } from '../game';
 import { cmd, exitRoom, getWorld } from '../flow';
 import { useStore, viewSeat } from '../store';
 import { Hand } from './Hand';
 import { MgPanel } from './MgPanel';
 import { MgScreen, SCREEN_MG } from './MgScreen';
-import { DodgeBar } from './MgPanel4';
 import { useArenaOn } from '../arena/on';
 import { Cutin, FxView, HandPeek, ItemCutin, ResultsView, RulesScreen } from './Screens';
 import { type TurnView, turnActs } from './Turn';
@@ -18,11 +17,13 @@ import { MI, SettingsPanel } from './Options';
 /* ---------- 이름표: 아바타 머리 위를 따라다닌다 (대기실에서는 빈 의자 위에 "빈 자리"도) ---------- */
 /** 핑 표시: 방장은 "방장", 소식이 없으면 "끊김?", 아니면 ms(색으로 좋음·보통·나쁨) */
 function Ping({ uid }: { uid: string }) {
-  const pings = useStore(s => s.pings); const room = useStore(s => s.room);
+  const pings = useStore(s => s.pings); const room = useStore(s => s.room); const host = useStore(s => s.S?.host);
   if (!room || !Object.keys(pings).length) return null;
   const ms = pings[uid];
+  // 방장은 테이블 상태의 방장 uid로 가린다(같은 기기 시험에서는 모두 0ms라 핑으로는 못 가린다)
+  const isHost = host ? uid === host : ms === 0;
+  if (isHost) return <span className="ping host" title="방장(판정하는 기기)">방장</span>;
   if (ms == null) return <span className="ping bad" title="방장과 연결이 끊긴 것 같아요">끊김?</span>;
-  if (ms === 0) return <span className="ping host" title="방장(판정하는 기기)">방장</span>;
   return <span className={`ping ${ms < 80 ? 'good' : ms < 200 ? 'mid' : 'bad'}`} title="방장과의 왕복 시간">{ms}ms</span>;
 }
 
@@ -100,6 +101,7 @@ function Lobby({ S, gear }: { S: GameState; gear: React.ReactNode }) {
   const [sure, setSure] = useState(false); const [solo, setSolo] = useState(false);
   const ms = mySeats(S, me); const sitting = ms.length > 0; const n = S.seats.length;
   const host = room?.role === 'host';
+  const rd = S.lobbyReady || {}; const iReady = !!rd[me]; const waiting = lobbyWaiting(S); const uids = [...new Set(S.seats.map(p => p.uid))];
   const exit = () => { if (host && n > ms.length && !sure) { setSure(true); return; } void exitRoom(); };
   return <>
     <div className="topl">
@@ -120,9 +122,15 @@ function Lobby({ S, gear }: { S: GameState; gear: React.ReactNode }) {
       <div className="btnrow">
         {sitting && n < MAX_SEATS && <button className="btn sm" onClick={() => cmd('sit')}>이 기기로 한 자리 더</button>}
         {sitting && ms.length > 1 && <button className="btn sm" onClick={() => cmd('leave', { i: ctl ?? ms[ms.length - 1] })}>이 자리 비우기</button>}
-        <button className="btn primary" disabled={!(n >= 2 && n <= MAX_SEATS && sitting)} onClick={() => cmd('start')}>게임 시작 ({n}명)</button>
-        <button className="btn" disabled={!(n >= 2 && sitting)} aria-expanded={solo} onClick={() => setSolo(v => !v)}>미니게임만 하기</button>
+        {host ? <>
+          <button className="btn primary" disabled={!(n >= 2 && n <= MAX_SEATS && !waiting.length)} onClick={() => cmd('start')}>게임 시작 ({n}명)</button>
+          <button className="btn" disabled={!(n >= 2 && !waiting.length)} aria-expanded={solo} onClick={() => setSolo(v => !v)}>미니게임만 하기</button>
+        </> : sitting && <button className={`btn${iReady ? '' : ' primary'}`} onClick={() => cmd('lready', { on: iReady ? 0 : 1 })}>{iReady ? '준비 취소' : '준비'}</button>}
       </div>
+      {/* 준비 상태: 방장이 아닌 사람이 모두 준비하면 방장이 시작할 수 있다 */}
+      {uids.length > 1 && <div className="readyrow">{uids.map(u => { const k = S.seats.findIndex(p => p.uid === u); const st = u === S.host ? 'host' : rd[u] ? 'on' : 'off';
+        return <span key={u} className={`rchip ${st}`}><i style={{ background: SEATCOL[k % 5] }} />{seatName(S, k)}<b>{st === 'host' ? '방장' : st === 'on' ? '준비' : '대기'}</b></span>; })}</div>}
+      {host ? (waiting.length > 0 && <p className="lobbytip">모두 준비하면 시작할 수 있어요</p>) : sitting && <p className="lobbytip">{iReady ? '방장이 시작하면 시작돼요' : '준비를 누르면 방장이 시작할 수 있어요'}</p>}
       {sitting && n < MAX_SEATS && <p className="lobbytip">빈 의자를 누르면 옮겨 앉아요</p>}
     </div>
     {solo && sitting && <SoloPick n={n} close={() => setSolo(false)} />}
@@ -135,7 +143,30 @@ export function Hud() {
   const rulesShown = useStore(s => s.rulesShown); const clubPlaying = useStore(s => s.clubPlaying); const screenAlert = useStore(s => s.screenAlert);
   const fxShow = useStore(s => s.fxShow); const cutin = useStore(s => s.cutin); const results = useStore(s => s.results); const fps = useStore(s => s.fps);
   const [opts, setOpts] = useState(false);
+  // 게임 중 메뉴(기록·설정): Esc 또는 왼쪽 위 게임 아이콘으로 연다(사용자 2026-10-14). 열린 창이 있으면 Esc는 그것부터 닫는다
+  const [menu, setMenu] = useState(false);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.pointerLockElement) return;
+      const st = useStore.getState(); if (!st.S || st.S.phase === 'lobby') return;
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      e.preventDefault();
+      if (opts) setOpts(false); else if (st.ui.log) cmd('log'); else setMenu(m => !m);
+    };
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
+  }, [opts]);
   const arenaOn = useArenaOn();
+  // 아이템을 쓴 뒤 대상 고르기: 그 카드를 골라 둔 상태로(기존 대상 고르기 화면이 그대로 쓴다)
+  const pend = S?.phase === 'mg' && i != null ? S.mgItems?.[i] ?? null : null;
+  const pendCard = useRef<string | null>(null);
+  useEffect(() => {
+    const st = useStore.getState();
+    // 대상을 고르거나 시간이 지나 끝났으면 골라 둔 카드도 푼다
+    if (!pend) { if (pendCard.current && st.sel.includes(pendCard.current)) st.set({ sel: [] }); pendCard.current = null; return; }
+    pendCard.current = pend.card;
+    if (!(st.sel.length === 1 && st.sel[0] === pend.card)) st.set({ sel: [pend.card], ui: { ...st.ui, bsub: S?.mg?.id === 'balloon' } });
+  }, [pend?.card, pend?.until]);
+  const amHost = useStore(s => s.room?.role === 'host');
   useLayoutEffect(() => refreshTip());
   // 설정은 로비·게임 중 모두 오른쪽 위 톱니로 연다
   const gear = <button className="iconbtn" aria-label="설정" aria-expanded={opts} onClick={() => setOpts(o => !o)}>{MI.gear}</button>;
@@ -143,7 +174,7 @@ export function Hud() {
   // ♠ 방어 남은 시간 표시용
   const [, setTick] = useState(0);
   // (몇 장이었지는 시간이 지나야 답할 수 있어, 아이템 카드 상태도 다시 그린다)
-  const ticking = S?.phase === 'defense' || (S?.phase === 'mg' && S.mg?.id === 'count');
+  const ticking = S?.phase === 'defense' || (S?.phase === 'mg' && (S.mg?.id === 'count' || !!S.mgItems && Object.keys(S.mgItems).length > 0));
   useEffect(() => { if (!ticking) return; const t = setInterval(() => setTick(x => x + 1), 250); return () => clearInterval(t); }, [ticking]);
 
   if (fatal) return <div id="hud"><div id="mainui"><div className="panel lobby"><h1 className="logo3d" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><sup aria-hidden="true">3</sup></h1><p>{fatal}</p></div></div></div>;
@@ -186,11 +217,12 @@ export function Hud() {
   }
   else if (ph === 'mg') {
     // 리더기 화면 미니게임은 테이블 대신 화면 가운데 전체를 쓴다
-    handTuck = !ui.showHand; center = S.mg!.id === 'dodge' ? <DodgeBar S={S} i={i} ui={ui} sel={sel} /> : SCREEN_MG.includes(S.mg!.id) ? <MgScreen S={S} i={i} /> : <MgPanel S={S} i={i} sel={sel} ui={ui} />;
+    handTuck = !ui.showHand; center = arenaOn ? null : SCREEN_MG.includes(S.mg!.id) ? <MgScreen S={S} i={i} /> : <MgPanel S={S} i={i} sel={sel} ui={ui} />;
     // 미니게임 중에도 이번 보상을 볼 수 있게
     if ((S.rewardDisp || []).length) extra = <div className="rewardstrip"><span className="lbl">이번 보상</span><div className="row">{S.rewardDisp!.map(c => <MCard key={c} c={c} />)}</div></div>;
     pill = actor != null && ms.includes(actor) ? '내 차례' : actor != null ? `${nm(actor)} 차례` : MG[S.mg!.id].name; pillWait = !(actor != null && ms.includes(actor));
-    acts = <button className="btn sm" onClick={() => cmd('togglehand')}>{ui.showHand ? '손패 접기' : `손패 ${i != null ? S.seats[i].hand.length : 0}장 · 미니게임 중엔 접혀 있어요`}</button>;
+    if (pend) { pill = `아이템 대상을 고르세요 · ${Math.max(0, Math.ceil((pend.until - now()) / 1000))}초`; pillWait = false; }
+    acts = <button className="btn sm" onClick={() => cmd('togglehand')}>{ui.showHand ? '손패 접기' : arenaOn ? `손패 ${i != null ? S.seats[i].hand.length : 0}장 보기` : `손패 ${i != null ? S.seats[i].hand.length : 0}장 · 미니게임 중엔 접혀 있어요`}</button>;
   } else if (ph === 'reward') {
     const Rw = S.reward!; const who = Rw.order[Rw.pi];
     pill = i === who ? '보상 1장을 고르세요 · 테이블의 카드를 누르세요' : `${nm(who)}이 보상을 고르는 중`; pillWait = i !== who;
@@ -214,32 +246,42 @@ export function Hud() {
       <div className="disp" style={{ fontSize: 18, color: 'var(--brass)' }}>{MG[S.solo].icon} {MG[S.solo].name} 결과</div>
       <div style={{ margin: '10px 0 16px', display: 'grid', gap: 4 }}>{(S.lastRank || []).map((g, k) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '56px 1fr', gap: 8, alignItems: 'center', textAlign: 'left' }}>
         <span className="disp" style={{ fontSize: k ? 20 : 30, color: k ? 'var(--muted)' : 'var(--brass)' }}>{k + 1}위</span><span className="disp" style={{ fontSize: k ? 20 : 30 }}>{names(S, g)}</span></div>)}</div>
-      <div className="btnrow"><button className="btn primary" onClick={() => cmd('restart')}>한 번 더</button><button className="btn" onClick={() => cmd('tolobby')}>다른 미니게임 · 로비로</button></div>
+      {/* 손패 숫자 카드가 이 판의 시드: 같은 손패로 다시 하면 같은 판 */}
+      {S.soloHands && <div className="seedrow"><span className="lbl">이 판의 시드(손패)</span>{S.soloHands.map((h, k) => <span key={k} className="seedp"><i style={{ background: SEATCOL[k % 5] }} />{h.map(cname).join(' ')}</span>)}</div>}
+      <div className="btnrow">{amHost && <><button className="btn primary" onClick={() => cmd('restart')}>같은 판 다시</button><button className="btn" onClick={() => cmd('fresh')}>새 판</button></>}<button className="btn" onClick={() => cmd('tolobby')}>다른 미니게임 · 로비로</button></div>
+      {!amHost && <p className="lobbytip" style={{ marginTop: 8 }}>다시 시작은 방장이 해요</p>}
     </div>;
   } else if (ph === 'ended') {
     center = <div className="panel center-panel" style={{ textAlign: 'center' }}>
       <div className="disp" style={{ fontSize: 20, color: 'var(--brass)' }}>우승</div>
       <div className="disp" style={{ fontSize: 52, margin: '6px 0 16px' }}>{names(S, S.winners || [])}</div>
-      <div className="btnrow"><button className="btn primary" onClick={() => cmd('restart')}>같은 자리로 새 게임</button><button className="btn" onClick={() => cmd('tolobby')}>로비로</button></div>
+      <div className="btnrow">{amHost && <button className="btn primary" onClick={() => cmd('restart')}>같은 자리로 새 게임</button>}<button className="btn" onClick={() => cmd('tolobby')}>로비로</button></div>
+      {!amHost && <p className="lobbytip" style={{ marginTop: 8 }}>새 게임은 방장이 시작해요</p>}
     </div>;
   }
   const showRules = ph === 'clubs' && rulesShown && !clubPlaying;
   const screenOn = showRules || screenAlert;
   return (
-    <div id="hud">
+    <div id="hud" className={arenaOn ? 'arena-on' : undefined}>
       {!arenaOn && <Plates S={S} />}
       <div id="mainui">
         {ph === 'main' && i != null && S.turn!.seat === i && S.turn!.picked && <div className="dz" data-dz="table"><span>테이블에 놓기</span></div>}
-        <div className="topl"><span className="logo" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></span>{S.solo ? <span className="chip">미니게임만 · {MG[S.solo].name}</span> : <><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span></>}<Ping uid={me} />
+        <div className="topl"><button className="logo logobtn" aria-label="메뉴 (Esc)" title="메뉴 (Esc)" aria-expanded={menu} onClick={() => setMenu(m => !m)}><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></button>{S.solo ? <span className="chip meta">미니게임만 · {MG[S.solo].name}</span> : <><span className="chip meta">{S.round}라운드</span><span className="chip meta">{S.ot ? '연장전 · 4색' : '목표 3색'}</span></>}<Ping uid={me} />
           {ms.length > 1 && ms.map(k => <button key={k} className={`chip ${k === i ? 'on' : ''}`} onClick={() => cmd('ctl', { i: k })}>자리 {k + 1}</button>)}</div>
         <div className="topr">
-          <button className="iconbtn" aria-label="기록 보기" onClick={() => cmd('log')}>{ICON.list}</button>
           <button className="iconbtn" aria-label="위에서 보기" onClick={() => cmd('viewtop')}>{ICON.top}</button>
           <button className="iconbtn" aria-label="기본 시점" onClick={() => cmd('viewseat')}>{ICON.eye}</button>
-          {gear}
         </div>
         {optsheet}
-        {(ph !== 'clubs' || S.clubChoose) && <div className="prompt">{pill && <div className={`pill${pillWait ? ' wait' : ''}`}>{pill}</div>}
+        {menu && <div className="escmenu" onClick={() => setMenu(false)}>
+          <div className={`panel escbox${arenaOn ? ' stone' : ''}`} role="dialog" aria-label="메뉴" onClick={e => e.stopPropagation()}>
+            <div className="eh"><strong>메뉴</strong><kbd>Esc</kbd></div>
+            <button className="btn primary" onClick={() => setMenu(false)}>계속하기</button>
+            <button className="btn" onClick={() => { setMenu(false); if (!ui.log) cmd('log'); }}>기록 보기</button>
+            <button className="btn" onClick={() => { setMenu(false); setOpts(true); }}>설정</button>
+          </div>
+        </div>}
+        {(ph !== 'clubs' || S.clubChoose) && !arenaOn && <div className="prompt">{pill && <div className={`pill${pillWait ? ' wait' : ''}`}>{pill}</div>}
           {sub && <div className="subchips">{sub.map(([t, on]) => <span key={t} className={`chip${on ? ' on' : ''}`}>{t}</span>)}</div>}</div>}
         {flash && <div className="notice" role="alert">{flash}</div>}
         {extra}

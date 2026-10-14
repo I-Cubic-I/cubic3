@@ -15,6 +15,7 @@ import type { MgId } from '@cubic3/engine';
 import { bindTips } from './ui/tip';
 import { startBrand } from './ui/brand';
 import { LogoHost } from './ui/CubicLogo';
+import { bindUiScale } from './ui/scale';
 
 const LS = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -39,7 +40,7 @@ export function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [fontsOk, setFontsOk] = useState(false);
   useEffect(() => {
-    bindTips(); startBrand();
+    bindTips(); startBrand(); bindUiScale();
     // 캔버스 글자(카드·디스크)가 대체 글꼴로 그려지지 않게 글꼴을 먼저 받는다
     Promise.race([
       Promise.all(["24px 'Black Han Sans'", "24px 'VT323'", "16px 'IBM Plex Sans KR'"].map(f => document.fonts.load(f))),

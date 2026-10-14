@@ -7,3 +7,4 @@ export * from './minigames2';
 export * from './minigames3';
 export * from './minigames4';
 export * from './actions';
+export * from './mgitems';

@@ -1,10 +1,10 @@
 /* 행동 판정: 플레이어가 보낸 행동이 지금 가능한지 확인하고 상태에 적용한다.
    방장(P2P) 또는 서버가 이 함수 하나로 판정한다. 화면은 같은 함수로 미리 가능 여부를 볼 수 있다. */
-import { R, U, cname, isItem, now } from './cards';
+import { R, U, bindSeed, cname, isItem, now } from './cards';
 import { MG } from './mginfo';
 import {
   canMakeToken, clubChoices, clubPick, defend, discardCard, endTurn, log, makeToken, newLobby, pickDJ, pickup, pickupDiscard,
-  readyUp, resolveAttack, rewardPick, rollBoard, startAttack, startGame, startSolo, stealPick, useClub, useDJ, useHQ,
+  readyUp, resolveAttack, rewardPick, rollBoard, setItemTick, startAttack, startGame, startSolo, stealPick, useClub, useDJ, useHQ,
 } from './core';
 import {
   auctionBid, auctionItem, auctionReady, balloonPlay, bombArm, bombFlip, countAnswer, countArm, countOpenAt, holdRoll, holdStop,
@@ -19,7 +19,8 @@ import {
   gestSkip, gestTurn, gesture, stackReport, stackWide, tenAll, tenGrab, tenPlace, tenTurn,
   foreAct, foreAsk, foreTurn, forkPick, forkRev, liarAdd, liarBid, liarCall, liarTurn,
 } from './minigames3';
-import { dodgeAtk, dodgeBlock, dodgeCanBlock, dodgeCanGo, dodgeGo, dodgeLock, dodgeMove, dodgePeek, dodgeShot, dodgeValid } from './minigames4';
+import { afterItemAction, blockedByPending, checkDeclare, declareItem, timeoutItems } from './mgitems';
+import { dodgeAtk, dodgeBlock, dodgeCanBlock, dodgeCanGo, dodgeLock, dodgeMove, dodgePeek, dodgeShot, dodgeValid } from './minigames4';
 import type { Card, CurlShot, GameState, Hand, MgId, MidCrit, Suit } from './types';
 
 export const MAX_SEATS = 5;
@@ -30,7 +31,10 @@ export type Action =
   | { type: 'move'; seat: number; chair: number }
   | { type: 'leave'; seat: number }
   | { type: 'start' }
-  | { type: 'restart' }
+  /** 미니게임만 하기에서는 같은 손패(시드)로 같은 판을 다시, fresh면 새 손패로 */
+  | { type: 'restart'; fresh?: boolean }
+  /** 대기실 준비 / 준비 취소(방장이 아닌 플레이어) */
+  | { type: 'lobbyReady'; on: boolean }
   /** 미니게임만 하기 */
   | { type: 'startSolo'; id: MgId }
   | { type: 'toLobby' }
@@ -118,11 +122,12 @@ export type Action =
   | { type: 'forkPick'; seat: number; k: number }
   | { type: 'forkRev'; seat: number; item: Card }
   | { type: 'dodgeBlock'; seat: number; item: Card; cell: number }
-  | { type: 'dodgeGo'; seat: number }
   | { type: 'dodgeMove'; seat: number; cell: number }
   | { type: 'dodgeLock'; seat: number }
   | { type: 'dodgeShot'; seat: number; k: number; cells: number[] }
-  | { type: 'dodgePeek'; seat: number; item: Card };
+  | { type: 'dodgePeek'; seat: number; item: Card }
+  /** 미니게임 아이템(대상이 필요한 것): 먼저 쓰고 컷신, 그 뒤 대상을 고른다 */
+  | { type: 'mgItemDeclare'; seat: number; item: Card };
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -131,10 +136,13 @@ const fail = (error: string): Result => ({ ok: false, error });
 
 /** 행동을 판정해 적용한다. 성공하면 상태 버전(v)을 올린다. 실패하면 상태를 바꾸지 않는다. */
 export function applyAction(S: GameState, uid: string, a: Action): Result {
+  bindSeed(S.rng);
   const r = check(S, uid, a);
   if (r) return fail(r);
+  const front0 = S.phase === 'mg' ? S.seats.map(p => p.front.length) : null; const fx0 = S.fxn || 0;
   const out = run(S, uid, a);
   if (out === false) return fail('지금은 할 수 없어요.');
+  afterItemAction(S, front0, fx0);
   S.v = (S.v || 0) + 1;
   return { ok: true };
 }
@@ -152,16 +160,20 @@ function check(S: GameState, uid: string, a: Action): string | null {
   if ('seat' in a && !seatOk(a.seat)) return '내 자리가 아니에요.';
   // 미니게임이 끝나 결과를 보여 주는 중에는 아무것도 받지 않는다
   if (S.mgEnd && !['reset', 'toLobby', 'leave'].includes(a.type)) return '미니게임 결과를 보여 주는 중이에요.';
+  // 아이템 대상을 고르는 동안에는 그 사람의 다른 미니게임 행동을 막는다
+  { const b = blockedByPending(S, a); if (b) return b; }
   // ♠J로 카드를 고르는 동안에는 그것만
   if (S.steal && a.type !== 'stealPick' && !['reset', 'toLobby', 'leave', 'sit'].includes(a.type)) return '♠J로 카드를 고르는 중이에요.';
   switch (a.type) {
     case 'sit': return S.phase !== 'lobby' ? '게임 중이에요.' : S.seats.length >= MAX_SEATS ? '자리가 다 찼어요.' : a.chair != null && !chairFree(S, a.chair) ? '빈 자리가 아니에요.' : null;
     case 'move': return S.phase !== 'lobby' ? '게임 중이에요.' : !chairFree(S, a.chair) ? '빈 자리가 아니에요.' : null;
     case 'leave': return S.phase !== 'lobby' ? '게임 중이에요.' : null;
-    case 'start': return S.phase !== 'lobby' ? '이미 시작했어요.' : S.seats.length < 2 ? '2명 이상 앉아야 해요.' : null;
-    case 'restart': return S.phase !== 'ended' ? '게임이 끝나지 않았어요.' : null;
+    case 'start': return S.phase !== 'lobby' ? '이미 시작했어요.' : S.seats.length < 2 ? '2명 이상 앉아야 해요.' : hostOnly(S, uid) || notReady(S);
+    case 'restart': return S.phase !== 'ended' ? '게임이 끝나지 않았어요.' : hostOnly(S, uid);
+    case 'lobbyReady': return S.phase !== 'lobby' ? '대기실에서만 준비할 수 있어요.' : !S.seats.some(p => p.uid === uid) ? '자리에 앉아야 준비할 수 있어요.' : S.host === uid ? '방장은 준비 없이 시작해요.' : null;
     case 'startSolo': {
       if (S.phase !== 'lobby') return '이미 시작했어요.';
+      const ho = hostOnly(S, uid) || notReady(S); if (ho) return ho;
       const g = MG[a.id]; if (!g) return '없는 미니게임이에요.';
       const n = S.seats.length; const lo = Math.max(2, g.min);
       return n < lo ? `${g.name}은 ${lo}명 이상이어야 해요.` : n > g.max ? `${g.name}은 ${g.max}명까지예요.` : null;
@@ -320,8 +332,8 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'forkRev': return mg.id === 'fork' && (mg.step === 'pick' || mg.step === 'wait') && (a.seat in mg.won) && !mg.rev[a.seat] ? null : '공개 전에 써요.';
     case 'balPick': return mg.id === 'balance' && mg.step === 'pick' && (a.seat in mg.pts) && !(a.seat in mg.picks) && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.opts.length ? null : '지금은 고를 수 없어요.';
     // 2026-10-14 디지털 전용
-    case 'dodgeBlock': return mg.id === 'dodge' && mg.step === 'block' && dodgeAtk(mg) === a.seat ? (dodgeCanBlock(mg, a.cell) ? null : '아무도 없는 칸만 막을 수 있어요.') : '공격자가 고르기 전에 써요.';
-    case 'dodgeGo': return mg.id === 'dodge' && mg.step === 'block' && dodgeAtk(mg) === a.seat ? null : '지금은 할 수 없어요.';
+    case 'mgItemDeclare': return checkDeclare(S, a.seat, a.item);
+    case 'dodgeBlock': return mg.id === 'dodge' && mg.step === 'pick' && !mg.shot && dodgeAtk(mg) === a.seat ? (dodgeCanBlock(mg, a.cell) ? null : '아무도 없는 칸만 막을 수 있어요.') : '공격자가 확정하기 전에 써요.';
     case 'dodgeMove': return mg.id === 'dodge' && mg.step === 'pick' && dodgeAtk(mg) !== a.seat && (a.seat in mg.pos) && !mg.done[a.seat] ? (dodgeCanGo(mg, a.seat, a.cell) ? null : '상하좌우 한 칸 또는 제자리만, 막힌 칸은 못 가요.') : '지금은 움직일 수 없어요.';
     case 'dodgeLock': return mg.id === 'dodge' && mg.step === 'pick' && dodgeAtk(mg) !== a.seat && (a.seat in mg.pos) && !mg.done[a.seat] ? null : '지금은 확정할 수 없어요.';
     case 'dodgeShot': return mg.id === 'dodge' && mg.step === 'pick' && dodgeAtk(mg) === a.seat && !mg.shot && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.dice.length ? (dodgeValid(mg.dice[a.k], a.cells) ? null : '그 눈으로는 놓을 수 없는 모양이에요.') : '지금은 떨어뜨릴 수 없어요.';
@@ -342,12 +354,22 @@ function sortSeats(S: GameState): void {
   S.seats.sort((a, b) => a.chair! - b.chair!);
 }
 
+/** 시작은 방장만(사용자 2026-10-14). 방장 정보가 없으면(시험 등) 누구나 */
+const hostOnly = (S: GameState, uid: string): string | null => (S.host && S.host !== uid ? '방장만 시작할 수 있어요.' : null);
+/** 방장이 아닌, 앉은 플레이어가 모두 준비했는지 */
+export function lobbyWaiting(S: GameState): string[] {
+  if (!S.host) return [];
+  return [...new Set(S.seats.map(p => p.uid))].filter(u => u !== S.host && !(S.lobbyReady || {})[u]);
+}
+const notReady = (S: GameState): string | null => (lobbyWaiting(S).length ? '아직 준비하지 않은 사람이 있어요.' : null);
+
 function resetTo(S: GameState, keepSeats: boolean): void {
   const seats = keepSeats ? S.seats.map((p, k) => ({ uid: p.uid, chair: chairOf(S, k), hand: [], tokens: [], front: [] })) : [];
-  const nm = S.names; const v = S.v;
+  const nm = S.names; const v = S.v; const host = S.host;
+  bindSeed(null);
   for (const k of Object.keys(S)) delete (S as unknown as Record<string, unknown>)[k];
   Object.assign(S, newLobby());
-  S.v = v; S.seats = seats; if (nm) S.names = nm;
+  S.v = v; S.seats = seats; if (nm) S.names = nm; if (host) S.host = host;
 }
 
 function run(S: GameState, uid: string, a: Action): false | void {
@@ -356,11 +378,12 @@ function run(S: GameState, uid: string, a: Action): false | void {
       S.seats.push({ uid, chair: a.chair ?? firstFreeChair(S), hand: [], tokens: [], front: [] }); sortSeats(S);
       if (a.name) { S.names = S.names || {}; S.names[uid] = a.name.slice(0, 20); }
       log(S, '자리에 한 명 앉았다.'); return;
-    case 'leave': S.seats.splice(a.seat, 1); return;
+    case 'leave': { const u = S.seats[a.seat].uid; S.seats.splice(a.seat, 1); if (S.lobbyReady && !S.seats.some(p => p.uid === u)) delete S.lobbyReady[u]; return; }
     case 'move': S.seats[a.seat].chair = a.chair; sortSeats(S); return;
     case 'start': startGame(S); return;
-    case 'restart': if (S.solo) startSolo(S, S.solo); else startGame(S); return;
+    case 'restart': if (S.solo) startSolo(S, S.solo, a.fresh ? null : S.soloHands); else startGame(S); return;
     case 'startSolo': startSolo(S, a.id); return;
+    case 'lobbyReady': (S.lobbyReady ||= {})[uid] = !!a.on; return;
     case 'toLobby': resetTo(S, true); return;
     case 'reset': resetTo(S, false); return;
     case 'roll': rollBoard(S); return;
@@ -463,9 +486,12 @@ function run(S: GameState, uid: string, a: Action): false | void {
     case 'forkPick': return forkPick(S, a.seat, a.k);
     case 'forkRev': return forkRev(S, a.seat, a.item);
     case 'dodgeBlock': return dodgeBlock(S, a.seat, a.item, a.cell);
-    case 'dodgeGo': return dodgeGo(S, a.seat);
+    case 'mgItemDeclare': declareItem(S, a.seat, a.item); return;
     case 'dodgeMove': return dodgeMove(S, a.seat, a.cell);
     case 'dodgeLock': return dodgeLock(S, a.seat);
     case 'dodgeShot': return dodgeShot(S, a.seat, a.k, a.cells);
     case 'dodgePeek': return dodgePeek(S, a.seat, a.item);  }
 }
+
+// 아이템 대상 고르기 시간 초과는 행동 판정을 거쳐 무작위 대상으로
+setItemTick(S => timeoutItems(S, (uid, a) => applyAction(S, uid, a).ok));

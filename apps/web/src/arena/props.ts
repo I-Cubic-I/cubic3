@@ -120,7 +120,7 @@ export function curlHand(h: OldHand, t: number): void { h.joints.forEach((j, k) 
 /* ---------------- 주사위 ---------------- */
 const FACE: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const dieGeo = new RoundedBoxGeometry(1, 1, 1, 4, 0.14);
-const pipGeo = new THREE.SphereGeometry(0.09, 10, 6);
+const pipGeo = new THREE.SphereGeometry(0.105, 12, 8);
 /** 맨 위가 v인 주사위. 쌍(1·6, 2·5, 3·4)을 지킨다 */
 export function buildDie(v: number, col = '#f1e6cf'): THREE.Group {
   const g = new THREE.Group(); g.add(ink(dieGeo, toon(col), 0.04));
@@ -144,17 +144,31 @@ export function setDie(g: THREE.Group, v: number): void {
       const r = Math.floor(idx / 3) - 1, c = (idx % 3) - 1;
       const p = new THREE.Mesh(pipGeo, toon(val === 1 ? '#b0261e' : INK));
       p.position.copy(n).multiplyScalar(0.5).addScaledVector(u, c * 0.27).addScaledVector(w, r * 0.27);
-      p.lookAt(p.position.clone().add(n)); p.scale.set(1, 1, 0.35); pips.add(p);
+      // 다시 굴려 새로 만든 눈도 주사위와 같은 층에(통제실 = 층 1에서 안 보이던 문제)
+      p.lookAt(p.position.clone().add(n)); p.scale.set(1, 1, 0.35); p.layers.mask = g.layers.mask; pips.add(p);
     }
   }
 }
 
 /* ---------------- 화살표(원소 색) ---------------- */
-export function buildArrow(color: string): THREE.Group {
-  const s = new THREE.Shape();
-  s.moveTo(-0.16, 0.9); s.lineTo(0.16, 0.9); s.lineTo(0.16, 0.38); s.lineTo(0.38, 0.38); s.lineTo(0, 0); s.lineTo(-0.38, 0.38); s.lineTo(-0.16, 0.38); s.closePath();
-  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.14, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 2 }); geo.translate(0, 0, -0.07);
-  const g = new THREE.Group(); const m = ink(geo, toon(color, { fresh: true, emissive: color, ei: 0.45 }), 0.05, true); g.add(m); return g;
+/** 이동 화살표(사용자 2026-10-14): 발판과 나란히 눕힌 납작한 화살표, 테두리 없음. 원점에서 -Z 쪽으로 len만큼 */
+export function buildArrow(color: string, len = 1.2): THREE.Group {
+  const s = new THREE.Shape(); const w = 0.12, hw = 0.3, hl = 0.42;
+  s.moveTo(-w, 0); s.lineTo(w, 0); s.lineTo(w, len - hl); s.lineTo(hw, len - hl); s.lineTo(0, len); s.lineTo(-hw, len - hl); s.lineTo(-w, len - hl); s.closePath();
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.06, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02, bevelSegments: 2 });
+  geo.rotateX(-Math.PI / 2);   // (x, y) → (x, 위, -y): 바닥에 눕고 끝이 -Z
+  return xray(geo, color);
+}
+/** 가려진 부분은 반투명하게 비쳐 보이게(마법사 뒤로 가는 화살표도 읽히게) */
+function xray(geo: THREE.BufferGeometry, color: string): THREE.Group {
+  const g = new THREE.Group(); g.add(new THREE.Mesh(geo, toon(color, { fresh: true, emissive: color, ei: 0.55 })));
+  const ghost = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false, depthFunc: THREE.GreaterDepth }));
+  ghost.renderOrder = 5; g.add(ghost); return g;
+}
+/** 제자리 표시: 발판과 나란한 납작한 고리, 테두리 없음 */
+export function buildStay(color: string, r = 0.62): THREE.Group {
+  const geo = new THREE.TorusGeometry(r, 0.06, 8, 48); geo.rotateX(-Math.PI / 2);
+  return xray(geo, color);
 }
 
 /* ---------------- 마법진·포탈·빛 ---------------- */
@@ -256,4 +270,27 @@ export function buildBulb(): THREE.Group {
   // 반짝이는 빗살
   for (let k = 0; k < 6; k++) { const a = k * Math.PI / 5 + Math.PI * 0.0; const r = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.22), glow('#fff3b0', 1)); r.position.set(Math.cos(a) * 0.55, 0.12 + Math.sin(a) * 0.55, 0); r.rotation.z = a - Math.PI / 2; g.add(r); }
   return g;
+}
+
+/* ---------------- 키보드 단축키 표시(키캡) ---------------- */
+const capTex = new Map<string, { t: THREE.Texture; a: number }>();
+/** 선택할 수 있는 물건 옆에 띄우는 작은 키캡. 늘 맨 위에 보인다 */
+export function keyCap(text: string, size = 0.32): THREE.Sprite {
+  let c = capTex.get(text);
+  if (!c) {
+    const h = 64; const cv = document.createElement('canvas'); const g0 = cv.getContext('2d')!; g0.font = "38px 'Black Han Sans', sans-serif";
+    const w = Math.max(h, Math.ceil(g0.measureText(text).width) + 30);
+    const t = canvasTex(w, h, g => {
+      g.fillStyle = '#3a2a1c'; rr(g, 3, 6, w - 6, h - 9, 12); g.fill();
+      g.fillStyle = '#f4ead6'; rr(g, 3, 3, w - 6, h - 12, 12); g.fill();
+      g.strokeStyle = INK; g.lineWidth = 4; rr(g, 3, 3, w - 6, h - 9, 12); g.stroke();
+      g.font = "38px 'Black Han Sans', sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK; g.fillText(text, w / 2, h / 2 - 3);
+    });
+    c = { t, a: w / h }; capTex.set(text, c);
+  }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: c.t, depthTest: false, transparent: true, toneMapped: false }));
+  sp.scale.set(size * c.a, size, 1); sp.renderOrder = 30; sp.visible = false; return sp;
+}
+function rr(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
 }

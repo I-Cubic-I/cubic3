@@ -18,6 +18,25 @@ export const DEF_MS = 6000;
 let RNG: () => number = Math.random;
 /** 시험·재현용: 무작위 함수를 바꾼다 */
 export function setRng(f: () => number): void { RNG = f; }
+/** 판의 시드 무작위(mulberry32). 상태 s를 테이블 상태에 두어 방장이 새로고침해도 같은 흐름이 이어진다 */
+export interface SeedRng { s: number }
+let bound: SeedRng | null = null; let saved: (() => number) | null = null;
+/** 이 판의 시드 무작위로 바꾼다(없으면 원래 무작위로 돌아간다). 엔진 입구(applyAction·advanceTimers)마다 부른다 */
+export function bindSeed(st: SeedRng | null | undefined): void {
+  if (st) {
+    if (bound === st) return;
+    if (!bound) saved = RNG; bound = st;
+    RNG = () => {
+      st.s = (st.s + 0x6d2b79f5) >>> 0; let t = st.s;
+      t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  } else if (bound) { bound = null; RNG = saved || Math.random; saved = null; }
+}
+/** 글자 → 32비트 시드(FNV-1a) */
+export function hashSeed(str: string): number {
+  let h = 0x811c9dc5; for (let k = 0; k < str.length; k++) { h ^= str.charCodeAt(k); h = Math.imul(h, 0x01000193); } return h >>> 0;
+}
 export const rnd = (n: number): number => Math.floor(RNG() * n);
 export const d6 = (): number => 1 + rnd(6);
 export function shuffle<T>(a: T[]): T[] {

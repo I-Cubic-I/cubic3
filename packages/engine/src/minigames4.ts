@@ -1,6 +1,6 @@
 /* 미니게임 4 (2026-10-14 디지털 전용: 주사위 눈 피하기). 순수 함수: 상태를 받아 고친다 */
 import { d6, now, rnd, shuffle } from './cards';
-import { endMinigame, fx, hasItem, log, N, rankBy, useItem } from './core';
+import { endMinigame, fx, log, N, rankBy, useItem } from './core';
 import type { Card, DodgeMg, GameState } from './types';
 
 const mgOf = <T>(S: GameState) => S.mg as unknown as T;
@@ -11,7 +11,11 @@ const nm = (i: number) => `자리 ${i + 1}`;
    3×3 판, 칸 번호 0~8 = 행×3+열(0 왼쪽 위). 공격자는 공개된 주사위 3개 중 하나를 골라 그 눈의 모양을 옮기고 돌려 놓는다.
    1 아무 1칸 · 2 띈 2칸(● · ●) · 3 한 줄 3칸(2·3은 45도씩 돌린다) · 4 2×2 · 5 X자(고정) · 6 두 줄(90도) */
 /** 봉쇄 시간은 아이템 카드를 고르고 칸을 누르는 두 번의 조작이 들어가 다른 아이템 유예(3초)보다 길게. 공격자가 [바로 시작]으로 넘길 수 있다 */
-export const DODGE_PRE = 6000, DODGE_ATK = 30000, DODGE_DEF = 35000, DODGE_SHOW = 3400;
+export const DODGE_ATK = 30000, DODGE_DEF = 35000, DODGE_SHOW = 3400;
+/** 칸 봉쇄를 쓰면 남은 시간을 공격자·수비자 모두 이만큼 늘린다(화면에 따로 알리지 않는다) */
+export const DODGE_ITEM_MS = 10000;
+/** 엿보기를 쓰면 수비자 마감을 이만큼 늘린다(사용자 2026-10-14: 컷신 뒤 5초쯤) */
+export const DODGE_PEEK_MS = 5000;
 /** 눈마다 놓을 수 있는 자리를 회전(방향)별로 묶은 것. 회전 버튼은 이 묶음을 차례로 돈다 */
 const ROWS = [[0, 1, 2], [3, 4, 5], [6, 7, 8]], COLS = [[0, 3, 6], [1, 4, 7], [2, 5, 8]];
 export const DODGE_SHAPES: Record<number, number[][][]> = {
@@ -62,25 +66,19 @@ function dodgeNewAttacker(S: GameState): void {
 }
 function dodgeTurn(S: GameState): void {
   const m = mgOf<DodgeMg>(S); m.turn++; m.shot = null; m.moves = {}; m.done = {}; m.peek = {};
-  // 공격자가 아이템을 가졌고 막을 칸이 있으면, 고르기 전에 봉쇄할 시간을 준다
-  if (hasItem(S, dodgeAtk(m)) && [...Array(9).keys()].some(c => dodgeCanBlock(m, c))) { m.step = 'block'; m.until = now() + DODGE_PRE; }
-  else dodgePickStep(S);
+  dodgePickStep(S);
 }
 function dodgePickStep(S: GameState): void {
   const m = mgOf<DodgeMg>(S); const t = now(); m.step = 'pick'; m.until = t + DODGE_ATK; m.dUntil = t + DODGE_DEF;
 }
-/** 아이템(칸 봉쇄): 공격자가 고르기 전에. 빈 칸 하나를 이 공격자의 차례가 끝날 때까지 막는다 */
+/** 아이템(칸 봉쇄): 공격자가 확정하기 전이면 언제든(사용자 2026-10-14). 빈 칸 하나를 이 공격자의 차례가 끝날 때까지 막는다.
+    쓰는 순간(선언) 남은 시간을 모두 10초 늘리고(mgitems.ts), 그 칸으로 이동을 골라 둔 수비자는(확정했어도) 이동이 취소되어 다시 고른다 */
 export function dodgeBlock(S: GameState, i: number, item: Card, c: number): false | undefined {
-  const m = mgOf<DodgeMg>(S); if (m.step !== 'block' || dodgeAtk(m) !== i || !dodgeCanBlock(m, c)) return false;
+  const m = mgOf<DodgeMg>(S); if (m.step !== 'pick' || m.shot || dodgeAtk(m) !== i || !dodgeCanBlock(m, c)) return false;
   if (!useItem(S, i, item)) return false;
   m.blocked.push(c); log(S, `주사위 눈 피하기: ${nm(i)} 아이템 → ${c + 1}번 칸 봉쇄`); fx(S, { t: 'banner', text: '칸 봉쇄!', seats: [i], tone: 'bad' });
-  // 더 막을 아이템이나 칸이 없으면 바로 고르기로
-  if (!hasItem(S, i) || ![...Array(9).keys()].some(x => dodgeCanBlock(m, x))) dodgePickStep(S);
-}
-/** 봉쇄를 마치고 바로 고르기로 */
-export function dodgeGo(S: GameState, i: number): false | undefined {
-  const m = mgOf<DodgeMg>(S); if (m.step !== 'block' || dodgeAtk(m) !== i) return false;
-  dodgePickStep(S);
+  for (const j of dodgeDefs(m)) if (m.moves[j] === c) { delete m.moves[j]; delete m.done[j]; }
+  // (남은 시간 +10초는 아이템을 쓰는 순간에: mgitems.ts)
 }
 /** 수비자: 갈 칸을 고른다(확정 전에는 바꿀 수 있다. 수비자끼리 보인다) */
 export function dodgeMove(S: GameState, i: number, c: number): false | undefined {
@@ -103,7 +101,7 @@ export function dodgeShot(S: GameState, i: number, k: number, cells: number[]): 
 export function dodgePeek(S: GameState, i: number, item: Card): false | undefined {
   const m = mgOf<DodgeMg>(S); if (m.step !== 'pick' || !m.shot || dodgeAtk(m) === i || !(i in m.pos) || m.done[i] || m.peek[i]) return false;
   if (!useItem(S, i, item)) return false;
-  m.peek[i] = true; log(S, `주사위 눈 피하기: ${nm(i)} 아이템 → 엿보기`); fx(S, { t: 'banner', text: '엿보기!', seats: [i] });
+  m.peek[i] = true; m.dUntil += DODGE_PEEK_MS; log(S, `주사위 눈 피하기: ${nm(i)} 아이템 → 엿보기`); fx(S, { t: 'banner', text: '엿보기!', seats: [i] });
 }
 function dodgeCheck(S: GameState): void {
   const m = mgOf<DodgeMg>(S); if (m.shot && dodgeDefs(m).every(j => m.done[j])) dodgeResolve(S);
@@ -139,7 +137,6 @@ function dodgeAfterShow(S: GameState): void {
 /** 방장 시계로 넘기는 단계들 (core.ts advanceTimers에서 부른다) */
 export function advanceMg4(S: GameState, t: number): boolean {
   const m = S.mg; if (S.phase !== 'mg' || !m || m.id !== 'dodge') return false;
-  if (m.step === 'block' && t >= m.until) { dodgePickStep(S); return true; }
   if (m.step === 'pick') {
     if (!m.shot && t >= m.until) { dodgeAutoShot(S); dodgeCheck(S); return true; }
     if (m.shot && t >= m.dUntil) { dodgeResolve(S); return true; }
