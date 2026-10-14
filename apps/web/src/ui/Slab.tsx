@@ -8,8 +8,8 @@ import { cmd } from '../flow';
 import { useStore } from '../store';
 import { slabH, uiScale } from './scale';
 
-/** 점수판 상태: 공격자 · 생각 중 · 준비 완료 · 없음 */
-export type SlabStatus = 'atk' | 'think' | 'ready' | null;
+/** 점수판 상태: 공격자 · 공격자(준비 완료) · 생각 중 · 준비 완료 · 없음 */
+export type SlabStatus = 'atk' | 'atkReady' | 'think' | 'ready' | null;
 /** 석판에 새길 내용(글자·버튼·점수표). 미니게임마다 만든다 */
 export interface MgBoard {
   /** 왼쪽 위: 게임 이름만 */
@@ -59,42 +59,32 @@ export function Scoreboard({ b }: { b: MgBoard }) {
   </aside>;
 }
 
-/* 점수판 상태 아이콘: 글자·특수문자 대신 직접 그린 그림(사용자 2026-10-14). 시안 A·B 비교 중(주소에 icons=b면 B안) */
+/* 점수판 상태 아이콘: 글자·특수문자 대신 직접 그린 그림(사용자 2026-10-14: 칼·체크는 A안, 생각 중은 모래시계) */
 const INKC = '#140e0a', PAPER = '#fbf7ee', GOLD = '#e0a83e', GREEN = '#5c9e5a';
-const ICON_A: Record<'atk' | 'think' | 'ready', React.ReactNode> = {
-  // 칼: 날 · 금빛 가드 · 갈색 손잡이 · 금빛 폼멜
-  atk: <g stroke={INKC} strokeWidth="1.5" strokeLinejoin="round">
-    <path d="M19.6 2.6 21.4 4.4 10.4 15.4 8.6 13.6Z" fill="#eef1f4" /><path d="M19.6 2.6 21.4 4.4 15 10.8Z" fill="#c9d1da" stroke="none" />
-    <path d="M5.6 12.4 11.6 18.4 10.4 19.6 4.4 13.6Z" fill={GOLD} /><path d="M8 17 5.4 19.6" stroke="#6b4423" strokeWidth="2.6" strokeLinecap="round" />
-    <circle cx="4.3" cy="20.7" r="1.7" fill={GOLD} /></g>,
-  // 생각 말풍선 + 점 세 개
-  think: <g className="think"><g stroke={INKC} strokeWidth="1.5">
-    <path d="M6 15.5c-2.6 0-4-1.7-4-3.6 0-1.8 1.4-3.2 3.1-3.4C5.6 6 7.6 4.5 9.9 4.8c1.1-1.3 3.4-1.8 5.1-.7 1-.6 2.6-.5 3.6.4 2 .2 3.4 1.9 3.3 3.8 1 .8 1.3 2.4.6 3.6-.6 1.4-2 2.1-3.4 1.9-.9 1.4-2.8 2-4.4 1.4-1.2 1-3.3 1-4.6.1-.9.3-2.5.4-4.1.2Z" fill={PAPER} />
-    <circle cx="4.6" cy="18.6" r="1.5" fill={PAPER} /><circle cx="2.4" cy="21.6" r="0.9" fill={PAPER} /></g>
-    <g className="dots"><circle cx="8.7" cy="10.2" r="1.2" fill={INKC} /><circle cx="12.3" cy="10.2" r="1.2" fill={INKC} /><circle cx="15.9" cy="10.2" r="1.2" fill={INKC} /></g></g>,
-  // 초록 동그라미 체크
-  ready: <g><circle cx="12" cy="12" r="9.6" fill={GREEN} stroke={INKC} strokeWidth="1.6" />
-    <path d="M7.2 12.4 10.6 15.8 17 8.8" fill="none" stroke={PAPER} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></g>,
-};
-const ICON_B: Record<'atk' | 'think' | 'ready', React.ReactNode> = {
-  // 별 지팡이
-  atk: <g stroke={INKC} strokeWidth="1.5" strokeLinejoin="round">
-    <path d="M4 20 15.2 8.8" strokeWidth="3.6" strokeLinecap="round" /><path d="M4 20 15.2 8.8" stroke="#8a5a32" strokeWidth="1.8" strokeLinecap="round" />
-    <path d="M18 2.4 19.2 5.6 22.4 6 19.8 8 20.6 11.2 18 9.4 15.2 11.2 16 8 13.6 6 16.8 5.6Z" fill="#f2c84b" /></g>,
-  // 모래시계
-  think: <g className="think" stroke={INKC} strokeWidth="1.5" strokeLinejoin="round">
+// 칼: 날 · 금빛 가드 · 갈색 손잡이 · 금빛 폼멜
+const SWORD = <g stroke={INKC} strokeWidth="1.5" strokeLinejoin="round">
+  <path d="M19.6 2.6 21.4 4.4 10.4 15.4 8.6 13.6Z" fill="#eef1f4" /><path d="M19.6 2.6 21.4 4.4 15 10.8Z" fill="#c9d1da" stroke="none" />
+  <path d="M5.6 12.4 11.6 18.4 10.4 19.6 4.4 13.6Z" fill={GOLD} /><path d="M8 17 5.4 19.6" stroke="#6b4423" strokeWidth="2.6" strokeLinecap="round" />
+  <circle cx="4.3" cy="20.7" r="1.7" fill={GOLD} /></g>;
+// 초록 동그라미 체크(크기·위치를 바꿔 칼 위 작은 표시로도 쓴다)
+const check = (cx: number, cy: number, r: number) => <g>
+  <circle cx={cx} cy={cy} r={r} fill={GREEN} stroke={INKC} strokeWidth={1.6 * Math.min(1, r / 9.6 + 0.3)} />
+  <path d={`M${cx - r * 0.5} ${cy + r * 0.04}l${r * 0.35} ${r * 0.35}L${cx + r * 0.52} ${cy - r * 0.33}`} fill="none" stroke={PAPER} strokeWidth={2.6 * r / 9.6 + 0.4} strokeLinecap="round" strokeLinejoin="round" /></g>;
+const ICONS: Record<NonNullable<SlabStatus>, React.ReactNode> = {
+  atk: SWORD,
+  // 공격자도 준비를 마치면: 칼은 그대로, 오른쪽 아래에 작은 체크
+  atkReady: <g>{SWORD}{check(17.6, 17.6, 5.6)}</g>,
+  // 모래시계(모래가 내려가며 가끔 뒤집힌다)
+  think: <g className="hg" stroke={INKC} strokeWidth="1.5" strokeLinejoin="round">
     <path d="M6 2.8h12M6 21.2h12" strokeWidth="2" strokeLinecap="round" />
     <path d="M7 3c0 4.4 3.4 6.2 3.4 9S7 16.6 7 21h10c0-4.4-3.4-6.2-3.4-9S17 7.4 17 3Z" fill={PAPER} />
     <path d="M9.4 19.6c.6-1.7 1.7-2.7 2.6-3 .9.3 2 1.3 2.6 3Z" fill="#d8b06a" stroke="none" /><path d="M9.6 6.2h4.8c-.6 1.3-1.5 2-2.4 2.6-.9-.6-1.8-1.3-2.4-2.6Z" fill="#d8b06a" stroke="none" /></g>,
-  // 초록 방패 체크
-  ready: <g><path d="M12 2.4 20 5.4V11.6c0 4.8-3.4 8.4-8 10-4.6-1.6-8-5.2-8-10V5.4Z" fill={GREEN} stroke={INKC} strokeWidth="1.6" strokeLinejoin="round" />
-    <path d="M8 12 11 15 16.4 9.2" fill="none" stroke={PAPER} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></g>,
+  ready: check(12, 12, 9.6),
 };
-const ICONS = typeof location !== 'undefined' && new URLSearchParams(location.search).get('icons') === 'b' ? ICON_B : ICON_A;
 /** 점수판 상태 아이콘: 공격자 · 생각 중 · 준비 완료. 글자 대신 아이콘으로 점수판 폭을 줄인다 */
 export function StatusIcon({ st }: { st: SlabStatus }) {
-  const label = st === 'atk' ? '공격자' : st === 'ready' ? '준비 완료' : st === 'think' ? '생각 중' : '';
-  return <span className={`st${st === 'ready' ? ' ok' : ''}`} title={label || undefined} aria-label={label || undefined}>
+  const label = st === 'atk' ? '공격자' : st === 'atkReady' ? '공격자 · 준비 완료' : st === 'ready' ? '준비 완료' : st === 'think' ? '생각 중' : '';
+  return <span className={`st${st === 'ready' || st === 'atkReady' ? ' ok' : ''}`} title={label || undefined} aria-label={label || undefined}>
     {st && <svg width="1.3em" height="1.3em" viewBox="0 0 24 24" aria-hidden="true">{ICONS[st]}</svg>}</span>;
 }
 

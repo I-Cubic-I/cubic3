@@ -192,7 +192,7 @@ export function dodgeBoard(S: GameState, i: number | null, ui: UiMode, sel: Card
   return {
     title: '주사위 눈 피하기', sub: `${m.turn}/${m.turns}턴 · 공격자 ${m.ai + 1}/${m.ord.length}`, lines, timer: showT ? left : null, buttons,
     rows: m.ord.map(k => ({ k, name: nm(k), pts: m.pts[k], atk: k === atk, me: k === i, top: m.pts[k] === best && best > 0,
-      st: k === atk ? 'atk' : m.step === 'pick' && m.done[k] ? 'ready' : m.step === 'pick' ? 'think' : null })),
+      st: k === atk ? (m.step === 'pick' && m.shot ? 'atkReady' : 'atk') : m.step === 'pick' && m.done[k] ? 'ready' : m.step === 'pick' ? 'think' : null })),
     reward: (S.rewardDisp || []).slice(),
   };
 }
