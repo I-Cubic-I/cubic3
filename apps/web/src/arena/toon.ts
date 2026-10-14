@@ -31,11 +31,15 @@ export const INK_U = { res: { value: new THREE.Vector2(1280, 720) }, px: { value
 function inkMat(w: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { w: { value: w / 0.04 }, col: { value: new THREE.Color(INK) }, res: INK_U.res, px: INK_U.px },
+    clipping: true,
     vertexShader: `uniform float w; uniform vec2 res; uniform float px;
+      #include <clipping_planes_pars_vertex>
       float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
       void main(){
         float j = 0.65 + 0.7 * h(floor(position * 5.0));
-        vec4 c = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        #include <clipping_planes_vertex>
+        vec4 c = projectionMatrix * mvPosition;
         vec2 n = (projectionMatrix * vec4(normalize(normalMatrix * normal), 0.0)).xy;
         float l = length(n);
         if (l > 1e-4) c.xy += n / l * (px * w * j * 2.0 / res) * c.w;
@@ -43,7 +47,12 @@ function inkMat(w: number): THREE.ShaderMaterial {
         c.z += 0.0004 * c.w;
         gl_Position = c;
       }`,
-    fragmentShader: `uniform vec3 col; void main(){ gl_FragColor = vec4(col, 1.0); }`,
+    fragmentShader: `uniform vec3 col;
+      #include <clipping_planes_pars_fragment>
+      void main(){
+        #include <clipping_planes_fragment>
+        gl_FragColor = vec4(col, 1.0);
+      }`,
     side: THREE.BackSide,
   });
 }
@@ -67,6 +76,19 @@ export function ink(geo: THREE.BufferGeometry, mat: THREE.Material, w = 0.05, on
     const o = new THREE.Mesh(hullGeo(geo), im); o.name = 'ink'; if (onTop) o.renderOrder = 20; m.add(o);
   }
   return m;
+}
+/** 자르기 평면 걸기·풀기: 재료는 함께 쓰는 것이라 그 물체만 복제해 건다(풀면 원래 재료로) */
+export function clipObj(o: THREE.Object3D, planes: THREE.Plane[] | null): void {
+  o.traverse(c => {
+    const m = c as THREE.Mesh; if (!m.isMesh) return;
+    if (planes) {
+      if (m.userData.mat0) return;
+      const src = m.material as THREE.Material; const cl = src.clone(); m.userData.mat0 = src;
+      // 잉크 재료의 화면 해상도·굵기는 모두가 같은 값을 보게
+      const sm = cl as THREE.ShaderMaterial; if (sm.uniforms?.res) { sm.uniforms.res = INK_U.res; sm.uniforms.px = INK_U.px; }
+      cl.clippingPlanes = planes; m.material = cl;
+    } else if (m.userData.mat0) { (m.material as THREE.Material).dispose(); m.material = m.userData.mat0; delete m.userData.mat0; }
+  });
 }
 /** 테두리 굵기를 나중에 바꾸거나 숨기기 */
 export function setInk(o: THREE.Object3D, on: boolean): void { o.traverse(c => { if (c.name === 'ink') c.visible = on; }); }

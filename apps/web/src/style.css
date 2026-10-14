@@ -103,44 +103,46 @@ button:disabled{cursor:default;opacity:.45}
 .screen .crt{position:absolute;inset:10px;border-radius:28px;background:radial-gradient(ellipse at 50% 40%,#213f60,var(--scr) 80%);overflow:hidden;color:#eaf6ff}
 .screen .crt::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.03) 0 2px,transparent 2px 5px);pointer-events:none}
 .screen .crt::after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 120px rgba(0,0,0,.65);pointer-events:none}
-.scr-top{position:absolute;left:40px;right:40px;top:28px;display:flex;justify-content:space-between;align-items:center;gap:12px}
-.scr-top .mono{font-size:30px;letter-spacing:4px;color:var(--cyan);text-shadow:0 0 10px rgba(127,227,255,.8)}
-.scr-chip{padding:6px 14px;border-radius:999px;border:1px solid rgba(127,227,255,.35);font-size:14px;color:var(--cyan-dim)}
-.scr-body{position:absolute;left:40px;right:40px;top:96px;bottom:236px;display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:28px}
-.scr-art{border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#1e2b4a;box-shadow:0 0 0 3px rgba(127,227,255,.25),0 30px 60px rgba(0,0,0,.45);padding:20px;min-height:0}
-.scr-art .glyph{font-size:110px;line-height:1}
-.scr-art .ttl{font-family:'Black Han Sans',sans-serif;font-size:60px;line-height:1.05;text-align:center}
-.scr-art .tags{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-.scr-art .tags span{padding:6px 14px;border-radius:999px;background:rgba(30,43,74,.12);font-size:15px;font-weight:700}
+.scr-top{position:absolute;left:calc(40px*var(--kr));right:calc(40px*var(--kr));top:calc(28px*var(--kr));display:flex;justify-content:space-between;align-items:center;gap:calc(12px*var(--kr))}
+.scr-top .mono{font-size:calc(30px*var(--kr));letter-spacing:calc(4px*var(--kr));color:var(--cyan);text-shadow:0 0 calc(10px*var(--kr)) rgba(127,227,255,.8)}
+.scr-chip{padding:calc(6px*var(--kr)) calc(14px*var(--kr));border-radius:999px;border:1px solid rgba(127,227,255,.35);font-size:calc(14px*var(--kr));color:var(--cyan-dim)}
+.scr-body{position:absolute;left:calc(40px*var(--kr));right:calc(40px*var(--kr));top:calc(96px*var(--kr));bottom:calc(236px*var(--kr));display:grid;grid-template-columns:minmax(0,calc(420px*var(--kr))) minmax(0,1fr);gap:calc(28px*var(--kr))}
+.scr-art{border-radius:calc(26px*var(--kr));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(14px*var(--kr));color:#1e2b4a;box-shadow:0 0 0 3px rgba(127,227,255,.25),0 calc(30px*var(--kr)) calc(60px*var(--kr)) rgba(0,0,0,.45);padding:calc(20px*var(--kr));min-height:0}
+.scr-art .glyph{font-size:calc(110px*var(--kr));line-height:1}
+.scr-art .ttl{font-family:'Black Han Sans',sans-serif;font-size:calc(60px*var(--kr));line-height:1.05;text-align:center}
+.scr-art .tags{display:flex;gap:calc(8px*var(--kr));flex-wrap:wrap;justify-content:center}
+.scr-art .tags span{padding:calc(6px*var(--kr)) calc(14px*var(--kr));border-radius:999px;background:rgba(30,43,74,.12);font-size:calc(15px*var(--kr));font-weight:700}
 /* 규칙: 한 장의 카드 안에 항목을 구분선으로 나눠 담는다 */
-.scr-rules{display:flex;flex-direction:column;align-self:start;max-height:100%;overflow:auto;min-height:0;padding:6px 22px;border-radius:18px;background:rgba(8,16,28,.55);border:1px solid rgba(127,227,255,.18)}
-.rrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:18px;align-items:start;padding:16px 0}
+.scr-rules{display:flex;flex-direction:column;align-self:start;max-height:100%;overflow:auto;min-height:0;padding:calc(6px*var(--kr)) calc(22px*var(--kr));border-radius:calc(18px*var(--kr));background:rgba(8,16,28,.55);border:1px solid rgba(127,227,255,.18)}
+.rrow{display:grid;grid-template-columns:calc(96px*var(--kr)) minmax(0,1fr);gap:calc(18px*var(--kr));align-items:start;padding:calc(16px*var(--kr)) 0}
 .rrow+.rrow{border-top:1px solid rgba(127,227,255,.14)}
-.rrow b{padding:5px 0;border-radius:10px;text-align:center;font-family:'Black Han Sans',sans-serif;font-size:20px;font-weight:400;background:var(--cyan);color:var(--scr)}
+.rrow b{padding:calc(5px*var(--kr)) 0;border-radius:calc(10px*var(--kr));text-align:center;font-family:'Black Han Sans',sans-serif;font-size:calc(20px*var(--kr));font-weight:400;background:var(--cyan);color:var(--scr)}
 .rrow.it b{background:var(--brass);color:var(--brass-ink)}
-.rrow span{font-size:19px;line-height:1.55}
-.scr-foot{position:absolute;left:40px;right:40px;bottom:60px;height:156px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,460px);gap:16px}
-.scr-box{border-radius:18px;background:rgba(8,16,28,.6);border:1px solid rgba(127,227,255,.18);padding:12px 16px;display:flex;flex-direction:column;justify-content:center;gap:10px;min-width:0}
-.scr-box .lbl{font-size:13px;letter-spacing:1px;color:var(--cyan)}
-.readys{display:flex;flex-wrap:wrap;gap:8px}
-.ready{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 7px;border-radius:999px;background:rgba(255,255,255,.08);font-size:14px;font-weight:700;color:var(--cyan-dim)}
+.rrow span{font-size:calc(19px*var(--kr));line-height:1.55}
+.scr-foot{position:absolute;left:calc(40px*var(--kr));right:calc(40px*var(--kr));bottom:calc(60px*var(--kr));height:calc(156px*var(--kr));display:grid;grid-template-columns:minmax(0,1fr) minmax(0,calc(460px*var(--kr)));gap:calc(16px*var(--kr))}
+.scr-box{border-radius:calc(18px*var(--kr));background:rgba(8,16,28,.6);border:1px solid rgba(127,227,255,.18);padding:calc(12px*var(--kr)) calc(16px*var(--kr));display:flex;flex-direction:column;justify-content:center;gap:calc(10px*var(--kr));min-width:0}
+.scr-box .lbl{font-size:calc(13px*var(--kr));letter-spacing:1px;color:var(--cyan)}
+.readys{display:flex;flex-wrap:wrap;gap:calc(8px*var(--kr))}
+.ready{display:flex;align-items:center;gap:calc(8px*var(--kr));padding:calc(6px*var(--kr)) calc(12px*var(--kr)) calc(6px*var(--kr)) calc(7px*var(--kr));border-radius:999px;background:rgba(255,255,255,.08);font-size:calc(14px*var(--kr));font-weight:700;color:var(--cyan-dim)}
 /* 준비하면 색 동그라미 안에 체크(칩 크기는 그대로) */
-.ready i{display:flex;align-items:center;justify-content:center;flex:none;color:#fff;font-style:normal;font-size:13px;font-weight:700;line-height:1}
+.ready i{display:flex;align-items:center;justify-content:center;flex:none;color:#fff;font-style:normal;font-size:calc(13px*var(--kr));font-weight:700;line-height:1}
 .ready.ok i{box-shadow:0 0 0 2px #5bd47a}
-.ready i{width:18px;height:18px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.6)}
-.clubbox{border-color:rgba(232,184,74,.5);flex-direction:row;align-items:center;gap:12px}
+/* 준비하면 닉네임 카드 전체가 초록색(사용자 2026-10-14) */
+.ready.ok{background:#3f9d5a;color:#f1fff4;box-shadow:0 0 0 1.5px #7be09a,0 0 calc(12px*var(--kr)) rgba(91,212,122,.45)}
+.ready i{width:calc(18px*var(--kr));height:calc(18px*var(--kr));border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.6)}
+.clubbox{border-color:rgba(232,184,74,.5);flex-direction:row;align-items:center;gap:calc(12px*var(--kr))}
 .clubbox .mcard{flex:none}
-.clubbox .txt{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--cyan-dim);line-height:1.45}
-.clubbox .txt strong{font-size:15px;color:#ffe2a0}
-.clubbtns{display:flex;flex-wrap:wrap;gap:6px}
-.scr-topr{display:flex;align-items:center;gap:16px;min-width:0}
-.rewardrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.rewardrow .lbl{font-size:13px;letter-spacing:1px;color:var(--cyan);margin-right:4px}
-.rewardrow .mcard{width:34px;height:48px;font-size:14px;border-radius:6px}
-.rewardrow .mcard small{font-size:11px}
-.readybox{gap:8px}
-.readybox .readybtn{flex:none;min-height:52px}
-.readybtn{flex:1;min-height:56px;border-radius:16px;border:0;background:var(--brass);color:var(--brass-ink);font-size:20px;font-weight:700;box-shadow:0 0 24px rgba(232,184,74,.45)}
+.clubbox .txt{display:flex;flex-direction:column;gap:calc(6px*var(--kr));font-size:calc(13px*var(--kr));color:var(--cyan-dim);line-height:1.45}
+.clubbox .txt strong{font-size:calc(15px*var(--kr));color:#ffe2a0}
+.clubbtns{display:flex;flex-wrap:wrap;gap:calc(6px*var(--kr))}
+.scr-topr{display:flex;align-items:center;gap:calc(16px*var(--kr));min-width:0}
+.rewardrow{display:flex;gap:calc(6px*var(--kr));align-items:center;flex-wrap:wrap}
+.rewardrow .lbl{font-size:calc(13px*var(--kr));letter-spacing:1px;color:var(--cyan);margin-right:calc(4px*var(--kr))}
+.rewardrow .mcard{width:calc(34px*var(--kr));height:calc(48px*var(--kr));font-size:calc(14px*var(--kr));border-radius:calc(6px*var(--kr))}
+.rewardrow .mcard small{font-size:calc(11px*var(--kr))}
+.readybox{gap:calc(8px*var(--kr))}
+.readybox .readybtn{flex:none;min-height:calc(52px*var(--kr))}
+.readybtn{flex:1;min-height:calc(56px*var(--kr));border-radius:calc(16px*var(--kr));border:0;background:var(--brass);color:var(--brass-ink);font-size:calc(20px*var(--kr));font-weight:700;box-shadow:0 0 calc(24px*var(--kr)) rgba(232,184,74,.45)}
 /* ♣: the monitor reacts — red rounded frame, floppy with X */
 .screen .alert{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 42%,#1d3550,var(--scr) 78%)}
 .screen.alerting .alert{display:flex}
@@ -233,11 +235,11 @@ button:disabled{cursor:default;opacity:.45}
   .prompt{top:62px}
   .acts{bottom:150px;right:12px}
   .tray{display:none}
-  .scr-body{grid-template-columns:1fr;top:80px;bottom:300px}
+  .scr-body{grid-template-columns:1fr;top:calc(80px*var(--kr));bottom:calc(300px*var(--kr))}
   .scr-art{display:none}
-  .scr-foot{grid-template-columns:1fr;height:auto;bottom:50px}
+  .scr-foot{grid-template-columns:1fr;height:auto;bottom:calc(50px*var(--kr))}
   .scr-topr .scr-chip{display:none}
-  .rrow{grid-template-columns:70px minmax(0,1fr);padding:10px 0}.rrow span{font-size:15px}
+  .rrow{grid-template-columns:calc(70px*var(--kr)) minmax(0,1fr);padding:calc(10px*var(--kr)) 0}.rrow span{font-size:calc(15px*var(--kr))}
 }
 
 /* FPS 시점 */
@@ -710,8 +712,8 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .rchip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--glass);border:1px solid var(--line);font-size:13px}
 .rchip i{width:9px;height:9px;border-radius:50%}
 .rchip b{font-size:11px;font-weight:700;color:var(--dim)}
-.rchip.on{border-color:rgba(120,200,120,.7)}
-.rchip.on b{color:#8fd88f}
+.rchip.on{background:#3f9d5a;border-color:#7be09a;color:#f1fff4}
+.rchip.on b{color:#e6ffe9}
 .rchip.host b{color:var(--brass)}
 
 #hud.arena-on .acts{bottom:16px}

@@ -8,7 +8,7 @@ import { useStore } from '../store';
 import { preview } from '../ui/MgPanel4';
 import { type OldHand, type Wizard, buildArrow, buildBulb, buildStay, buildCloud, buildDie, buildHand, buildHead, buildWizard, curlHand, glowDisc, keyCap, lightColumn, magicCircle, magicTex, portalDisc, setDie, softTex } from './props';
 import { type Pillar, T, TOP, buildTower, cellPos } from './tower';
-import { INK, INK_U, backOut, canvasTex, clamp01, ease, glow, ink, toon, wobbleLine } from './toon';
+import { INK, INK_U, backOut, canvasTex, clamp01, clipObj, ease, glow, ink, toon, wobbleLine } from './toon';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import { slabH, uiScale } from '../ui/scale';
 import { noKeys } from '../ui/device';
@@ -21,6 +21,10 @@ const DESK_Y = -0.64, DESK_S = 0.4, HAND = 1.05;
 const DIE_TILT = 0.75;
 /** 탑 뒤 하늘의 주사위 별자리 자리 */
 const PEEK_RED = new THREE.Color('#ff5a46');
+/** 주사위 다시 만들기 시간표(초, 사용자 2026-10-14): 공중에 마법진 → 그 평면에서 잘린 주사위가 솟아남 → 잠깐 뜸 → 굴러 제자리로 → 마법진 사라짐 */
+const REGEN = { ring: 0.35, rise: 1.15, hover: 1.35, land: 2.05, end: 2.5 };
+/** 마법진 높이(책상 기준, 쟁반 칸 위) */
+const REGEN_Y = 0.85;
 /** 엿보기 연출 시각(컷신이 끝난 뒤부터, 초): 전구가 뜨고 → star부터 별자리 강조 → bulbOut에 전구가 사라진다 */
 const PEEK_T = { star: 0.7, starDur: 0.6, bulbOut: 1.7 };
 const STAR_Y = 4.4, STAR_Z = -5.4, STAR_S = 1.7, STAR_GAP = 3.3;
@@ -88,12 +92,15 @@ export class DodgeArena {
   private aspect = 0; private t = 0;
   /** 화면 비율에 맞춘 책상 크기·높이 */
   private deskS = DESK_S; private deskY = DESK_Y;
+  private regenPlane = [0, 1, 2].map(() => new THREE.Plane());
   private shotSeen = { key: '', at: 0, k: -1, from: new THREE.Vector3() }; private regenAll = -1; private deskAi = -1;
   /** 키보드 단축키 키캡: 주사위 1·2·3, 방향판 R(이동 방향·확정에는 표시하지 않는다, 사용자 2026-10-14) */
   private caps = { dice: [] as THREE.Sprite[], rot: keyCap('R') };
 
   constructor(private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private dom: HTMLCanvasElement, private gl: THREE.WebGLRenderer) {
     scene.add(this.tower.root);
+    // 주사위가 마법진 평면에서 잘려 솟아나는 연출에 쓰는 자르기 평면
+    gl.localClippingEnabled = true;
     // 빛은 탑(층 0)과 통제실(층 1) 모두에
     const hemi = new THREE.HemisphereLight('#8f8fc8', '#3a2820', 0.7); hemi.layers.enableAll(); scene.add(hemi);
     const sun = new THREE.DirectionalLight('#ffd2a0', 1.7); sun.position.set(-8, 14, 9); sun.layers.enableAll(); scene.add(sun);
@@ -187,7 +194,7 @@ export class DodgeArena {
     const cloud = buildCloud(0.3); cloud.position.set(0.42, 0.3, 0.1); pr.add(cloud);
     const pdie = buildDie(1); pdie.scale.setScalar(0.12); pdie.rotation.set(0.5, 0.6, 0); pdie.position.set(0, 0.0, 0.12); cloud.add(pdie);
     const dragDie = buildDie(1); dragDie.scale.setScalar(0.3 * DESK_S); dragDie.visible = false; root.add(dragDie);
-    const regenRings = diceHome.map(() => { const r = magicCircle('#b9a6ff', 0.95); r.visible = false; desk.add(r); return r; });
+    const regenRings = diceHome.map(() => { const r = magicCircle('#b9a6ff', 0.72); r.visible = false; desk.add(r); return r; });
     return { root, desk, frame, dice, diceHome, socket, grids, crystal, crystalGlow, lever, left, right, candle, peek: { root: pr, portal, holder, cloud, die: pdie }, dragDie, regenRings };
   }
 
@@ -644,8 +651,9 @@ export class DodgeArena {
       const home = k === selK && !m.shot ? cp.socket.clone() : cp.diceHome[k].clone();
       // 다시 나타나기(공개 끝무렵, 또는 공격자가 바뀔 때)
       let r = -1;
-      if (this.regenAll >= 0 && t - this.regenAll - k * 0.25 < 1.45) r = t - this.regenAll - k * 0.25;
-      if (m.shot && k === m.shot.k && m.step === 'show') r = showS - 1.9;
+      if (this.regenAll >= 0 && t - this.regenAll - k * 0.25 < REGEN.end) r = t - this.regenAll - k * 0.25;
+      // 공개가 끝나기 전에 다 끝나도록(공개 3.4초)
+      if (m.shot && k === m.shot.k && m.step === 'show') r = showS - 0.85;
       const consumed = !!m.shot && k === m.shot.k && this.shotSeen.key === key && (m.step === 'pick' || r < 0);
       if (consumed && r < 0) {
         // 소모: 빛나며 수정구로 빨려 들어간다
@@ -653,19 +661,42 @@ export class DodgeArena {
         if (u < 1) { const e = ease(u); d.position.copy(this.shotSeen.from).lerp(ballL, e); d.scale.setScalar(0.42 * (1 - e * 0.85)); d.rotation.set(DIE_TILT + e * 6, e * 8, 0); }
         return;
       }
-      if (r >= 0 && r < 1.45) {
-        ring.visible = true; ring.position.set(cp.diceHome[k].x, 0.06, cp.diceHome[k].z);
-        const rm = ring.material as THREE.MeshBasicMaterial; rm.opacity = r < 1.1 ? Math.min(1, r / 0.25) : 1 - (r - 1.1) / 0.35; ring.rotation.z = t * 2; ring.scale.setScalar(0.6 + 0.4 * backOut(Math.min(1, r / 0.3)));
-        d.visible = true; const p = cp.diceHome[k].clone(); let sc = 0.42;
-        if (r < 0.5) { sc = 0.42 * backOut(r / 0.5); d.rotation.set(DIE_TILT, 0, 0); if (d.userData.spin !== key + k) { d.userData.spin = key + k; setDie(d, 1 + Math.floor(Math.random() * 6)); } }
-        else if (r < 1.05) {
-          const u = (r - 0.5) / 0.55; p.y += Math.sin(u * Math.PI) * 0.6; const sp = (1 - u) * 18;
-          d.rotation.set(DIE_TILT + r * sp, r * sp * 0.8, r * sp * 0.5);
-          if (u > 0.82 && d.userData.v !== m.dice[k]) setDie(d, m.dice[k]);
-          if (u > 0.82) d.rotation.set(DIE_TILT, 0, 0);
-        } else { d.rotation.set(DIE_TILT, 0, 0); if (d.userData.v !== m.dice[k]) setDie(d, m.dice[k]); const u = (r - 1.05) / 0.4; sc = 0.42 * (1 + 0.3 * Math.sin(Math.min(1, u) * Math.PI)); }
+      if (r >= 0 && r < REGEN.end) {
+        const hm = cp.diceHome[k]; const ry = hm.y + REGEN_Y;
+        // 공중의 마법진: 생겨나 돌다가, 주사위가 자리 잡으면 커지며 사라진다
+        ring.visible = true; ring.position.set(hm.x, ry, hm.z); ring.rotation.z = t * 1.6;
+        const rm = ring.material as THREE.MeshBasicMaterial;
+        const out = clamp01((r - REGEN.land) / (REGEN.end - REGEN.land));
+        rm.opacity = r < REGEN.ring ? r / REGEN.ring : 1 - out;
+        ring.scale.setScalar(r < REGEN.ring ? 0.3 + 0.7 * backOut(r / REGEN.ring) : 1 + out * 0.25);
+        const p = hm.clone(); let sc = 0.42;
+        if (d.userData.spin !== key + k) { d.userData.spin = key + k; clipObj(d, null); setDie(d, 1 + Math.floor(Math.random() * 6)); }
+        if (r < REGEN.ring) { d.visible = false; clipObj(d, null); }
+        else if (r < REGEN.rise) {
+          // 마법진 평면 아래에서 위로: 평면 위쪽만 보이게 잘라 솟아나는 것처럼
+          const u = ease((r - REGEN.ring) / (REGEN.rise - REGEN.ring));
+          d.visible = true; p.y = ry - 0.28 + 0.62 * u; d.rotation.set(0, r * 1.5, 0);
+          const pl = this.regenPlane[k]; const wp = ring.getWorldPosition(new THREE.Vector3());
+          const wn = new THREE.Vector3(0, 1, 0).applyQuaternion(cp.desk.getWorldQuaternion(new THREE.Quaternion()));
+          pl.setFromNormalAndCoplanarPoint(wn, wp); clipObj(d, [pl]);
+        } else if (r < REGEN.hover) {
+          clipObj(d, null); d.visible = true; p.y = ry + 0.34 + Math.sin((r - REGEN.rise) / (REGEN.hover - REGEN.rise) * Math.PI) * 0.05; d.rotation.set(0, r * 1.5, 0);
+        } else if (r < REGEN.land) {
+          // 굴러서 제자리로: 떨어지며 구르고, 작게 튄 뒤 멈춘다. 끝무렵 눈이 정해진다
+          clipObj(d, null); d.visible = true;
+          const u = (r - REGEN.hover) / (REGEN.land - REGEN.hover); const top = ry + 0.34 - hm.y;
+          p.y = hm.y + top * Math.pow(1 - Math.min(1, u / 0.55), 2) + (u > 0.55 ? Math.abs(Math.sin((u - 0.55) / 0.45 * Math.PI)) * 0.12 * (1 - u) : 0);
+          const spin = Math.pow(1 - u, 2) * 11;
+          if (u > 0.85) { if (d.userData.v !== m.dice[k]) setDie(d, m.dice[k]); d.rotation.set(DIE_TILT, 0, 0); }
+          else d.rotation.set(DIE_TILT + spin, spin * 0.6, spin * 0.35);
+        } else {
+          // 정해진 눈을 잠깐 키워 강조
+          clipObj(d, null); d.visible = true; d.rotation.set(DIE_TILT, 0, 0); if (d.userData.v !== m.dice[k]) setDie(d, m.dice[k]);
+          sc = 0.42 * (1 + 0.3 * Math.sin(out * Math.PI));
+        }
         d.position.copy(p); d.scale.setScalar(sc); return;
       }
+      clipObj(d, null);
       d.scale.setScalar(0.42);
       if (d.userData.v !== m.dice[k]) setDie(d, m.dice[k]);
       const target = home;
