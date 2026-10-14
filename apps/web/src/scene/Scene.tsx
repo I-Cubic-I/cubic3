@@ -11,6 +11,7 @@ import { World } from './World';
 import { type Quality, feltColor, prefs, usePrefs } from '../prefs';
 import { setCardBack } from './textures';
 import { AutoDpr, detectSoftware, usePerf } from './perf';
+import { useArenaOn } from '../arena/on';
 
 function Director() {
   const { scene, camera, gl, size } = useThree();
@@ -82,6 +83,8 @@ const DPR: Record<Quality, [number, number]> = { low: [1, 1], mid: [1, 1.5], hig
 
 export function SceneView() {
   const shakeN = useStore(s => s.shakeN);
+  // 아레나 미니게임 동안 테이블은 그리지 않는다
+  const arena = useArenaOn();
   const quality = usePrefs(s => s.quality);
   const ref = useRef<HTMLCanvasElement>(null);
   // 화면 흔들림: 캔버스에 클래스를 다시 붙인다
@@ -90,7 +93,7 @@ export function SceneView() {
     c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
   }, [shakeN]);
   return (
-    <Canvas id="gl" ref={ref} aria-label="게임 테이블" shadows dpr={DPR[quality]} style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', touchAction: 'none' }}
+    <Canvas id="gl" ref={ref} aria-label="게임 테이블" shadows dpr={DPR[quality]} frameloop={arena ? 'never' : 'always'} style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', touchAction: 'none' }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 50, near: 1, far: 4000, position: [0, 150, 128] }}
       onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1.0; }}>

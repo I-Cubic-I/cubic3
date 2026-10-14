@@ -1,7 +1,7 @@
 /* applyAction 시험: 판정이 허용한 행동만 실행해 무작위 대국을 끝까지 돌리고, 카드가 사라지거나 생기지 않는지 본다. */
 import { describe, expect, it } from 'vitest';
 import {
-  type Action, type Card, type CountMg, type DodgeMg, type GameState, type HoldMg, type MgId, DODGE_SHAPES, MG, R, U, advanceTimers, endTurn, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
+  type Action, type Card, type CountMg, type DodgeMg, type GameState, type HoldMg, type MgId, DODGE_SHAPES, DODGE_SHOW, MG, R, U, advanceTimers, endTurn, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
 } from '../src/index';
 
 function mulberry32(seed: number) {
@@ -400,7 +400,7 @@ describe('applyAction', () => {
     expect(m.last!.hit.sort()).toEqual([a, b, c].sort());
     expect(m.pts[atk]).toBe(3); expect(m.pts[a] + m.pts[b] + m.pts[c]).toBe(0);
     expect(m.dice[1]).toBe(6); expect(m.dice[2]).toBe(1);
-    T += 3000; advanceTimers(S); expect(m.turn).toBe(2);
+    T += DODGE_SHOW + 100; advanceTimers(S); expect(m.turn).toBe(2);
   });
 
   it('주사위 눈 피하기: 봉쇄는 빈 칸만, 막힌 칸으로는 못 가고, 공격자가 바뀌면 풀린다. 2인은 5턴', () => {

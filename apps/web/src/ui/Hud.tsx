@@ -7,6 +7,8 @@ import { useStore, viewSeat } from '../store';
 import { Hand } from './Hand';
 import { MgPanel } from './MgPanel';
 import { MgScreen, SCREEN_MG } from './MgScreen';
+import { DodgeBar } from './MgPanel4';
+import { useArenaOn } from '../arena/on';
 import { Cutin, FxView, HandPeek, ItemCutin, ResultsView, RulesScreen } from './Screens';
 import { type TurnView, turnActs } from './Turn';
 import { ICON, MCard, names } from './bits';
@@ -120,6 +122,7 @@ export function Hud() {
   const rulesShown = useStore(s => s.rulesShown); const clubPlaying = useStore(s => s.clubPlaying); const screenAlert = useStore(s => s.screenAlert);
   const fxShow = useStore(s => s.fxShow); const cutin = useStore(s => s.cutin); const results = useStore(s => s.results); const fps = useStore(s => s.fps);
   const [opts, setOpts] = useState(false);
+  const arenaOn = useArenaOn();
   useLayoutEffect(() => refreshTip());
   // 설정은 로비·게임 중 모두 오른쪽 위 톱니로 연다
   const gear = <button className="iconbtn" aria-label="설정" aria-expanded={opts} onClick={() => setOpts(o => !o)}>{MI.gear}</button>;
@@ -170,7 +173,7 @@ export function Hud() {
   }
   else if (ph === 'mg') {
     // 리더기 화면 미니게임은 테이블 대신 화면 가운데 전체를 쓴다
-    handTuck = !ui.showHand; center = SCREEN_MG.includes(S.mg!.id) ? <MgScreen S={S} i={i} /> : <MgPanel S={S} i={i} sel={sel} ui={ui} />;
+    handTuck = !ui.showHand; center = S.mg!.id === 'dodge' ? <DodgeBar S={S} i={i} ui={ui} sel={sel} /> : SCREEN_MG.includes(S.mg!.id) ? <MgScreen S={S} i={i} /> : <MgPanel S={S} i={i} sel={sel} ui={ui} />;
     // 미니게임 중에도 이번 보상을 볼 수 있게
     if ((S.rewardDisp || []).length) extra = <div className="rewardstrip"><span className="lbl">이번 보상</span><div className="row">{S.rewardDisp!.map(c => <MCard key={c} c={c} />)}</div></div>;
     pill = actor != null && ms.includes(actor) ? '내 차례' : actor != null ? `${nm(actor)} 차례` : MG[S.mg!.id].name; pillWait = !(actor != null && ms.includes(actor));
@@ -201,7 +204,7 @@ export function Hud() {
   const screenOn = showRules || screenAlert;
   return (
     <div id="hud">
-      <Plates S={S} />
+      {!arenaOn && <Plates S={S} />}
       <div id="mainui">
         {ph === 'main' && i != null && S.turn!.seat === i && S.turn!.picked && <div className="dz" data-dz="table"><span>테이블에 놓기</span></div>}
         <div className="topl"><span className="logo" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></span><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span><Ping uid={me} />
@@ -232,7 +235,7 @@ export function Hud() {
       {cutin && <Cutin S={S} f={cutin} />}
       {results && <ResultsView S={S} r={results} />}
       {fxShow?.f.t === 'item' && <ItemCutin key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}
-      <div id="fxl">{fxShow && fxShow.f.t !== 'item' && <FxView key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}</div>
+      <div id="fxl">{fxShow && fxShow.f.t !== 'item' && !(arenaOn && ['dodge', 'banner'].includes(fxShow.f.t)) && <FxView key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}</div>
       <Toast m={toast} />
       <div id="fpshint" className={fps.locked ? 'fps on' : fps.ok ? 'fps' : 'fps off'}>
         {fps.locked ? <><div className="xh" aria-hidden="true" /><div className="fpstip">Esc · 커서 꺼내기</div></> : fps.ok ? <div className="fpstip">화면을 클릭하면 1인칭 시점 (마우스로 둘러보기)</div> : null}

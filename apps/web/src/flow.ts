@@ -6,7 +6,7 @@ import { mine, mySeats, seatName, whoActs } from './game';
 import { useStore, viewSeat } from './store';
 import type { Pick, World } from './scene/World';
 import { forgetHosting } from './net/room';
-import { dodgeNudge, dodgePlaceAt, dodgeRotate, preview } from './ui/MgPanel4';
+import { dodgeNudge, dodgeOrient, dodgePlaceAt, dodgeRotate, preview } from './ui/MgPanel4';
 
 let world: World | null = null;
 export const getWorld = () => world;
@@ -358,9 +358,9 @@ export function cmd(a: string, d: D = {}): void {
     case 'frev': act({ type: 'forkRev', seat: i, item: sel[0] }); break;
     // 2026-10-14 주사위 눈 피하기
     case 'dk': store.patchUi({ dk: +d.k!, dor: undefined, dpl: undefined }); break;
-    case 'drot': case 'dplace': case 'dnudge': {
+    case 'drot': case 'dplace': case 'dnudge': case 'dorient': {
       if (s?.mg?.id !== 'dodge') break; const m = s.mg;
-      const p = a === 'drot' ? dodgeRotate(m, ui) : a === 'dplace' ? dodgePlaceAt(m, ui, +d.c!) : dodgeNudge(m, ui, +d.r!, +d.c!);
+      const p = a === 'drot' ? dodgeRotate(m, ui) : a === 'dplace' ? dodgePlaceAt(m, ui, +d.c!) : a === 'dorient' ? dodgeOrient(m, ui, +d.o!) : dodgeNudge(m, ui, +d.r!, +d.c!);
       if (p) store.patchUi(p); break;
     }
     case 'dshot': {

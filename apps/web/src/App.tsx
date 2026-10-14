@@ -7,6 +7,7 @@ import { LocalNet, NetError, PeerNet, rid } from './net/transport';
 import { useStore } from './store';
 import { exitRoom } from './flow';
 import { SceneView } from './scene/Scene';
+import { ArenaView } from './arena/ArenaView';
 import { Hud } from './ui/Hud';
 import { Start, roomFromUrl } from './ui/Start';
 import { prefs } from './prefs';
@@ -85,7 +86,7 @@ export function App() {
   };
 
   // 개발 서버 전용: 미니게임 미리보기(시험 방을 내 자리 3개로 열어 고른 미니게임으로)
-  const devPreview = async (id: MgId) => {
+  const devPreview = async (id: MgId, go = false) => {
     const me = myId(); const name = prefs().name.trim() || '나';
     setBusy('미리보기 준비 중…');
     try {
@@ -93,7 +94,8 @@ export function App() {
       useStore.getState().setRoom(r, me, name); useStore.getState().set({ autoSit: false, devPreview: true });
       r.subscribe(S => useStore.getState().receive(S));
       const { setupMgPreview } = await import('./devmg');
-      await setupMgPreview(r, id, name);
+      await setupMgPreview(r, id, name, go);
+      await (await import('./devmg')).devTools();
     } catch (e) { console.error(e); setMsg('미리보기를 열지 못했어요.'); }
     setBusy(null);
   };
@@ -113,6 +115,14 @@ export function App() {
     });
   }, []);
 
+  // 개발 서버 전용: ?mg=미니게임id 로 열면 그 미니게임 미리보기로 바로(&go=1 이면 규칙 설명도 건너뛴다)
+  useEffect(() => {
+    const q = new URLSearchParams(location.search); const id = q.get('mg') as MgId | null;
+    if (!import.meta.env.DEV || !id || autoJoined) return;
+    autoJoined = true; void devPreview(id, q.get('go') === '1');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 방 링크(?room=코드)로 열면 바로 들어간다. 이름을 아직 안 정했으면 메인 화면에서 이름부터 정한다
   useEffect(() => {
     const code = roomFromUrl(), name = prefs().name.trim();
@@ -124,6 +134,7 @@ export function App() {
   return (
     <>
       {fontsOk && <SceneView />}
+      {fontsOk && room && <ArenaView />}
       {room ? <Hud /> : <Start msg={msg} busy={busy} onPick={connect} onDevMg={import.meta.env.DEV ? devPreview : undefined} />}
       {/* 로고는 하나만: 시작 화면·로비의 자리를 따라다녀 화면이 바뀌어도 끊기지 않는다 */}
       {fontsOk && <LogoHost />}

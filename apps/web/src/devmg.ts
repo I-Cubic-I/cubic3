@@ -5,7 +5,7 @@ import type { Room } from './net/room';
 
 export const MG_IDS = Object.keys(MG) as MgId[];
 
-export async function setupMgPreview(r: Room, id: MgId, name: string): Promise<void> {
+export async function setupMgPreview(r: Room, id: MgId, name: string, go = false): Promise<void> {
   // 내 자리 3개(그 미니게임의 최소 인원이 더 많으면 그만큼)
   for (let k = 0; k < Math.max(3, MG[id].min); k++) await r.act({ type: 'sit', name });
   await r.act({ type: 'start' });
@@ -28,6 +28,20 @@ export async function setupMgPreview(r: Room, id: MgId, name: string): Promise<v
       const qk = (k % 2 ? S.kPile : S.qPile).pop(); if (qk) p.hand.push(qk);
     });
     // 즉시 시작 미니게임(눈치 게임)은 규칙 설명 없이 바로
-    if (INSTANT.includes(id)) { reclaim(S); startMinigame(S); }
+    if (INSTANT.includes(id) || go) { reclaim(S); startMinigame(S); }
   });
+}
+
+/** 개발 서버 전용 콘솔 도구: 시계 멈추기·한 걸음씩(창이 가려져 화면이 멈춰 있을 때 연출 확인용) */
+export async function devTools(): Promise<void> {
+  const E = await import('@cubic3/engine'); const F = await import('./flow'); const { useStore } = await import('./store');
+  const w = window as unknown as Record<string, unknown>;
+  let T = Date.now(); let frozen = false;
+  w.__dev = {
+    E, F, St: useStore,
+    freeze() { T = E.now(); frozen = true; E.setClock(() => T); },
+    thaw() { frozen = false; E.setClock(() => Date.now()); },
+    /** n프레임(0.05초씩) 진행 */
+    step(n = 1) { const a = w.__arena as { frame(dt: number): void } | undefined; for (let k = 0; k < n; k++) { if (frozen) T += 50; a?.frame(0.05); } },
+  };
 }

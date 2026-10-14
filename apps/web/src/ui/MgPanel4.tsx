@@ -1,6 +1,6 @@
 /* 미니게임 조작판 4 (2026-10-14 디지털 전용: 주사위 눈 피하기) */
 import { useEffect, useState } from 'react';
-import { type Card, DODGE_SHAPES, type DodgeMg, type GameState, R, dodgeAtk, dodgeCanBlock, dodgeCanGo, dodgeDefs, now } from '@cubic3/engine';
+import { type Card, DODGE_SHAPES, DODGE_SHOW, type DodgeMg, type GameState, R, dodgeAtk, dodgeCanBlock, dodgeCanGo, dodgeDefs, now } from '@cubic3/engine';
 import { SEATCOL, seatName } from '../game';
 import { cmd } from '../flow';
 import type { UiMode } from '../store';
@@ -39,7 +39,12 @@ export function preview(m: DodgeMg, ui: UiMode): { k: number; die: number; group
 /** 회전: 다음 방향에서, 지금 모양의 가운데와 가장 가까운 자리 */
 export function dodgeRotate(m: DodgeMg, ui: UiMode): Partial<UiMode> | null {
   const p = preview(m, ui); if (!p || p.groups.length < 2) return null;
-  const dor = (p.dor + 1) % p.groups.length; const c0 = cen(p.cells); const ps = p.groups[dor];
+  return dodgeOrient(m, ui, (p.dor + 1) % p.groups.length);
+}
+/** 방향을 바로 고르기(계기판): 그 방향에서 지금 모양의 가운데와 가장 가까운 자리 */
+export function dodgeOrient(m: DodgeMg, ui: UiMode, dor: number): Partial<UiMode> | null {
+  const p = preview(m, ui); if (!p || !(dor >= 0 && dor < p.groups.length)) return null;
+  const c0 = cen(p.cells); const ps = p.groups[dor];
   let best = 0; ps.forEach((q, j) => { if (dist(cen(q), c0) < dist(cen(ps[best]), c0)) best = j; });
   return { dor, dpl: best };
 }
@@ -62,14 +67,11 @@ export function dodgeNudge(m: DodgeMg, ui: UiMode, dr: number, dc: number): Part
   return best < 0 ? null : { dor: p.dor, dpl: best };
 }
 
-export function Dodge({ S, i, ui, sel }: { S: GameState; i: number | null; ui: UiMode; sel: Card[] }) {
-  const m = S.mg as DodgeMg;
-  const atk = dodgeAtk(m); const amAtk = i === atk; const amDef = i != null && i in m.pos; const defs = dodgeDefs(m);
-  const selItem = sel.length === 1 && R(sel[0]) >= 11 ? sel[0] : null;
-  const pv = amAtk && m.step === 'pick' && !m.shot ? preview(m, ui) : null;
-  const myPos = amDef ? m.pos[i!] : -1; const myMove = amDef ? (m.moves[i!] ?? myPos) : -1;
-  const canMove = amDef && m.step === 'pick' && !m.done[i!];
-  // 키보드: 공격자 = 1·2·3 주사위, 방향키 옮기기, R 회전, Enter 떨어뜨리기 / 수비자 = 방향키 한 칸(제자리 기준), Enter·스페이스 확정
+/** 키보드: 공격자 = 1·2·3 주사위, 방향키 옮기기, R 회전, Enter 발동 / 수비자 = 방향키 한 칸(제자리 기준), Enter·스페이스 확정 */
+function useDodgeKeys(m: DodgeMg, i: number | null, ui: UiMode) {
+  const amAtk = i === dodgeAtk(m); const amDef = i != null && i in m.pos;
+  const myPos = amDef ? m.pos[i!] : -1; const canMove = amDef && m.step === 'pick' && !m.done[i!];
+  void ui;
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.repeat || (e.target as HTMLElement)?.tagName === 'INPUT') return;
@@ -87,6 +89,16 @@ export function Dodge({ S, i, ui, sel }: { S: GameState; i: number | null; ui: U
     };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   });
+}
+
+export function Dodge({ S, i, ui, sel }: { S: GameState; i: number | null; ui: UiMode; sel: Card[] }) {
+  const m = S.mg as DodgeMg;
+  const atk = dodgeAtk(m); const amAtk = i === atk; const amDef = i != null && i in m.pos; const defs = dodgeDefs(m);
+  const selItem = sel.length === 1 && R(sel[0]) >= 11 ? sel[0] : null;
+  const pv = amAtk && m.step === 'pick' && !m.shot ? preview(m, ui) : null;
+  const myPos = amDef ? m.pos[i!] : -1; const myMove = amDef ? (m.moves[i!] ?? myPos) : -1;
+  const canMove = amDef && m.step === 'pick' && !m.done[i!];
+  useDodgeKeys(m, i, ui);
   const [, set] = useState(0);
   useEffect(() => { const t = setInterval(() => set(x => x + 1), 250); return () => clearInterval(t); }, []);
 
@@ -141,4 +153,41 @@ export function Dodge({ S, i, ui, sel }: { S: GameState; i: number | null; ui: U
     </div>
     <div className="chips">{m.ord.map(k => <span key={k} className={`chip${k === atk ? ' lead' : ''}`}><Dot k={k} />{nm(k)} {m.pts[k]}점{k === atk ? ' · 공격' : m.step === 'pick' && m.done[k] ? ' ✓' : ''}</span>)}</div>
   </>;
+}
+
+/** 아레나용 조작 띠(화면 위쪽): 상황·버튼·점수만. 판과 주사위는 아레나에서 직접 만진다 */
+export function DodgeBar({ S, i, ui, sel }: { S: GameState; i: number | null; ui: UiMode; sel: Card[] }) {
+  const m = S.mg as DodgeMg;
+  const atk = dodgeAtk(m); const amAtk = i === atk; const amDef = i != null && i in m.pos;
+  const selItem = sel.length === 1 && R(sel[0]) >= 11;
+  const pv = amAtk && m.step === 'pick' && !m.shot ? preview(m, ui) : null;
+  const canMove = amDef && m.step === 'pick' && !m.done[i!];
+  useDodgeKeys(m, i, ui);
+  const [, set] = useState(0);
+  useEffect(() => { const t = setInterval(() => set(x => x + 1), 250); return () => clearInterval(t); }, []);
+  const nm = (k: number) => seatName(S, k);
+  const L = m.step === 'show' ? m.last : null;
+  const deadline = m.step === 'pick' ? (amAtk ? m.until : m.dUntil) : m.step === 'block' ? m.until : 0;
+  const left = deadline ? secs(deadline) : 0; const showT = m.step === 'block' || (m.step === 'pick' && left <= 10 && (amAtk ? !m.shot : canMove));
+  const T = showT ? <span className="dt">{left}초</span> : null;
+  let head: React.ReactNode;
+  if (m.step === 'block') head = amAtk ? <><strong>칸 봉쇄</strong> · {selItem ? '무너뜨릴 빈 발판을 누르세요' : '아이템 카드를 고른 뒤 발판을 누르세요'} {T} <button className="btn sm" onClick={() => cmd('dgo')}>바로 시작</button></>
+    : <>공격자가 발판을 무너뜨릴지 고르는 중 {T}</>;
+  else if (m.step === 'pick') {
+    if (amAtk) head = m.shot ? <>발동 준비 완료 · 수비자를 기다리는 중</>
+      : pv ? <><strong>판 위로 끌거나 발판을 눌러 옮기기</strong>{pv.groups.length > 1 ? <> · 계기판에서 방향 <button className="btn sm" onClick={() => cmd('drot')}>⟳ <kbd>R</kbd></button></> : null} · <button className="btn sm primary" onClick={() => cmd('dshot')}>발동! <kbd>Enter</kbd></button> {T}</>
+        : <><strong>주사위를 하나 집으세요</strong> <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> {T}</>;
+    else if (amDef) head = m.done[i!] ? <>확정했어요 · 기다리는 중</>
+      : <><strong>갈 발판을 누르세요</strong>(상하좌우 한 칸 또는 제자리) · <button className="btn sm primary" onClick={() => cmd('dlock')}>확정 <kbd>Space</kbd></button>{m.shot ? <> · <strong>공격자 준비 완료!</strong></> : null} {T}</>;
+    else head = <>고르는 중…</>;
+  } else {
+    // 결과는 빛이 터진 뒤에 알린다(아레나 연출과 맞춘다)
+    const boom = now() - (m.until - DODGE_SHOW) > 1300;
+    head = L ? <>{L.auto ? '시간 초과! ' : ''}<DieFace v={L.die} sm /> 발동{boom ? <> · {L.hit.length ? <strong>{L.hit.map(nm).join(', ')} 맞음!</strong> : '모두 피했다'}</> : '!'}</> : null;
+  }
+  return <div className="dbar">
+    <div className="line">공격자 <Dot k={atk} /><strong>{nm(atk)}</strong> · {m.turn}/{m.turns}턴 · {m.ai + 1}/{m.ord.length}번째 공격자</div>
+    <div className="line">{head}</div>
+    <div className="chips">{m.ord.map(k => <span key={k} className={`chip${k === atk ? ' lead' : ''}`}><Dot k={k} />{nm(k)} {m.pts[k]}점{k === atk ? ' · 공격' : m.step === 'pick' && m.done[k] ? ' ✓' : ''}</span>)}</div>
+  </div>;
 }
