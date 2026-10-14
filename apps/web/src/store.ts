@@ -23,6 +23,8 @@ export interface UiMode {
   cg?: number[];
   /** 동굴 탐험: 고른 화살표(전진 = 남기 / 나가기) */
   cave?: 'stay' | 'leave';
+  /** 선 가위바위보(아레나): 고른 원소(R = 불, P = 물, S = 풀). [확정]을 눌러야 낸다 */
+  rps?: 'R' | 'P' | 'S';
   /** 거짓말쟁이: 고른 문양·장수 / 이마 위의 카드: 물어볼 사람·숫자 */
   lsu?: string;
   ln?: number;

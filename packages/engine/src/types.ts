@@ -86,7 +86,9 @@ export interface OvnMg {
   id: 'rps' | 'vault';
   bundle: Card[]; lead: number; alive: number[]; round: number; max: number; out: number[][];
   picks: Record<number, Hand | number>; armL: boolean; saveq: number[]; losers: number[]; saved: number[];
-  last: unknown; step: 'pick' | 'hide' | 'guard' | 'save'; zones?: number[] | null;
+  last: unknown; step: 'pick' | 'hide' | 'guard' | 'save' | 'show'; zones?: number[] | null;
+  /** 선 가위바위보: 모두 낸 뒤 결과 연출이 끝나는 시각(step = 'show') */
+  until?: number;
   /** 선 가위바위보: 이번 판 '이기면 즉시 통과' 아이템을 낸 사람 / 그렇게 통과해 끝까지 남은 것으로 치는 사람 */
   pass?: Record<number, boolean>; passed?: number[];
 }

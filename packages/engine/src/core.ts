@@ -2,7 +2,7 @@
 import { DEF_MS, R, SNAME, U, bindSeed, cname, d6, fullDeck, hashSeed, isItem, now, rnd, shuffle } from './cards';
 import { MG } from './mginfo';
 import {
-  auctionOpen, balloonStart, bombLay, countStart, ovnStart, raceStart,
+  auctionOpen, balloonStart, bombLay, countStart, ovnStart, raceStart, rpsAfterShow,
 } from './minigames';
 import {
   advanceMg3, balanceStart, caveStart, changeStart, foreStart, forkStart, gestureStart, liarStart, stackStart, tenStart,
@@ -440,6 +440,8 @@ export function advanceTimers(S: GameState): boolean {
     startMinigame(S); return true;
   }
   if (S.phase === 'defense' && S.pending && t >= S.pending.deadline) { resolveAttack(S); return true; }
+  // 선 가위바위보: 결과 연출이 끝나면 탈락 적용
+  if (S.phase === 'mg' && S.mg?.id === 'rps' && S.mg.step === 'show' && S.mg.until && t >= S.mg.until) { rpsAfterShow(S); return true; }
   // 눈치 경매(디지털판): 아이템 낼 시간이 지나면 입찰로
   if (S.phase === 'mg' && S.mg?.id === 'auction' && S.mg.step === 'pre' && S.mg.until && t >= S.mg.until) { S.mg.step = 'bid'; return true; }
   return advanceMg2(S, t) || advanceMg3(S, t) || advanceMg4(S, t);

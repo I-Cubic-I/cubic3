@@ -25,13 +25,16 @@ function loadOld(): Eng {
     ["m.step='pre';m.ready={};m.bids={};}", "m.step='pre';m.ready={};m.bids={};if(!Object.keys(m.hands).some(k=>hasItem(S,+k)))m.step='bid';else m.until=Date.now()+4000;}"],
     // 선 가위바위보: 졌을 때 버티기 단계는 금고 털기만 (minigames.ts ovnLosers). 새 아이템(이기면 통과)은 대조 행동에 없다
     ["m.saveq=losers.filter(j=>hasItem(S,j));", "m.saveq=m.id==='rps'?[]:losers.filter(j=>hasItem(S,j));"],
+    // 선 가위바위보: 모두 낸 뒤 결과 연출(show)을 거쳐 탈락 적용 (minigames.ts rpsPick·rpsAfterShow)
+    ["    fx(S,{t:'rps',picks:{...m.picks},lead:m.lead,losers,armL:m.armL});\n    ovnLosers(S,losers)}}",
+     "    fx(S,{t:'rps',picks:{...m.picks},lead:m.lead,losers,armL:m.armL});\n    m.step='show';m.until=Date.now()+5200}}\nfunction rpsAfterShow(S){ovnLosers(S,S.mg.last.losers)}"],
     // 미니게임 동점: 주사위로 보상 고르는 순서 (core.ts endMinigame)
     ["const order=[];groups.forEach(g=>order.push(...shuffle(g.slice())));\n  S.lastRank=groups;fx(S,{t:'rank',groups});",
      "const rolls={},order=[];const tie=c=>{if(c.length<2){order.push(...c);return}const r=c.map(()=>d6());c.forEach((j,k)=>(rolls[j]=rolls[j]||[]).push(r[k]));[...new Set(r)].sort((a,b)=>b-a).forEach(v=>tie(c.filter((_,k)=>r[k]===v)))};groups.forEach(g=>tie(g.slice()));\n  S.lastRank=groups;fx(S,{t:'rank',groups,rolls,order});"],
     // ♠J: 가져가는 쪽이 뒷면으로 펼친 손패에서 고른다 (core.ts applyAttack, stealPick)
     ["const c=T.hand.splice(rnd(T.hand.length),1)[0];A.hand.push(c);log(S,`자리 ${from+1}이 자리 ${to+1}의 손패 1장을 뺏었다.`)}",
      "shuffle(T.hand);S.steal={from,to};log(S,`자리 ${from+1}이 자리 ${to+1}의 손패에서 1장을 고른다.`)}"],
-    ["if(typeof module!=='undefined')module.exports={", "function stealPick(S,i,k){const st=S.steal;const T=S.seats[st.to];const c=T.hand.splice(k,1)[0];S.seats[i].hand.push(c);S.steal=null;log(S,`자리 ${i+1}이 자리 ${st.to+1}의 손패 1장을 뺏었다.`)}\nif(typeof module!=='undefined')module.exports={stealPick,"],
+    ["if(typeof module!=='undefined')module.exports={", "function stealPick(S,i,k){const st=S.steal;const T=S.seats[st.to];const c=T.hand.splice(k,1)[0];S.seats[i].hand.push(c);S.steal=null;log(S,`자리 ${i+1}이 자리 ${st.to+1}의 손패 1장을 뺏었다.`)}\nif(typeof module!=='undefined')module.exports={stealPick,rpsAfterShow,"],
     // 2인 메인 턴 2바퀴, 토큰 만들기·아이템은 한 라운드에 1번 (core.ts startMain·resetTurn·mark)
     ["S.order=[];for(let k=0;k<N(S);k++)S.order.push((S.first+k)%N(S));",
      "S.order=[];for(let k=0;k<N(S);k++)S.order.push((S.first+k)%N(S));const one=S.order.slice();for(let l=1;l<(N(S)===2?2:1);l++)S.order.push(...one);S.used={};"],
@@ -173,6 +176,7 @@ function choose(S: any, E: Eng, pick: () => number): Step | null {
     if (m.id === 'rps' || m.id === 'vault') {
       if (m.step === 'save') { const i = m.saveq[0]; const it = pick() < 0.5 ? items(i)[0] : null; return { fn: 'ovnSave', args: () => [i, it] }; }
       if (m.id === 'rps') {
+        if (m.step === 'show') return { fn: 'rpsAfterShow', args: () => [] };
         if (!m.armL && !m.picks[m.lead] && items(m.lead).length && pick() < 0.2) { const it = items(m.lead)[0]; return { fn: 'rpsArm', args: () => [m.lead, it] }; }
         const need = [m.lead, ...m.alive].filter((j: number) => !m.picks[j]); const i = need[0]; const h = one(['R', 'P', 'S']);
         return { fn: 'rpsPick', args: () => [i, h] };

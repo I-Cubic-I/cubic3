@@ -185,6 +185,8 @@ function ovnApply(S: GameState): void {
 
 /* ---- 선 가위바위보 ---- */
 export const RPSN: Record<Hand, string> = { R: '바위', P: '보', S: '가위' };
+/** 모두 낸 뒤 결과를 적용하기까지(사용자 2026-10-15): 1.5초 뒤 도전자 방어 → 선의 광역 공격 → 진 사람 탈락 연출. 시간은 [제안] */
+export const RPS_WAIT = 1500, RPS_SHOW = 5200;
 const BEATS: Record<Hand, Hand> = { R: 'S', P: 'R', S: 'P' };
 export function rpsPick(S: GameState, i: number, h: Hand): false | undefined {
   const m = mgOf<OvnMg>(S); if (m.step !== 'pick' || m.picks[i] || !(i === m.lead || m.alive.includes(i)) || !RPSN[h]) return false;
@@ -198,7 +200,11 @@ export function rpsPick(S: GameState, i: number, h: Hand): false | undefined {
   m.last = { picks: { ...m.picks }, armL: m.armL, round: m.round, losers };
   log(S, `선 가위바위보 ${m.round}판: ${need.map(j => `자리 ${j + 1} ${RPSN[m.picks[j] as Hand]}`).join(', ')}`);
   fx(S, { t: 'rps', picks: { ...m.picks }, lead: m.lead, losers, armL: m.armL });
-  ovnLosers(S, losers);
+  // 결과 연출을 보여 준 뒤에 탈락을 적용한다(rpsAfterShow)
+  m.step = 'show'; m.until = now() + RPS_SHOW;
+}
+export function rpsAfterShow(S: GameState): void {
+  const m = mgOf<OvnMg>(S); ovnLosers(S, (m.last as { losers: number[] }).losers);
 }
 /** 선이 아닌 사람의 아이템: 내기 전에 낸다. 이번에 선을 이기면 바로 통과 */
 export function rpsPass(S: GameState, i: number, item: Card): false | undefined {

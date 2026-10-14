@@ -1,7 +1,7 @@
 /* applyAction 시험: 판정이 허용한 행동만 실행해 무작위 대국을 끝까지 돌리고, 카드가 사라지거나 생기지 않는지 본다. */
 import { describe, expect, it } from 'vitest';
 import {
-  type Action, type Card, type CountMg, type DodgeMg, type GameState, type HoldMg, type MgId, DODGE_SHAPES, DODGE_SHOW, MG, R, U, advanceTimers, endTurn, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
+  type Action, type Card, type CountMg, type DodgeMg, type GameState, type HoldMg, type MgId, DODGE_SHAPES, DODGE_SHOW, MG, R, U, advanceTimers, endTurn, applyAction, canAct, countOpenAt, countStart, isItem, rpsAfterShow, startMinigame, newLobby, setClock, setRng,
 } from '../src/index';
 
 function mulberry32(seed: number) {
@@ -257,6 +257,7 @@ describe('applyAction', () => {
     applyAction(S, 'a', { type: 'rps', seat: 0, hand: 'R' });
     applyAction(S, 'b', { type: 'rps', seat: 1, hand: 'P' });  // 선을 이김 → 통과
     applyAction(S, 'c', { type: 'rps', seat: 2, hand: 'S' });  // 선에게 짐 → 탈락
+    expect((S.mg as { step: string }).step).toBe('show'); rpsAfterShow(S); // 결과 연출 뒤 적용
     expect(S.lastRank).toEqual([[1], [2], [0]]); // 통과한 사람 1위, 탈락한 사람, 선 꼴찌
   });
 

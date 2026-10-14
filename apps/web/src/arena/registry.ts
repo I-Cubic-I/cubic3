@@ -10,6 +10,8 @@ import { DodgeKeys, dodgeBoard } from '../ui/MgPanel4';
 import { DodgeArena } from './dodgeArena';
 import { CaveArena } from './caveArena';
 import { CaveKeys, caveBoard } from '../ui/CaveBoard';
+import { RpsArena } from './rpsArena';
+import { rpsBoard } from '../ui/RpsBoard';
 
 /** 아레나 3D 장면: 매 프레임 그리고, 끝나면 치운다 */
 export interface ArenaScene {
@@ -29,4 +31,6 @@ export interface ArenaDef {
 export const ARENAS: Partial<Record<MgId, ArenaDef>> = {
   dodge: { board: dodgeBoard, Keys: DodgeKeys, make: (scene, camera, dom, gl) => new DodgeArena(scene, camera, dom, gl) },
   cave: { board: caveBoard, Keys: CaveKeys, make: (scene, camera, dom, gl) => new CaveArena(scene, camera, dom, gl) },
+  // 선 가위바위보: 구상 중이라 개발 서버에서만(배포판은 원래 화면)
+  ...(import.meta.env.DEV ? { rps: { board: rpsBoard, make: (scene: THREE.Scene, camera: THREE.PerspectiveCamera, dom: HTMLCanvasElement) => new RpsArena(scene, camera, dom) } } : {}),
 };

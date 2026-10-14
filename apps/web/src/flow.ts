@@ -351,6 +351,12 @@ export function cmd(a: string, d: D = {}): void {
       store.patchUi({ cave: undefined }); act({ type: 'caveGo', seat: i, stay: c === 'stay' }); break;
     }
     case 'cguard': act({ type: 'caveGuard', seat: i, item: sel[0] }); break;
+    // 선 가위바위보(아레나, 사용자 2026-10-15): 화면 가운데 원소 구슬을 고른 뒤 [확정]
+    case 'rsel': store.patchUi({ rps: d.h as 'R' | 'P' | 'S' }); break;
+    case 'rconfirm': {
+      const h = ui.rps; if (!h) { toast('원소를 먼저 고르세요'); break; }
+      store.patchUi({ rps: undefined }); act({ type: 'rps', seat: i, hand: h }); break;
+    }
     case 'tplace': act({ type: 'tenPlace', seat: i, slot: +d.k! }); break;
     case 'tgrab': act({ type: 'tenGrab', seat: i, n: +d.n!, ms: +d.ms! }); break;
     case 'tall': act({ type: 'tenAll', seat: i, item: sel[0] }); break;
