@@ -300,7 +300,7 @@ export function Hud() {
       {cutin && <Cutin S={S} f={cutin} />}
       {results && <ResultsView S={S} r={results} />}
       {fxShow?.f.t === 'item' && <ItemCutin key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}
-      <div id="fxl">{fxShow && fxShow.f.t !== 'item' && !(arenaOn && ['dodge', 'banner'].includes(fxShow.f.t)) && <FxView key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}</div>
+      <div id="fxl">{fxShow && fxShow.f.t !== 'item' && !(arenaOn && (fxShow.f.t === S.mg?.id || fxShow.f.t === 'banner')) && <FxView key={fxShow.f.id} S={S} f={fxShow.f} out={fxShow.out} />}</div>
       <Toast m={toast} />
       <div id="fpshint" className={fps.locked ? 'fps on' : fps.ok ? 'fps' : 'fps off'}>
         {fps.locked ? <><div className="xh" aria-hidden="true" /><div className="fpstip">Esc · 커서 꺼내기</div></> : fps.ok ? <div className="fpstip">화면을 클릭하면 1인칭 시점 (마우스로 둘러보기)</div> : null}

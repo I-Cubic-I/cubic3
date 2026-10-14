@@ -8,9 +8,15 @@ import type { UiMode } from '../store';
 import type { MgBoard } from '../ui/Slab';
 import { DodgeKeys, dodgeBoard } from '../ui/MgPanel4';
 import { DodgeArena } from './dodgeArena';
+import { CaveArena } from './caveArena';
+import { CaveKeys, caveBoard } from '../ui/CaveBoard';
 
 /** 아레나 3D 장면: 매 프레임 그리고, 끝나면 치운다 */
-export interface ArenaScene { frame(dt: number): void; dispose(): void }
+export interface ArenaScene {
+  frame(dt: number): void; dispose(): void;
+  /** 직접 그리기(화면 효과를 거칠 때). 없으면 장면을 그대로 그린다 */
+  render?(): void;
+}
 export interface ArenaDef {
   /** 석판에 새길 내용 */
   board(S: GameState, i: number | null, ui: UiMode, sel: Card[]): MgBoard;
@@ -22,4 +28,5 @@ export interface ArenaDef {
 
 export const ARENAS: Partial<Record<MgId, ArenaDef>> = {
   dodge: { board: dodgeBoard, Keys: DodgeKeys, make: (scene, camera, dom, gl) => new DodgeArena(scene, camera, dom, gl) },
+  cave: { board: caveBoard, Keys: CaveKeys, make: (scene, camera, dom, gl) => new CaveArena(scene, camera, dom, gl) },
 };

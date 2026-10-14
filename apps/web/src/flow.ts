@@ -344,6 +344,8 @@ export function cmd(a: string, d: D = {}): void {
     }
     case 'chgguess': { const g = (ui.cg || []).slice(); store.patchUi({ cg: [] }); act({ type: 'chgGuess', seat: i, pieces: g }); break; }
     case 'cgo': act({ type: 'caveGo', seat: i, stay: !!+d.s! }); break;
+    case 'cstay': act({ type: 'caveGo', seat: i, stay: true }); break;
+    case 'cleave': act({ type: 'caveGo', seat: i, stay: false }); break;
     case 'cguard': act({ type: 'caveGuard', seat: i, item: sel[0] }); break;
     case 'tplace': act({ type: 'tenPlace', seat: i, slot: +d.k! }); break;
     case 'tgrab': act({ type: 'tenGrab', seat: i, n: +d.n!, ms: +d.ms! }); break;

@@ -131,7 +131,8 @@ export function changeResolve(S: GameState): void {
 }
 
 /* ================= 동굴 탐험 ================= */
-export const CAVE_PRE = 3000, CAVE_SHOW = 1800, CAVE_PANS = 3;
+/** 굴림 공개 시간: 버티면 폭파·전진·장면 전환까지, 무너지면 붕괴까지(아레나 연출, 사용자 2026-10-14 · 시간은 제안) */
+export const CAVE_PRE = 3000, CAVE_SHOW = 5000, CAVE_SHOW_FALL = 3500, CAVE_PANS = 3;
 export function caveStart(S: GameState): void {
   const ord = seatOrd(S); const score: Record<number, number[]> = {}; ord.forEach(i => score[i] = []);
   S.mg = { id: 'cave', ord, pan: 0, step: 'decide', until: 0, inside: [], di: 0, pool: 0, ones: 0, turn: 0, protect: 0, got: {}, score, last: null };
@@ -167,7 +168,7 @@ export function caveRoll(S: GameState): void {
   log(S, `동굴 탐험: 굴림 ${faces.join(' ')}${kept ? ` (1 보호 ${kept})` : ''} → 빼 둔 1 ${m.ones}개${collapse ? ' · 무너졌다!' : ` · ${m.turn}턴 버팀`}`);
   fx(S, { t: 'cave', ...m.last, seats: m.inside.slice() });
   if (collapse) m.inside.forEach(j => m.got[j] = 0);
-  m.step = 'show'; m.until = now() + CAVE_SHOW;
+  m.step = 'show'; m.until = now() + (collapse ? CAVE_SHOW_FALL : CAVE_SHOW);
 }
 /** 굴림을 보여 준 뒤: 무너졌으면 판 끝, 아니면 다시 남기·나가기 */
 export function caveAfterShow(S: GameState): void {

@@ -17,7 +17,8 @@ function Director({ def }: { def: ArenaDef }) {
     return () => { x.dispose(); a.current = null; };
     // (개발 중 아레나 코드를 고치면 등록이 새로 만들어져 새 장면으로 다시 짓는다)
   }, [scene, camera, gl, def]);
-  useFrame((_, dt) => a.current?.frame(dt));
+  // 아레나가 직접 그린다(심도 같은 화면 효과를 쓰는 장면이 있어서). 우선순위 1 = 기본 그리기를 대신한다
+  useFrame((_, dt) => { const x = a.current; if (!x) { gl.render(scene, camera); return; } x.frame(dt); if (x.render) x.render(); else gl.render(scene, camera); }, 1);
   return null;
 }
 
