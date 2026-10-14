@@ -19,6 +19,8 @@ function loadOld(): Eng {
     ["m.ans={};m.arm={};m.step='flip'}", "m.ans={};m.arm={};m.step='flip';if(m.dec){const su=U(m.dec);let ex=m.seq.filter(c=>U(c)===su).length-6,sw=false;while(ex>0){const k=m.seq.findIndex(c=>U(c)===su),j=S.deck.findIndex(c=>U(c)!==su);if(k<0||j<0)break;const o=m.seq[k];m.seq[k]=S.deck.splice(j,1)[0];S.deck.push(o);ex--;sw=true}if(sw)shuffle(S.deck)}}"],
     // 버티기(디지털판): 매 판 첫 굴림에는 1이 나오지 않는다 (minigames.ts holdRoll)
     ["m.k++;const a=d6(),b=item?d6():null;", "m.k++;let a=d6();while(m.k===1&&a===1)a=d6();const b=item?d6():null;"],
+    // 눈치 경매: 손패 6장 (core.ts startMinigame)
+    ["const bundle=buildBundle(S,5+5*n);const hands={};ord.forEach(i=>hands[i]=bundle.splice(0,5));", "const bundle=buildBundle(S,5+6*n);const hands={};ord.forEach(i=>hands[i]=bundle.splice(0,6));"],
     // 눈치 경매(디지털판): 시간제 입찰, 아이템 가진 사람이 없으면 바로 입찰 (minigames.ts auctionOpen)
     ["m.step='pre';m.ready={};m.bids={};}", "m.step='pre';m.ready={};m.bids={};if(!Object.keys(m.hands).some(k=>hasItem(S,+k)))m.step='bid';else m.until=Date.now()+4000;}"],
     // 선 가위바위보: 졌을 때 버티기 단계는 금고 털기만 (minigames.ts ovnLosers). 새 아이템(이기면 통과)은 대조 행동에 없다

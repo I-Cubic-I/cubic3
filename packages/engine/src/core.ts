@@ -299,7 +299,8 @@ export function startMinigame(S: GameState): void {
   if (id === 'hold') { S.mg = { id, pan: 1, ord, ci: 0, k: 0, s: 0, tot: Array(n).fill(0), last: null }; }
   if (id === 'bomb') { S.mg = { id, bundle: [], alive: ord.slice(), ci: 0, lay: [], flip: {}, arm: {}, out: [] }; bombLay(S); }
   if (id === 'auction') {
-    const bundle = buildBundle(S, 5 + 5 * n); const hands: Record<number, Card[]> = {}; ord.forEach(i => hands[i] = bundle.splice(0, 5));
+    // 손패 6장, 상품 5장: 마지막 경매에도 고를 카드가 남는다
+    const bundle = buildBundle(S, 5 + 6 * n); const hands: Record<number, Card[]> = {}; ord.forEach(i => hands[i] = bundle.splice(0, 6));
     const prizes = bundle.splice(0, 5).map((c, k) => ({ c, up: k < 3 }));
     S.mg = { id, bundle, hands, prizes, ai: 0, pot: [], step: 'pre', ready: {}, bids: {}, won: {}, spent: [] };
     ord.forEach(i => (S.mg as { won: Record<number, Card[]> }).won[i] = []); auctionOpen(S);
