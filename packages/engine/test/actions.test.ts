@@ -297,6 +297,17 @@ describe('applyAction', () => {
     T += 1500; advanceTimers(S); expect(m.step).toBe('show');
   });
 
+  it('동굴 탐험: 판마다 선이 왼쪽으로 한 칸씩 넘어간다', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(6));
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.board = Array(6).fill('cave'); S.die = 1; S.phase = 'clubs'; S.turn = null; startMinigame(S);
+    const m = S.mg as unknown as { step: string; ord: number[]; inside: number[]; pan: number };
+    m.step = 'decide'; const ord = m.ord.slice();
+    expect(m.inside[0]).toBe(ord[0]);
+    for (const k of m.inside.slice()) applyAction(S, S.seats[k].uid, { type: 'caveGo', seat: k, stay: false });
+    expect(m.pan).toBe(2); expect(m.inside).toEqual([ord[1], ord[2], ord[0]]);
+  });
+
   it('눈치 게임은 뽑히면 규칙 설명 없이 바로 시작한다', () => {
     let T = 1_000_000; setClock(() => T); setRng(mulberry32(3));
     const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });

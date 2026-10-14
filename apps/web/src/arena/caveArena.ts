@@ -187,6 +187,14 @@ export class CaveArena {
     const c = new EffectComposer(this.gl);
     c.addPass(new RenderPass(this.scene, this.camera));
     this.bokeh = new BokehPass(this.scene, this.camera, { focus: 22, aperture: 0.0008, maxblur: 0.012 });
+    // 심도 효과의 깊이 그리기에서는 빛무리·글자 같은 투명 평면을 뺀다: 깊이 재질로 덮어 그리면 사각형 전체가 깊이에 찍혀
+    // 그 사각형만 흐림이 달라져 굴절처럼 보인다(사용자 2026-10-15: 빛 정령 주변 사각형)
+    const bk = this.bokeh, draw = bk.render.bind(bk), hid: THREE.Object3D[] = [];
+    bk.render = (...args: Parameters<BokehPass['render']>) => {
+      this.scene.traverseVisible(o => { const mt = (o as THREE.Mesh).material as THREE.Material | undefined; if ((o as THREE.Sprite).isSprite || (mt && !Array.isArray(mt) && mt.transparent && !mt.depthWrite)) hid.push(o); });
+      hid.forEach(o => o.visible = false);
+      try { draw(...args); } finally { hid.forEach(o => o.visible = true); hid.length = 0; }
+    };
     c.addPass(this.bokeh); c.addPass(new OutputPass());
     // 색 단계 줄이기: 색조는 두고 밝기만 몇 단계로 끊는다(그러데이션이 판화처럼)
     c.addPass(new ShaderPass(POSTER));

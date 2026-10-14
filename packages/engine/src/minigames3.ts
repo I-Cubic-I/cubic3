@@ -141,7 +141,8 @@ export function caveStart(S: GameState): void {
   cavePan(S);
 }
 function cavePan(S: GameState): void {
-  const m = mgOf<CaveMg>(S); m.pan++; m.inside = m.ord.slice(); m.di = 0; m.pool = 0; m.ones = 0; m.turn = 0; m.protect = 0; m.got = {}; m.step = 'decide';
+  // 판마다 선을 왼쪽으로 한 칸씩 넘긴다(사용자 2026-10-15): 뒤에 고르는 사람이 유리하니 같은 사람이 계속 먼저 고르지 않게
+  const m = mgOf<CaveMg>(S); m.pan++; const sh = (m.pan - 1) % m.ord.length; m.inside = [...m.ord.slice(sh), ...m.ord.slice(0, sh)]; m.di = 0; m.pool = 0; m.ones = 0; m.turn = 0; m.protect = 0; m.got = {}; m.step = 'decide';
 }
 export const caveDecider = (m: CaveMg): number | null => (m.step === 'decide' && m.di < m.inside.length ? m.inside[m.di] : null);
 /** 남기·나가기: 선부터 차례로(앞사람의 선택을 보고 정한다) */
