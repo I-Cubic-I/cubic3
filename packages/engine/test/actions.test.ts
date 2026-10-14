@@ -425,6 +425,32 @@ describe('applyAction', () => {
     for (let k = 0; k < 40 && m.ai === 0; k++) { T += 40_000; advanceTimers(S); }
     expect(m.ai).toBe(1); expect(m.blocked).toEqual([]); expect(m.pos[0]).toBe(4);
   });
+  it('미니게임만 하기: 인원 확인, 규칙 설명 → 미니게임 → 보상 없이 끝, 한 번 더, ♣ 바꾸기 없음, 카드 수 보존', () => {
+    let T = 2_000_000; setClock(() => T); setRng(mulberry32(7));
+    const S = newLobby(); applyAction(S, 'u0', { type: 'sit' });
+    expect(applyAction(S, 'u0', { type: 'startSolo', id: 'dodge' }).ok).toBe(false);   // 혼자는 안 된다(멀티 전용)
+    for (let k = 1; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' });
+    expect(applyAction(S, 'u0', { type: 'startSolo', id: 'nope' as MgId }).ok).toBe(false);
+    const total = (x: GameState) => allCards(x).length;
+    expect(applyAction(S, 'u0', { type: 'startSolo', id: 'dodge' }).ok).toBe(true);
+    const n0 = total(S);
+    expect(S.phase).toBe('clubs'); expect(S.solo).toBe('dodge'); expect(S.rewardDisp).toEqual([]);
+    S.seats.forEach(p => { expect(p.hand.length).toBe(3); expect(p.hand.filter(isItem)).toHaveLength(1); expect(p.hand.some(c => U(c) === 'C' && isItem(c))).toBe(false); });
+    S.seats[0].hand.push('C12b');
+    expect(applyAction(S, 'u0', { type: 'club', seat: 0, card: 'C12b', arg: 1 }).ok).toBe(false);
+    S.seats[0].hand.pop();
+    for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'ready' });
+    expect(S.phase).toBe('mg'); expect(S.mg?.id).toBe('dodge');
+    for (let k = 0; k < 400 && S.phase === 'mg'; k++) { T += 40_000; advanceTimers(S); }
+    expect(S.phase).toBe('ended'); expect(S.reward).toBeFalsy(); expect(S.winners!.length).toBeGreaterThan(0);
+    expect(total(S)).toBe(n0);
+    expect(applyAction(S, 'u0', { type: 'restart' }).ok).toBe(true);
+    expect(S.phase).toBe('clubs'); expect(S.solo).toBe('dodge');
+    expect(applyAction(S, 'u0', { type: 'toLobby' }).ok).toBe(true);
+    expect(S.phase).toBe('lobby'); expect(S.solo).toBeFalsy(); expect(S.seats.length).toBe(3);
+    // 즉시 시작 미니게임(눈치 게임)은 규칙 설명 없이 바로
+    expect(applyAction(S, 'u0', { type: 'startSolo', id: 'nunchi' }).ok).toBe(true); expect(S.phase).toBe('mg');
+  });
   it('판정이 허용한 행동만으로 2~5인 대국이 오류 없이 끝나고 카드 수가 보존된다', () => {
     let ended = 0;
     for (let g = 0; g < 80; g++) if (play(2 + (g % 4), 500 + g).ended) ended++;

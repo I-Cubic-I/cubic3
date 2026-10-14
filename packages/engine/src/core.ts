@@ -80,6 +80,23 @@ export function startGame(S: GameState): void {
 
 const boardMg = (S: GameState): MgId => S.board![S.die! - 1];
 
+/** 미니게임만 하기(디지털 멀티 전용, 사용자 2026-10-14): 메인 턴 없이 고른 미니게임 1종만 한다.
+    규칙 설명 → 미니게임 → 순위 결과 → 끝('ended'). 보상·토큰은 없다.
+    [제안] 공정하게 모두 손패 숫자 카드 2장 + 아이템 J 1장(♣ 아님: ♣로 미니게임을 바꾸는 일은 없다) */
+export function startSolo(S: GameState, id: MgId): void {
+  startGame(S);
+  S.seats.forEach(p => { S.deck.push(...p.hand.splice(0)); }); shuffle(S.deck);
+  const take = (f: (c: Card) => boolean): Card | null => { const k = S.deck.findIndex(f); return k < 0 ? null : S.deck.splice(k, 1)[0]; };
+  S.seats.forEach(p => {
+    for (let k = 0; k < 2; k++) { const c = take(c => R(c) <= 10); if (c) p.hand.push(c); }
+    const j = take(c => R(c) === 11 && U(c) !== 'C'); if (j) p.hand.push(j);
+  });
+  S.solo = id; S.turn = null; S.order = []; S.ti = 0; S.pending = null; S.deadline = null;
+  S.board = [id, id, id, id, id, id]; S.die = 1; S.round = 1; S.phase = 'clubs'; S.ready = {}; S.rewardDisp = []; S.clubChoose = null;
+  S.log = []; log(S, `미니게임만 하기: ${MG[id].name} (${N(S)}명)`);
+  instantStart(S);
+}
+
 export function rollBoard(S: GameState): void {
   S.die = d6(); S.phase = 'clubs'; S.deadline = null; S.ready = {};
   log(S, `${S.round}라운드 미니게임 주사위: ${S.die} → ${MG[boardMg(S)].name}`);
@@ -364,6 +381,12 @@ export function finishMinigame(S: GameState): void {
     if (m.pot) back.push(...m.pot.map(p => (typeof p === 'string' ? p : p.c)));
     if (m.pile) back.push(...m.pile);
     S.deck.push(...back); shuffle(S.deck);
+  }
+  // 미니게임만 하기: 보상이 없으니 동점 주사위도 없이 순위만 알리고 끝
+  if (S.solo) {
+    S.lastRank = groups; fx(S, { t: 'rank', groups, rolls: {}, order: groups.flat() });
+    log(S, `${MG[S.solo].name} 결과: ` + groups.map((g, k) => `${k + 1}위 ${g.map(i => '자리 ' + (i + 1)).join('·')}`).join(' / '));
+    S.mg = null; S.rewardDisp = null; S.phase = 'ended'; S.winners = groups[0] || []; return;
   }
   // 같은 순위끼리는 주사위를 굴려 높은 눈부터 보상을 고른다(같은 눈끼리만 다시). 굴린 눈은 결과 화면에서 보여 준다
   const rolls: Record<number, number[]> = {}; const order: number[] = [];

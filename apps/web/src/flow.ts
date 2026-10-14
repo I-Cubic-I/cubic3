@@ -215,6 +215,8 @@ export function cmd(a: string, d: D = {}): void {
     case 'chair': if (i != null) act({ type: 'move', seat: i, chair: +d.c! }); else act({ type: 'sit', name: store.name, chair: +d.c! }); break;
     case 'leave': act({ type: 'leave', seat: +d.i! }); break;
     case 'start': act({ type: 'start' }); break;
+    // 미니게임만 하기(멀티 전용)
+    case 'solo': act({ type: 'startSolo', id: String(d.id) as MgId }); break;
     case 'restart': act({ type: 'restart' }); break;
     case 'tolobby': act({ type: 'toLobby' }); break;
     case 'reset1': store.patchUi({ confirmReset: true }); break;

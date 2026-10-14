@@ -25,8 +25,8 @@ export function RulesScreen({ S }: { S: GameState }) {
       <div className="crt">
         <div className="scr-top"><span className="mono">MINIGAME ▸ 규칙 설명</span>
           <div className="scr-topr">
-            <div className="rewardrow"><span className="lbl">이번 보상</span>{(S.rewardDisp || []).map(c => <MCard key={c} c={c} />)}</div>
-            <span className="scr-chip">{S.round}라운드 · 모두 준비되면 시작</span>
+            {!S.solo && <div className="rewardrow"><span className="lbl">이번 보상</span>{(S.rewardDisp || []).map(c => <MCard key={c} c={c} />)}</div>}
+            <span className="scr-chip">{S.solo ? '미니게임만 하기' : `${S.round}라운드`} · 모두 준비되면 시작</span>
           </div>
         </div>
         <div className="scr-body">
@@ -266,8 +266,9 @@ export function ResultsView({ S, r }: { S: GameState; r: { mg: MgId | null; grou
             </div>;
           })}
         </div>
-        <p className="rk-sub">{tied ? '같은 순위끼리는 주사위 눈이 높은 사람부터 · ' : ''}1위부터 차례로 보상 카드를 1장씩 골라요</p>
-        <button className="btn primary" onClick={close}>보상 고르러 가기</button>
+        {S.solo ? <button className="btn primary" onClick={close}>확인</button> : <>
+          <p className="rk-sub">{tied ? '같은 순위끼리는 주사위 눈이 높은 사람부터 · ' : ''}1위부터 차례로 보상 카드를 1장씩 골라요</p>
+          <button className="btn primary" onClick={close}>보상 고르러 가기</button></>}
       </div>
     </div>
   );

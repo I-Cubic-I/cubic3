@@ -354,6 +354,8 @@ export interface GameState {
   used?: Record<number, { item?: boolean; token?: boolean }>;
   /** 디지털판: 최근에 한 미니게임(오래된 것부터). 이 미니게임들은 미니게임 6장에 나오지 않는다 */
   recentMg?: MgId[];
+  /** 미니게임만 하기(디지털 멀티 전용): 메인 턴 없이 이 미니게임 1종만 한다 */
+  solo?: MgId | null;
   /** 미니게임이 끝났다: 마지막 결과를 보여 주는 동안(at까지, 방장 시계) 미니게임 화면에 머문 뒤 순위·보상으로 넘어간다 */
   mgEnd?: { groups: number[][]; at: number } | null;
   rewardDisp?: Card[] | null;

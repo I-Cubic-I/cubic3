@@ -1,9 +1,10 @@
 /* 행동 판정: 플레이어가 보낸 행동이 지금 가능한지 확인하고 상태에 적용한다.
    방장(P2P) 또는 서버가 이 함수 하나로 판정한다. 화면은 같은 함수로 미리 가능 여부를 볼 수 있다. */
 import { R, U, cname, isItem, now } from './cards';
+import { MG } from './mginfo';
 import {
   canMakeToken, clubChoices, clubPick, defend, discardCard, endTurn, log, makeToken, newLobby, pickDJ, pickup, pickupDiscard,
-  readyUp, resolveAttack, rewardPick, rollBoard, startAttack, startGame, stealPick, useClub, useDJ, useHQ,
+  readyUp, resolveAttack, rewardPick, rollBoard, startAttack, startGame, startSolo, stealPick, useClub, useDJ, useHQ,
 } from './core';
 import {
   auctionBid, auctionItem, auctionReady, balloonPlay, bombArm, bombFlip, countAnswer, countArm, countOpenAt, holdRoll, holdStop,
@@ -19,7 +20,7 @@ import {
   foreAct, foreAsk, foreTurn, forkPick, forkRev, liarAdd, liarBid, liarCall, liarTurn,
 } from './minigames3';
 import { dodgeAtk, dodgeBlock, dodgeCanBlock, dodgeCanGo, dodgeGo, dodgeLock, dodgeMove, dodgePeek, dodgeShot, dodgeValid } from './minigames4';
-import type { Card, CurlShot, GameState, Hand, MidCrit, Suit } from './types';
+import type { Card, CurlShot, GameState, Hand, MgId, MidCrit, Suit } from './types';
 
 export const MAX_SEATS = 5;
 export const HAND_LIMIT = 6;
@@ -30,6 +31,8 @@ export type Action =
   | { type: 'leave'; seat: number }
   | { type: 'start' }
   | { type: 'restart' }
+  /** 미니게임만 하기 */
+  | { type: 'startSolo'; id: MgId }
   | { type: 'toLobby' }
   | { type: 'reset' }
   | { type: 'roll'; seat: number }
@@ -157,11 +160,18 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'leave': return S.phase !== 'lobby' ? '게임 중이에요.' : null;
     case 'start': return S.phase !== 'lobby' ? '이미 시작했어요.' : S.seats.length < 2 ? '2명 이상 앉아야 해요.' : null;
     case 'restart': return S.phase !== 'ended' ? '게임이 끝나지 않았어요.' : null;
+    case 'startSolo': {
+      if (S.phase !== 'lobby') return '이미 시작했어요.';
+      const g = MG[a.id]; if (!g) return '없는 미니게임이에요.';
+      const n = S.seats.length; const lo = Math.max(2, g.min);
+      return n < lo ? `${g.name}은 ${lo}명 이상이어야 해요.` : n > g.max ? `${g.name}은 ${g.max}명까지예요.` : null;
+    }
     case 'toLobby': case 'reset': return S.seats.some(p => p.uid === uid) || S.phase === 'lobby' ? null : '자리에 앉은 사람만 할 수 있어요.';
     case 'roll': return S.phase === 'roll' && S.first === a.seat ? null : '선 플레이어가 굴릴 차례가 아니에요.';
     case 'ready': return S.phase !== 'clubs' ? '규칙 설명 시간이 아니에요.' : S.clubChoose ? '♣로 미니게임을 고르는 중이에요.' : S.seats.some((p, k) => p.uid === uid && !(S.ready || {})[k]) ? null : '이미 준비했어요.';
     case 'club': {
       if (S.phase !== 'clubs') return '규칙 설명 시간에만 쓸 수 있어요.';
+      if (S.solo) return '미니게임만 하기에서는 ♣로 미니게임을 바꿀 수 없어요.';
       if (!holds(a.seat, a.card) || U(a.card) !== 'C' || !isItem(a.card)) return '♣ 아이템이 아니에요.';
       if (S.seats[a.seat].front.length) return '이번 라운드에 아이템을 써서 ♣를 쓸 수 없어요.';
       if (S.clubChoose) return '다른 ♣로 미니게임을 고르는 중이에요.';
@@ -348,7 +358,9 @@ function run(S: GameState, uid: string, a: Action): false | void {
       log(S, '자리에 한 명 앉았다.'); return;
     case 'leave': S.seats.splice(a.seat, 1); return;
     case 'move': S.seats[a.seat].chair = a.chair; sortSeats(S); return;
-    case 'start': case 'restart': startGame(S); return;
+    case 'start': startGame(S); return;
+    case 'restart': if (S.solo) startSolo(S, S.solo); else startGame(S); return;
+    case 'startSolo': startSolo(S, a.id); return;
     case 'toLobby': resetTo(S, true); return;
     case 'reset': resetTo(S, false); return;
     case 'roll': rollBoard(S); return;

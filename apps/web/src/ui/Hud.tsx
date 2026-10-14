@@ -1,6 +1,6 @@
 /* 화면 위 UI 전체 (테이블 장면 위에 겹친다) */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { type GameState, MAX_SEATS, MG, R, U, chairOf, cname, isItem, now } from '@cubic3/engine';
+import { type GameState, MAX_SEATS, MG, type MgId, R, U, chairOf, cname, isItem, now } from '@cubic3/engine';
 import { SEATCOL, mySeats, seatName, whoActs } from '../game';
 import { cmd, exitRoom, getWorld } from '../flow';
 import { useStore, viewSeat } from '../store';
@@ -84,9 +84,20 @@ function Plates({ S }: { S: GameState }) {
 }
 
 /** 대기실: 창 없이 테이블에 앉은 모습 그대로. 위에는 방 정보와 나가기, 아래에는 시작 버튼 */
+/** 미니게임만 하기(멀티 전용): 메인 턴 없이 고른 미니게임 1종만. 지금 인원으로 할 수 있는 것만 누를 수 있다 */
+function SoloPick({ n, close }: { n: number; close: () => void }) {
+  const ids = Object.keys(MG) as MgId[];
+  return <div className="panel solopick" role="dialog" aria-label="미니게임만 하기">
+    <div className="sphead"><strong>미니게임만 하기</strong><span>메인 턴 없이 미니게임 하나만 · 지금 {n}명</span><button className="btn sm" onClick={close}>닫기</button></div>
+    <div className="splist">{ids.map(id => { const g = MG[id]; const ok = n >= Math.max(2, g.min) && n <= g.max;
+      return <button key={id} className="spbtn" disabled={!ok} onClick={() => { close(); cmd('solo', { id }); }} title={ok ? undefined : `${Math.max(2, g.min)}~${g.max}명`}>
+        <span className="ic" aria-hidden="true">{g.icon}</span><span className="nm">{g.name}</span><span className="ct">{Math.max(2, g.min)}~{g.max}인</span></button>; })}</div>
+  </div>;
+}
+
 function Lobby({ S, gear }: { S: GameState; gear: React.ReactNode }) {
   const me = useStore(s => s.me); const room = useStore(s => s.room); const flash = useStore(s => s.flash); const ctl = useStore(s => s.ctl);
-  const [sure, setSure] = useState(false);
+  const [sure, setSure] = useState(false); const [solo, setSolo] = useState(false);
   const ms = mySeats(S, me); const sitting = ms.length > 0; const n = S.seats.length;
   const host = room?.role === 'host';
   const exit = () => { if (host && n > ms.length && !sure) { setSure(true); return; } void exitRoom(); };
@@ -110,9 +121,11 @@ function Lobby({ S, gear }: { S: GameState; gear: React.ReactNode }) {
         {sitting && n < MAX_SEATS && <button className="btn sm" onClick={() => cmd('sit')}>이 기기로 한 자리 더</button>}
         {sitting && ms.length > 1 && <button className="btn sm" onClick={() => cmd('leave', { i: ctl ?? ms[ms.length - 1] })}>이 자리 비우기</button>}
         <button className="btn primary" disabled={!(n >= 2 && n <= MAX_SEATS && sitting)} onClick={() => cmd('start')}>게임 시작 ({n}명)</button>
+        <button className="btn" disabled={!(n >= 2 && sitting)} aria-expanded={solo} onClick={() => setSolo(v => !v)}>미니게임만 하기</button>
       </div>
       {sitting && n < MAX_SEATS && <p className="lobbytip">빈 의자를 누르면 옮겨 앉아요</p>}
     </div>
+    {solo && sitting && <SoloPick n={n} close={() => setSolo(false)} />}
   </>;
 }
 
@@ -193,6 +206,16 @@ export function Hud() {
         {Rw.order.map((k, j) => <span key={j} className="chip" style={{ fontSize: 12, ...(j === Rw.pi ? { background: 'var(--brass)', color: 'var(--brass-ink)', borderColor: 'var(--brass)' } : j < Rw.pi ? { opacity: .4 } : {}) }}>{nm(k)}</span>)}
       </div>
     </>;
+  } else if (ph === 'ended' && S.solo) {
+    // (순위 결과 화면이 떠 있는 동안은 숨긴다)
+    if (!results)
+    // 미니게임만 하기: 순위만 보여 주고 한 번 더 / 다른 미니게임
+    center = <div className="panel center-panel" style={{ textAlign: 'center' }}>
+      <div className="disp" style={{ fontSize: 18, color: 'var(--brass)' }}>{MG[S.solo].icon} {MG[S.solo].name} 결과</div>
+      <div style={{ margin: '10px 0 16px', display: 'grid', gap: 4 }}>{(S.lastRank || []).map((g, k) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '56px 1fr', gap: 8, alignItems: 'center', textAlign: 'left' }}>
+        <span className="disp" style={{ fontSize: k ? 20 : 30, color: k ? 'var(--muted)' : 'var(--brass)' }}>{k + 1}위</span><span className="disp" style={{ fontSize: k ? 20 : 30 }}>{names(S, g)}</span></div>)}</div>
+      <div className="btnrow"><button className="btn primary" onClick={() => cmd('restart')}>한 번 더</button><button className="btn" onClick={() => cmd('tolobby')}>다른 미니게임 · 로비로</button></div>
+    </div>;
   } else if (ph === 'ended') {
     center = <div className="panel center-panel" style={{ textAlign: 'center' }}>
       <div className="disp" style={{ fontSize: 20, color: 'var(--brass)' }}>우승</div>
@@ -207,7 +230,7 @@ export function Hud() {
       {!arenaOn && <Plates S={S} />}
       <div id="mainui">
         {ph === 'main' && i != null && S.turn!.seat === i && S.turn!.picked && <div className="dz" data-dz="table"><span>테이블에 놓기</span></div>}
-        <div className="topl"><span className="logo" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></span><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span><Ping uid={me} />
+        <div className="topl"><span className="logo" role="img" aria-label="Cubic³"><span className="sq" aria-hidden="true">■</span><span aria-hidden="true">³</span></span>{S.solo ? <span className="chip">미니게임만 · {MG[S.solo].name}</span> : <><span className="chip">{S.round}라운드</span><span className="chip">{S.ot ? '연장전 · 4색' : '목표 3색'}</span></>}<Ping uid={me} />
           {ms.length > 1 && ms.map(k => <button key={k} className={`chip ${k === i ? 'on' : ''}`} onClick={() => cmd('ctl', { i: k })}>자리 {k + 1}</button>)}</div>
         <div className="topr">
           <button className="iconbtn" aria-label="기록 보기" onClick={() => cmd('log')}>{ICON.list}</button>
@@ -220,7 +243,7 @@ export function Hud() {
           {sub && <div className="subchips">{sub.map(([t, on]) => <span key={t} className={`chip${on ? ' on' : ''}`}>{t}</span>)}</div>}</div>}
         {flash && <div className="notice" role="alert">{flash}</div>}
         {extra}
-        {i != null && !['mg', 'clubs'].includes(ph) && <div className="tray dz" data-dz="tray"><span className="lbl">내 토큰 · {nm(i)} · 카드를 끌어 놓으면 토큰</span>
+        {i != null && !S.solo && !['mg', 'clubs'].includes(ph) && <div className="tray dz" data-dz="tray"><span className="lbl">내 토큰 · {nm(i)} · 카드를 끌어 놓으면 토큰</span>
           <div className="row">{[0, 1, 2].concat(S.ot ? [3] : []).map(k => <span key={k} className={`cube ${S.seats[i].tokens[k] || 'empty'}`} />)}</div></div>}
         {i != null && !handTuck && <Hand seat={i} kind="res" />}
         {(acts || note) && <div className="acts">{note && <div className="note">{note}</div>}<div className="group">{acts}</div></div>}

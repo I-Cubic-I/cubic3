@@ -694,3 +694,15 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .dbar .chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
 .dbar .dt{color:#ffb070;font-weight:700}
 @media (max-height:520px){.dbar{top:44px;padding:3px 8px;font-size:11px;gap:2px;border-radius:12px;background:rgba(18,12,10,.68)}.dbar .line:first-child{display:none}.dbar .chips .chip{font-size:10px;padding:1px 6px}.dbar .btn.sm{padding:2px 8px;font-size:11px}.dbar kbd{display:none}}
+
+/* 미니게임만 하기: 로비에서 고르는 판 */
+.solopick{position:absolute;left:50%;top:50%;transform:translate(-50%,-56%);width:min(720px,calc(100vw - 32px));max-height:min(70vh,560px);display:flex;flex-direction:column;gap:10px;pointer-events:auto;z-index:8}
+.solopick .sphead{display:flex;align-items:center;gap:10px}
+.solopick .sphead span{flex:1;font-size:13px;color:var(--muted)}
+.solopick .splist{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;overflow-y:auto;min-height:0}
+.spbtn{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;padding:9px 10px;border-radius:12px;background:var(--glass);border:1px solid var(--line);color:inherit;font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.spbtn:hover:not(:disabled){border-color:var(--brass);background:rgba(232,184,74,.12)}
+.spbtn:disabled{opacity:.38;cursor:default}
+.spbtn .ic{font-size:16px;text-align:center;white-space:nowrap;min-width:24px}
+.spbtn .ct{font-size:11px;color:var(--dim)}
+@media (max-height:520px){.solopick{top:8px;transform:translateX(-50%);max-height:calc(100vh - 130px)}.spbtn{padding:6px 8px;font-size:13px}}
