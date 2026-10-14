@@ -11,7 +11,7 @@ import {
   advanceMg2, chainStart, curlingStart, duelStart, foldStart, lineStart, midStart, speedStart, updownStart,
 } from './minigames2';
 import { advanceMg4, dodgeStart } from './minigames4';
-import type { Card, Fx, GameState, MgId, Suit } from './types';
+import type { Card, Fx, GameState, MgId, MgScore, Suit } from './types';
 
 export function log(S: GameState, msg: string): void {
   S.log.unshift(msg);
@@ -371,12 +371,16 @@ type AnyMg = {
 };
 /** 미니게임 마지막 결과를 보여 주는 시간(ms). 그동안 미니게임 화면에 머물고 행동은 받지 않는다(사용자 2026-10-13) */
 export const MG_HOLD = 3500;
-export function endMinigame(S: GameState, groups: number[][]): void {
-  S.mgEnd = { groups, at: now() + MG_HOLD }; S.lastRank = groups;
+/** 점수 묶음을 결과판 점수로: 숫자 + 단위(pre가 있으면 앞말, 예: 벌점 3) */
+export function scoreOf(pts: Record<number, number>, u: string, pre?: string): MgScore {
+  const o: MgScore = {}; Object.keys(pts).forEach(k => o[+k] = { v: String(pts[+k]), ...(pre ? { pre } : { u }) }); return o;
+}
+export function endMinigame(S: GameState, groups: number[][], score?: MgScore): void {
+  S.mgEnd = { groups, at: now() + MG_HOLD, ...(score ? { score } : {}) }; S.lastRank = groups;
 }
 /** 결과를 보여 준 뒤: 재료를 덱에 섞고, 동점 주사위, 순위 발표, 보상 고르기로 */
 export function finishMinigame(S: GameState): void {
-  const groups = S.mgEnd!.groups; delete S.mgEnd;
+  const groups = S.mgEnd!.groups, score = S.mgEnd!.score; delete S.mgEnd;
   const m = S.mg as AnyMg;
   if (m.bundle) {
     const back = m.bundle.slice();
@@ -392,7 +396,7 @@ export function finishMinigame(S: GameState): void {
   }
   // 미니게임만 하기: 보상이 없으니 동점 주사위도 없이 순위만 알리고 끝
   if (S.solo) {
-    S.lastRank = groups; fx(S, { t: 'rank', groups, rolls: {}, order: groups.flat() });
+    S.lastRank = groups; fx(S, { t: 'rank', groups, rolls: {}, order: groups.flat(), score });
     log(S, `${MG[S.solo].name} 결과: ` + groups.map((g, k) => `${k + 1}위 ${g.map(i => '자리 ' + (i + 1)).join('·')}`).join(' / '));
     S.mg = null; S.rewardDisp = null; S.phase = 'ended'; S.winners = groups[0] || []; return;
   }
@@ -404,7 +408,7 @@ export function finishMinigame(S: GameState): void {
     [...new Set(r)].sort((a, b) => b - a).forEach(v => tie(c.filter((_, k) => r[k] === v)));
   };
   groups.forEach(g => tie(g.slice()));
-  S.lastRank = groups; fx(S, { t: 'rank', groups, rolls, order });
+  S.lastRank = groups; fx(S, { t: 'rank', groups, rolls, order, score });
   log(S, '미니게임 순위: ' + groups.map((g, k) => `${k + 1}위 ${g.map(i => '자리 ' + (i + 1)).join('·')}`).join(' / '));
   const disp = S.rewardDisp || []; S.rewardDisp = null;
   S.mg = null; S.phase = 'reward'; S.reward = { disp, order: order.concat(order), pi: 0 };

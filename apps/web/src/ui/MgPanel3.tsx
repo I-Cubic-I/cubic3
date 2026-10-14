@@ -22,7 +22,7 @@ export function mgItemUse3(S: GameState, i: number, no: (w: string) => ItemUse, 
     case 'gesture': return gestTurn(m) === i && m.pos === 0 && m.seq.length ? now_('gskip') : no('내 차례에 따라 하기 전에 써요');
     case 'stack': return m.step === 'pre' ? (m.wide[i] ? no('이미 썼어요') : now_('swide')) : no('시작 전에 써요');
     case 'change': return m.step === 'move' && m.changer === i ? (m.need === 3 ? no('이미 썼어요') : now_('cmore')) : no('바꾸는 사람이 옮기는 동안 써요');
-    case 'cave': return m.step === 'pre' && m.inside.includes(i) ? now_('cguard') : no('굴리기 전에, 동굴에 남은 사람이 써요');
+    case 'cave': return caveDecider(m) === i ? now_('cguard') : no('내 선택 차례에, 고르기 전에 써요');
     case 'ten': return tenTurn(m) === i ? (m.all ? no('이번 판에 이미 썼어요') : now_('tall')) : no('내 차례에 놓기 전에 써요');
     case 'balance': return m.step === 'say' && m.ord[m.ci] === i ? (m.three ? no('이미 썼어요') : now_('bthree')) : no('선일 때 주제를 내기 전에 써요');
     case 'liar': return m.step === 'judge' && m.bid ? now_('ladd') : no(`판정 때("거짓말!" 뒤) 선언한 문양의 아이템을 써요`);
@@ -110,7 +110,6 @@ function Cave({ S, i }: { S: GameState; i: number | null }) {
     {m.step === 'decide' && (dec === i ? <><div className="line"><strong>남을까요, 나갈까요?</strong> 나가면 {m.turn}점</div>
       <div className="bigbtns"><button className="btn primary big" onClick={() => cmd('cgo', { s: 1 })}>남기</button><button className="btn big" onClick={() => cmd('cgo', { s: 0 })}>나가기 ({m.turn}점)</button></div></>
       : <div className="line">{dec != null ? `${nm(dec)}이 고르는 중` : ''}</div>)}
-    {m.step === 'pre' && <div className="line"><strong>{secs(m.until)}초 뒤 굴림</strong> · 아이템으로 1을 지킬 수 있어요</div>}
     <div className="chips">{m.ord.map(k => <span key={k} className={`chip${m.inside.includes(k) ? ' on' : ' out'}`} style={m.inside.includes(k) ? {} : { textDecoration: 'none' }}><Dot k={k} />{nm(k)} {tot[k]}점{m.inside.includes(k) ? ' · 동굴 안' : k in m.got ? ` · 이번 ${m.got[k]}` : ''}</span>)}</div>
   </>;
 }

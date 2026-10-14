@@ -279,6 +279,24 @@ describe('applyAction', () => {
     }
   }, 300_000);
 
+  it('동굴 탐험: 아이템은 자기 선택 차례에만, 모두 고르면 잠깐(1.5초) 뒤 굴린다', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(5));
+    const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.board = Array(6).fill('cave'); S.die = 1; S.phase = 'clubs'; S.turn = null; startMinigame(S);
+    const m = S.mg as unknown as { step: string; inside: number[]; di: number; protect: number };
+    m.step = 'decide';
+    const item = (['S', 'H', 'D', 'C'] as const).flatMap(u => Array.from({ length: 13 }, (_, r) => `${u}${r + 1}` as Card)).find(isItem)!;
+    S.seats.forEach(p => p.hand = [item]);
+    const [a, b] = m.inside;
+    expect(canAct(S, S.seats[b].uid, { type: 'caveGuard', seat: b, item })).not.toBeNull();
+    expect(applyAction(S, S.seats[a].uid, { type: 'caveGuard', seat: a, item }).ok).toBe(true);
+    expect(m.protect).toBe(1);
+    for (const k of m.inside.slice()) applyAction(S, S.seats[k].uid, { type: 'caveGo', seat: k, stay: true });
+    expect(m.step).toBe('pre');
+    expect(canAct(S, S.seats[b].uid, { type: 'caveGuard', seat: b, item })).not.toBeNull();
+    T += 1500; advanceTimers(S); expect(m.step).toBe('show');
+  });
+
   it('눈치 게임은 뽑히면 규칙 설명 없이 바로 시작한다', () => {
     let T = 1_000_000; setClock(() => T); setRng(mulberry32(3));
     const S = newLobby(); for (let k = 0; k < 3; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });

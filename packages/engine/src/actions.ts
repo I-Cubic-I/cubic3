@@ -317,7 +317,7 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'chgMore': return mg.id === 'change' && mg.step === 'move' && mg.changer === a.seat && mg.need === 2 ? null : '바꾸는 사람이 옮기는 동안에 써요.';
     case 'chgGuess': return mg.id === 'change' && mg.step === 'guess' && mg.changer !== a.seat && (a.seat in mg.pts) && !(a.seat in mg.guesses) && Array.isArray(a.pieces) && a.pieces.length === mg.need && new Set(a.pieces).size === a.pieces.length && a.pieces.every(p => Number.isInteger(p) && p >= 0 && p < CHG_PIECES) ? null : `말 ${mg.id === 'change' ? mg.need : 2}개를 고르세요.`;
     case 'caveGo': return mg.id === 'cave' && caveDecider(mg) === a.seat ? null : '내 차례가 아니에요.';
-    case 'caveGuard': return mg.id === 'cave' && mg.step === 'pre' && mg.inside.includes(a.seat) ? null : '굴리기 전에, 동굴에 남은 사람이 써요.';
+    case 'caveGuard': return mg.id === 'cave' && caveDecider(mg) === a.seat ? null : '내 선택 차례에, 고르기 전에 써요.';
     case 'tenPlace': return mg.id === 'ten' && tenTurn(mg) === a.seat && (mg.hands[a.seat] || []).length > 0 && !mg.grabUntil && !!mg.slots[a.slot] && !(mg.slots.some(s => !s.length) && mg.slots[a.slot].length) ? null : '그 자리에는 놓을 수 없어요.';
     case 'tenGrab': return mg.id === 'ten' && (a.seat in mg.hands) && a.n === mg.flipN && !(a.seat in mg.grabs) && Number.isFinite(a.ms) ? null : '지금은 잡을 수 없어요.';
     case 'tenAll': return mg.id === 'ten' && tenTurn(mg) === a.seat && !mg.all ? null : '내 차례에 놓기 전에 써요.';

@@ -1,6 +1,6 @@
 /* 미니게임 2 (2026-10-12 추가분). 순수 함수: 상태를 받아 고친다 */
 import { R, cname, now, rnd, shuffle } from './cards';
-import { buildBundle, draw, endMinigame, fx, hasItem, log, N, rankBy, useItem } from './core';
+import { buildBundle, draw, endMinigame, fx, hasItem, log, N, rankBy, scoreOf, useItem } from './core';
 import type {
   Card, ChainMg, CurlShot, CurlingMg, DuelMg, FoldMg, GameState, LineMg, MidCrit, MidMg, SpeedMg, Stone, UpDownMg,
 } from './types';
@@ -51,7 +51,7 @@ export function duelEnd(S: GameState): void {
   m.last = { pan: m.pan, res: { ...m.res }, gain };
   log(S, `눈치 게임 ${m.pan}판: ` + Object.keys(m.pts).map(k => `${nm(+k)} ${m.res[+k] === 'fs' ? '부정출발' : m.res[+k] != null ? m.res[+k] + 'ms' : '못 쏨'}`).join(', '));
   fx(S, { t: 'duel', pan: m.pan, res: { ...m.res }, gain });
-  if (m.pan >= m.max) { endMinigame(S, rankBy(m.pts)); return; }
+  if (m.pan >= m.max) { endMinigame(S, rankBy(m.pts), scoreOf(m.pts, '점')); return; }
   duelPan(S);
 }
 
@@ -88,7 +88,7 @@ export function udShout(S: GameState, i: number, up: boolean): false | undefined
   log(S, `위냐 아래냐: ${call}에 "${up ? '위' : '아래'}!" → 합 ${sum}. ${nm(who)} +${gain}`);
   fx(S, { t: 'updown', ...m.last, who });
   m.turn++;
-  if (m.turn >= m.turns) { endMinigame(S, rankBy(m.pts)); return; }
+  if (m.turn >= m.turns) { endMinigame(S, rankBy(m.pts), scoreOf(m.pts, '점')); return; }
   m.step = 'grip'; m.grip = {}; m.call = null; m.regrip = false;
 }
 
@@ -173,7 +173,7 @@ export function curlScore(S: GameState): void {
   log(S, `말 컬링 ${m.end}판: ` + m.ord.map(j => `${nm(j)} ${got[j]}점`).join(', '));
   fx(S, { t: 'curl', end: m.end, got });
   m.end++;
-  if (m.end > m.ends) { const tot: Record<number, number> = {}; m.ord.forEach(j => tot[j] = m.score[j].reduce((a, v) => a + v, 0)); endMinigame(S, rankBy(tot)); return; }
+  if (m.end > m.ends) { const tot: Record<number, number> = {}; m.ord.forEach(j => tot[j] = m.score[j].reduce((a, v) => a + v, 0)); endMinigame(S, rankBy(tot), scoreOf(tot, '점')); return; }
   curlSeq(S);
 }
 
@@ -207,7 +207,7 @@ export function linePlay(S: GameState, i: number): false | undefined {
   if (caught) fx(S, { t: 'line', seat: i, c, stop, seats: [i, ...Object.keys(stop).map(Number)] });
   if (m.ord.every(j => !m.hands[j].length)) {
     S.deck.push(...m.pile, ...m.spent); m.pile = []; m.spent = []; shuffle(S.deck);
-    if (m.pan >= 3) { const pen: Record<number, number> = {}; m.ord.forEach(j => pen[j] = m.won[j].length); endMinigame(S, rankBy(pen, false)); return; }
+    if (m.pan >= 3) { const pen: Record<number, number> = {}; m.ord.forEach(j => pen[j] = m.won[j].length); endMinigame(S, rankBy(pen, false), scoreOf(pen, '', '벌점')); return; }
     linePan(S);
   }
 }
@@ -272,7 +272,7 @@ function speedPanEnd(S: GameState, w: number | null): void {
   m.piles.forEach(p => S.deck.push(...p)); m.piles = []; shuffle(S.deck);
   log(S, `스피드 ${m.pan}판: ${w != null ? nm(w) + '이 손패를 다 털었다. ' : ''}벌점 ` + m.ord.map(j => `${nm(j)} ${m.won[j].length}`).join(', '));
   fx(S, { t: 'banner', text: w != null ? '다 털었다!' : '판 끝', seats: w != null ? [w] : [], tone: 'win' });
-  if (m.pan >= 3) { const pen: Record<number, number> = {}; m.ord.forEach(j => pen[j] = m.won[j].length); endMinigame(S, rankBy(pen, false)); return; }
+  if (m.pan >= 3) { const pen: Record<number, number> = {}; m.ord.forEach(j => pen[j] = m.won[j].length); endMinigame(S, rankBy(pen, false), scoreOf(pen, '', '벌점')); return; }
   speedPan(S);
 }
 
@@ -306,7 +306,7 @@ export function foldAnswer(S: GameState, i: number, yes: boolean): false | undef
   m.last = { text: m.text, folded, safe };
   log(S, `손병호 게임: 접은 사람 ${folded.map(nm).join('·') || '없음'}`);
   fx(S, { t: 'fold', text: m.text, folded, safe, seats: folded });
-  if (m.ord.some(j => m.fingers[j] <= 0)) { endMinigame(S, rankBy(m.fingers)); return; }
+  if (m.ord.some(j => m.fingers[j] <= 0)) { endMinigame(S, rankBy(m.fingers), scoreOf(m.fingers, '', '손가락')); return; }
   m.ci = (m.ci + 1) % m.ord.length; m.step = 'say'; m.text = ''; m.ans = {}; m.safe = {};
 }
 
@@ -357,7 +357,7 @@ export function chainCaught(S: GameState, j: number): void {
 }
 export function chainNext(S: GameState): void {
   const m = mgOf<ChainMg>(S);
-  if (m.pan >= m.ord.length) { endMinigame(S, rankBy(m.coins, false)); return; }
+  if (m.pan >= m.ord.length) { endMinigame(S, rankBy(m.coins, false), scoreOf(m.coins, '🪙')); return; }
   chainPan(S);
 }
 
@@ -398,7 +398,7 @@ export function midPick(S: GameState, i: number, c: Card): false | undefined {
   log(S, `가운데 숫자 ${m.pan}판: ${m.ord.map(j => nm(j) + ' ' + cname(m.picks[j])).join(', ')}${m.deckCard ? ' / 덱 ' + cname(m.deckCard) : ''} → ${vd ? '무산' : win.map(nm).join('·') + ' 1점'}`);
   fx(S, { t: 'mid', ...m.last, seats: win });
   m.deckCard = null; m.picks = {};
-  if (m.pan >= MID_PANS) { const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.won[j].length); endMinigame(S, rankBy(sc)); return; }
+  if (m.pan >= MID_PANS) { const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.won[j].length); endMinigame(S, rankBy(sc), scoreOf(sc, '점')); return; }
   midPan(S);
 }
 

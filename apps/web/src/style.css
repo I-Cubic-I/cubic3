@@ -452,6 +452,11 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .stealfan{display:flex;justify-content:center;gap:0;padding:18px 10px 6px}
 .stealcard{width:70px;height:98px;margin:0 -8px;border-radius:9px;border:2px solid #e8b84a;background:repeating-linear-gradient(45deg,#24324f 0 6px,#2c3d60 6px 12px);box-shadow:0 8px 18px rgba(0,0,0,.45);cursor:pointer;transition:transform .15s,margin .15s}
 .stealcard:hover,.stealcard:focus-visible{margin-top:-14px;outline:none;box-shadow:0 0 0 3px var(--cyan),0 10px 22px rgba(0,0,0,.5)}
+/* 합계 점수(사용자 2026-10-15): 줄 오른쪽 끝 */
+.rk-row .rk-pts{margin-left:auto;font-size:22px;color:#fff1d6;white-space:nowrap}
+.rk-row .rk-pts small{font-size:13px;margin-left:2px;color:var(--muted)}
+.rk-row.first .rk-pts{color:var(--brass)}
+.rk-row .rk-pts small.pre{margin:0 4px 0 0}
 .rk-row .tie{font-size:11px;color:var(--muted);padding:1px 6px;border-radius:999px;border:1px solid var(--line)}
 .rk-row .tdie{margin-left:auto}
 /* ---- 2026-10-12 추가 미니게임 ---- */
@@ -796,3 +801,36 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 
 /* 손가락으로만 조작하는 기기: 키보드 단축키 표시를 숨긴다(ui/device.ts) */
 .no-keys kbd{display:none!important}
+
+/* 위쪽 석판 가운데 칸 = 버튼만(사용자 2026-10-14). 버튼은 칸 모양을 따라 아래가 둥근 돌판, 화면 크기에 따라 줄어든다 */
+.sh-btns{position:absolute;top:4px;display:flex;align-items:stretch;justify-content:center;pointer-events:auto}
+.sh-btns .slab-btn{flex:none;padding:0;border-radius:6px 6px calc(16px*var(--k,1)) calc(16px*var(--k,1));border:2px solid #140e0a;background:linear-gradient(#5a3c22,#3a2616);color:#ffd98a;box-shadow:inset 0 0 0 2px rgba(255,214,140,.35),inset 0 -3px 0 rgba(0,0,0,.35),0 2px 0 rgba(255,240,215,.25);letter-spacing:.04em;display:flex;align-items:center;justify-content:center}
+.sh-btns .slab-btn:hover{background:linear-gradient(#7a5228,#4e3218);color:#fff0c0}
+.sh-btns .slab-btn:active{transform:translateY(1px)}
+/* 지금 할 일: 석판 밖, 위쪽 가운데에 떠 있는 글자 */
+.sh-say{position:absolute;left:50%;transform:translateX(-50%);z-index:2;pointer-events:none;display:flex;align-items:center;gap:calc(10px*var(--k,1));white-space:nowrap;max-width:calc(100% - 24px)}
+.sh-say span{font-size:calc(15px*var(--k,1));color:#f4e6cc;text-shadow:0 2px 0 #140e0a,0 0 8px rgba(0,0,0,.8)}
+.sh-say .lead{font-family:'Black Han Sans',sans-serif;font-size:max(15px,calc(22px*var(--k,1)));color:#fff1d6;-webkit-text-stroke:1px #140e0a;text-shadow:0 2px 0 #140e0a,0 0 10px rgba(0,0,0,.7);overflow:hidden;text-overflow:ellipsis}
+.sh-say .say-t{min-width:calc(32px*var(--k,1));height:calc(32px*var(--k,1));border-radius:50%;display:grid;place-items:center;background:rgba(30,15,8,.75);border:2px solid #c99a3e;color:#ffcf7a;font-family:'Black Han Sans',sans-serif;font-size:calc(17px*var(--k,1));text-shadow:none}
+.sh-say .say-t.hot{color:#ff7a4a;border-color:#ff7a4a}
+
+/* 버튼이 없을 때의 빈 돌판(칸은 늘 남겨 둔다) */
+.sh-btns .slab-btn.idle{background:linear-gradient(#6e5a44,#57452f);box-shadow:inset 0 2px 4px rgba(0,0,0,.45),0 2px 0 rgba(255,240,215,.2);border-color:#2a1f17;opacity:.75}
+
+/* 보상 카드: 겹쳐 펼치기(왼쪽 위 모서리만 보인다) · 칩으로 접기(사용자 2026-10-14) */
+.sh-reward.ov{overflow:visible;display:block}
+.sh-reward .mc.ov{justify-content:flex-start;align-items:flex-start;padding:2px 0 0 3px;box-shadow:-2px 1px 3px rgba(0,0,0,.35)}
+.sh-reward .mc.ov b{line-height:.95}
+.sh-reward.chipmode{overflow:visible;pointer-events:auto}
+.rw-chip{height:calc(100% - 12px);align-self:center;padding:0 calc(12px*var(--k,1));border-radius:999px;border:2px solid #140e0a;background:#f4ead6;color:#2a1f17;font-family:'Black Han Sans',sans-serif;font-size:max(13px,calc(15px*var(--k,1)));cursor:pointer;white-space:nowrap}
+.rw-pop{position:absolute;right:0;top:calc(100% + 4px);display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:min(80vw,320px);padding:8px;border-radius:10px;background:#a39581;border:2px solid #140e0a;box-shadow:0 8px 18px rgba(0,0,0,.5);pointer-events:auto}
+
+/* 아직 누를 수 없는 버튼(선택지를 고르기 전) */
+.sh-btns .slab-btn:disabled{background:linear-gradient(#6e5a44,#57452f);color:rgba(255,230,180,.45);box-shadow:inset 0 2px 4px rgba(0,0,0,.45);border-color:#2a1f17;cursor:default;transform:none}
+
+/* 동굴 탐험: 빠진 1 주사위 칸(사용자 2026-10-15). 위쪽 석판과 같은 돌빛·검은 테두리의 화면 UI, 크기는 아레나가 --p(돌판 높이)로 정한다 */
+.cave-tray{position:absolute;left:50%;transform:translateX(-50%);z-index:1;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:calc(var(--p)*.195);box-sizing:border-box;background:linear-gradient(#ab9c86,#8b7d69);border:3px solid #140e0a;border-radius:calc(var(--p)*.16);box-shadow:inset 0 2px 0 rgba(255,240,215,.28),0 3px 8px rgba(0,0,0,.45)}
+.cave-tray .ct-slot{width:calc(var(--p)*.7);height:calc(var(--p)*.7);border-radius:calc(var(--p)*.1);background:#2a1d12;box-shadow:inset 0 3px 6px rgba(0,0,0,.65),0 1px 0 rgba(255,240,215,.25);display:grid;place-items:center}
+.cave-tray .ct-die{width:calc(var(--p)*.58);height:calc(var(--p)*.58);box-sizing:border-box;border-radius:calc(var(--p)*.12);background:#f1e6cf;border:2px solid #140e0a;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18);display:grid;place-items:center;opacity:0;transform:scale(var(--pop,1))}
+.cave-tray .ct-slot.on .ct-die{opacity:1}
+.cave-tray .ct-die span{width:calc(var(--p)*.17);height:calc(var(--p)*.17);border-radius:50%;background:#b0261e}

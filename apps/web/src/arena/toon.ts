@@ -90,6 +90,8 @@ export function clipObj(o: THREE.Object3D, planes: THREE.Plane[] | null): void {
     } else if (m.userData.mat0) { (m.material as THREE.Material).dispose(); m.material = m.userData.mat0; delete m.userData.mat0; }
   });
 }
+/** 이미 만든 메시에 잉크 테두리를 붙인다(무대 바위처럼 나중에 고르는 경우) */
+export function addInk(m: THREE.Mesh, w = 0.05): void { const o = new THREE.Mesh(hullGeo(m.geometry), inkOf(w)); o.name = 'ink'; m.add(o); }
 /** 테두리 굵기를 나중에 바꾸거나 숨기기 */
 export function setInk(o: THREE.Object3D, on: boolean): void { o.traverse(c => { if (c.name === 'ink') c.visible = on; }); }
 

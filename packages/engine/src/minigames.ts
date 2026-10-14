@@ -1,6 +1,6 @@
 /* 미니게임 (순수 함수: 상태를 받아 고친다) */
 import { R, SYM, SUITS, U, cname, d6, now, shuffle } from './cards';
-import { buildBundle, draw, endMinigame, fx, hasItem, log, N, outGroups, rankBy, useItem } from './core';
+import { buildBundle, draw, endMinigame, fx, hasItem, log, N, outGroups, rankBy, scoreOf, useItem } from './core';
 import type {
   AuctionMg, BalloonMg, BombMg, Card, CountMg, GameState, Hand, HoldMg, OvnMg, RaceMg, Suit,
 } from './types';
@@ -25,7 +25,7 @@ function holdNext(S: GameState): void {
   const m = mgOf<HoldMg>(S); m.k = 0; m.s = 0; m.ci++;
   if (m.ci >= m.ord.length) {
     m.ci = 0; m.pan++;
-    if (m.pan > 3) { const sc: Record<number, number> = {}; m.ord.forEach(i => sc[i] = m.tot[i]); endMinigame(S, rankBy(sc)); return; }
+    if (m.pan > 3) { const sc: Record<number, number> = {}; m.ord.forEach(i => sc[i] = m.tot[i]); endMinigame(S, rankBy(sc), scoreOf(sc, '점')); return; }
     log(S, `버티기 ${m.pan}판.`);
   }
 }
@@ -109,7 +109,7 @@ export function auctionBid(S: GameState, i: number, c: Card): void {
 function auctionEnd(S: GameState): void {
   const m = mgOf<AuctionMg>(S); const sc: Record<number, number> = {};
   Object.keys(m.won).forEach(k => sc[+k] = m.won[+k].reduce((a, c) => a + R(c), 0));
-  log(S, '눈치 경매 점수: ' + Object.keys(sc).map(k => `자리 ${+k + 1}=${sc[+k]}`).join(', ')); endMinigame(S, rankBy(sc));
+  log(S, '눈치 경매 점수: ' + Object.keys(sc).map(k => `자리 ${+k + 1}=${sc[+k]}`).join(', ')); endMinigame(S, rankBy(sc), scoreOf(sc, '점'));
 }
 
 /* ---- 풍선 불기 ---- */
@@ -271,7 +271,7 @@ export function countAnswer(S: GameState, i: number, a: number): false | undefin
   m.pan++;
   if (m.pan > 3) {
     S.deck.push(...m.seq!); if (m.dec) S.deck.push(m.dec); shuffle(S.deck); m.seq = null; m.dec = null;
-    endMinigame(S, rankBy(m.hits)); return;
+    endMinigame(S, rankBy(m.hits), scoreOf(m.hits, '점')); return;
   }
   countPan(S);
 }
@@ -293,7 +293,9 @@ export function raceSwap(S: GameState, i: number, item: Card, s: Suit): false | 
 function raceEnd(S: GameState, win: Suit): void {
   const m = mgOf<RaceMg>(S); const first = m.order.filter(j => m.bet[j] === win); const sc: Record<number, number> = {};
   m.order.filter(j => m.bet[j] !== win).forEach(j => sc[j] = m.pos[m.bet[j]]);
-  endMinigame(S, (first.length ? [first] : []).concat(rankBy(sc)));
+  // 결과판: 고른 문양이 간 칸 수(우승 문양 포함)
+  const at: Record<number, number> = {}; m.order.forEach(j => at[j] = m.pos[m.bet[j]]);
+  endMinigame(S, (first.length ? [first] : []).concat(rankBy(sc)), scoreOf(at, '칸'));
 }
 function raceLimit(S: GameState): void {
   const m = mgOf<RaceMg>(S); const mx = Math.max(...SUITS.map(s => m.pos[s])); const lead = SUITS.filter(s => m.pos[s] === mx);
@@ -301,7 +303,9 @@ function raceLimit(S: GameState): void {
   fx(S, { t: 'banner', text: `${lead.map(s => SYM[s]).join('·')} 우승!`, tone: 'win' });
   const first = m.order.filter(j => lead.includes(m.bet[j])); const sc: Record<number, number> = {};
   m.order.filter(j => !lead.includes(m.bet[j])).forEach(j => sc[j] = m.pos[m.bet[j]]);
-  endMinigame(S, (first.length ? [first] : []).concat(rankBy(sc)));
+  // 결과판: 고른 문양이 간 칸 수(우승 문양 포함)
+  const at: Record<number, number> = {}; m.order.forEach(j => at[j] = m.pos[m.bet[j]]);
+  endMinigame(S, (first.length ? [first] : []).concat(rankBy(sc)), scoreOf(at, '칸'));
 }
 export function raceFlip(S: GameState, i: number): false | undefined {
   const m = mgOf<RaceMg>(S); if (m.step !== 'race' || i !== S.first) return false; const c = draw(S);

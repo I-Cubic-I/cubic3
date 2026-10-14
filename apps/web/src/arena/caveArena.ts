@@ -16,18 +16,21 @@ import { CAVE_SHOW, CAVE_SHOW_FALL, type CaveMg, caveDecider, now } from '@cubic
 import { SEATCOL } from '../game';
 import { useStore } from '../store';
 import { cmd } from '../flow';
-import { noKeys } from '../ui/device';
 import { usePrefs } from '../prefs';
-import { type Wizard, buildDie, buildDots, buildWizard, keyCap, lightColumn, portalDisc, setDie, softTex } from './props';
-import { INK, INK_U, backOut, canvasTex, clamp01, ease, glow, ink, toon } from './toon';
+import { type Wizard, buildDie, buildDots, buildWizard, lightColumn, portalDisc, setDie, softTex } from './props';
+import { INK, INK_U, addInk, backOut, canvasTex, clamp01, ease, glow, ink, toon } from './toon';
 import { slabH, uiScale } from '../ui/scale';
+import { arrow3D, crystal, rng, rockGeo, rockMat, rockWall, stalGeo } from './caveParts';
+import { GATHER_T, type Hazard, type RoomState, type ThemeKey, MAP_NODES, THEMES, buildBandage, buildFog, buildMaze, flyTo, mapTex, markerTex, themeOf } from './caveThemes';
 
 const col = (j: number) => SEATCOL[j % 5];
 /** 천장 높이 · 무리가 서는 곳 · 막힌 바위 · 무대 반폭 */
 const CEIL = 4.3, CX = -0.6, ROCK_X = 3.6, HALF = 7;
 /** 공개(굴림) 연출 시각(초) [제안]. 버틴 턴: 주사위 → 1은 천장으로 → 폭파 → 오른쪽으로 → 어두워짐 → 장면 바꿈 → 밝아짐 → 왼쪽에서 들어옴 */
-const RT = { land: 0.9, up: 1.25, hit: 1.75, blast: 1.9, out: 2.6, fadeOut: 3.2, swap: 3.6, fadeIn: 3.75, inEnd: 4.7, shake: 1.9, fall: 2.15, buried: 2.55 };
+const RT = { land: 0.9, up: 1.25, hit: 1.75, blast: 1.9, out: 2.6, fadeOut: 3.2, swap: 3.6, fadeIn: 3.75, inEnd: 4.7, gather: 4.55, shake: 1.9, fall: 2.15, buried: 2.55 };
 const LEAVE_T = 2.2;
+/** 1 주사위 칸(로컬 크기, 화면 UI 칸과 같은 비율): 날아가는 주사위의 목적지 */
+const TRAY_H = 1.1, TRAY_W = 3.4, TRAY_GAP = 0.985, TRAY_DIE = 0.64, TRAY_Z = 1.6;
 const FOG = '#b98a5c';
 /** 망원 카메라 화각(원근 왜곡을 줄여 층이 겹친 것처럼, 사용자 2026-10-14) */
 const FOV = 18;
@@ -37,6 +40,10 @@ interface CW {
   w: Wizard; spirit: THREE.Group; light: THREE.PointLight; dots: THREE.Group;
   pos: THREE.Vector3; born: number; leaveAt: number; gone: boolean; got: number;
   scroll: THREE.Group; portal: THREE.Mesh; column: THREE.Mesh; pop: THREE.Sprite;
+  /** 전진을 고른 표시(머리 위 작은 화살표) · "전진!" 말풍선을 띄운 시각 */
+  badge: THREE.Group; stayAt: number;
+  /** 무너짐에 깔린 적이 있으면 다음 판부터 붕대 */
+  band: THREE.Group; hurt: number;
 }
 
 export class CaveArena {
@@ -50,7 +57,7 @@ export class CaveArena {
   private dust: THREE.Mesh[] = [];
   private block!: THREE.Group; private blockLight!: THREE.PointLight;
   private chunks: { m: THREE.Mesh; v: THREE.Vector3; p0: THREE.Vector3 }[] = [];
-  private gems: THREE.Group[] = [];
+  private gems: THREE.Object3D[] = [];
   private flash!: THREE.PointLight; private burst!: THREE.Mesh;
   /** 무리 위쪽 천장(바위·종유석·균열이 생기는 앞 바위면): 1이 빠질 때마다 통째로 쿵 내려앉는다 */
   private ceil = new THREE.Group(); private ceilY = 0; private ceilFrom = 0; private ceilTo = 0; private ceilAt = -9;
@@ -59,7 +66,19 @@ export class CaveArena {
   private cracks: { core: THREE.Mesh; edge: THREE.Mesh; n: number; at: number }[] = []; private crackN = 0;
   private sign!: THREE.Mesh; private signN = -1; private entrance!: THREE.Group;
   private fade: THREE.Mesh; private sides: THREE.Mesh;
-  private prev: { pan: number; inside: number[]; step: string } | null = null;
+  private prev: { pan: number; inside: number[]; step: string; di: number } | null = null;
+  /** 판 사이 장면(사용자 2026-10-14): 어두워짐(start→black) → "N판" → 밝아짐(end→). 어두운 동안 무대를 정리한다 */
+  private trans = { start: -9, black: -9, end: -9, pan: 0, reset: true };
+  private title!: THREE.Mesh; private titlePan = -1; private marker!: THREE.Mesh;
+  /** 장소(판마다): 무대 묶음 · 근경 묶음 · 막힌 것 · 재료 · 위험 */
+  private themes = {} as Record<ThemeKey, { root: THREE.Group; fg: THREE.Group; block: THREE.Group; blockLight: THREE.PointLight; gems: THREE.Object3D[]; hazard: Hazard | null; blast?: boolean; advance?: (b: number, t: number, cam: THREE.Vector3) => void; room?: (st: RoomState, t: number, cam: THREE.Vector3, party: THREE.Vector3[]) => void }>;
+  /** 방 채집: 어느 방에서 언제 시작했는지 */
+  private gKey = ''; private gT = -9;
+  private themeKey: ThemeKey = 'cave'; private hemi!: THREE.HemisphereLight;
+  /** 무너짐에 깔린 사람(다음 판부터 붕대) */
+  private hurtNext = new Set<number>(); private hurtKey = '';
+  /** 정해 둔 자리(사용자 2026-10-14): 누가 귀환해도 남은 사람은 그 자리 그대로, 다음 장면으로 넘어갈 때(턴 장면 전환·새 판) 다시 정한다 */
+  private slots = new Map<number, number>(); private slotKey = '';
   private panAt = -9;
   private shakeT = -9; private shakeK = 0;
   private camX = 0; private camD = 11; private camY = 2.4; private lookY = 2;
@@ -67,8 +86,12 @@ export class CaveArena {
   /** 카메라에 붙은 흐린 근경 */
   private fg = new THREE.Group(); private fov0 = 40;
   /** 고르기 화살표(사용자 2026-10-14): 전진 = 머리 위 오른쪽, 나가기 = 출구 쪽 왼쪽. 눌러 고르고 [확정] */
-  private pick!: { fwd: THREE.Group; exit: THREE.Group; fwdLbl: THREE.Sprite; exitLbl: THREE.Sprite; capL: THREE.Sprite; capR: THREE.Sprite };
+  private pick!: { fwd: THREE.Group; exit: THREE.Group; fwdLbl: THREE.Sprite; exitLbl: THREE.Sprite };
   private ray = new THREE.Raycaster(); private ndc = new THREE.Vector2(-9, -9); private hover: 'stay' | 'leave' | null = null;
+  /** 위쪽 가운데 1 주사위 칸(사용자 2026-10-15): 돌판에 칸 3개, 빠진 1 주사위가 하나씩 꽂힌다. 화면에 붙은 듯 카메라 앞 일정 자리 */
+  private trayScene = new THREE.Scene(); private tray = new THREE.Group(); private trayDie: THREE.Group[] = []; private trayN = 0; private trayPan = -1; private trayAt = [-9, -9, -9]; private trayK = 1;
+  /** 칸 돌판은 위쪽 석판과 같은 화면 UI(사용자 2026-10-15: 헤더와 같은 그림). 3D 칸 자리는 날아가는 주사위의 목적지로만 쓴다 */
+  private trayEl = document.createElement('div'); private traySlots: HTMLElement[] = [];
   private composer: EffectComposer | null = null; private bokeh: BokehPass | null = null; private size = new THREE.Vector2();
 
   constructor(private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private dom: HTMLCanvasElement, private gl: THREE.WebGLRenderer) {
@@ -76,15 +99,24 @@ export class CaveArena {
     this.fov0 = camera.fov; camera.fov = FOV; camera.updateProjectionMatrix();
     // 갈색 안개: 멀수록 밝은 황토빛으로 흐려진다
     scene.fog = new THREE.Fog(FOG, 10, 34);
-    scene.add(new THREE.HemisphereLight('#e2bd8e', '#24160c', 0.55));
+    this.hemi = new THREE.HemisphereLight('#e2bd8e', '#24160c', 0.55); scene.add(this.hemi);
     const back = new THREE.DirectionalLight('#ffd9a0', 0.6); back.position.set(2, 8, -12); scene.add(back);
     this.buildCave();
     scene.add(this.fg);
+    // 2판 미궁 · 3판 안개 숲
+    for (const [key, build] of [['maze', buildMaze], ['fog', buildFog]] as const) {
+      const root = new THREE.Group(), fg = new THREE.Group(); scene.add(root); this.fg.add(fg);
+      const parts = build(root, fg, CX, ROCK_X, CEIL); this.themes[key] = { root, fg, ...parts };
+    }
+    { const m0 = this.mg(); this.applyTheme(themeOf(m0?.pan ?? 1).key); }
+    this.inkStage();
     for (let k = 0; k < 3; k++) {
       const d = buildDie(1); d.scale.setScalar(0.5); d.visible = false; scene.add(d); this.dice.push(d);
       const g = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), glow('#ff5a3a', 0.9)); (g.material as THREE.MeshBasicMaterial).map = softTex(); g.visible = false; scene.add(g); this.diceGlow.push(g);
       const sh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), glow('#8fe3ff', 0.35)); sh.visible = false; scene.add(sh); this.shields.push(sh);
     }
+    this.buildTray(); this.trayScene.add(this.tray, new THREE.HemisphereLight('#f2dcb8', '#3a2818', 0.9));
+    { const l = new THREE.DirectionalLight('#fff1d6', 1.4); l.position.set(0.3, 6, 30); this.trayScene.add(l); }
     for (let k = 0; k < 7; k++) { const p = new THREE.Mesh(rockGeo(500 + k, 0, 0.3), rockMat('#5e3e28')); p.scale.setScalar(0.08 + (k % 3) * 0.04); p.visible = false; scene.add(p); this.pebbles.push({ m: p, v: new THREE.Vector3(), on: false }); }
     for (let k = 0; k < 8; k++) { const b = new THREE.Mesh(rockGeo(600 + k, 1, 0.35), rockMat(k % 2 ? '#5a3a25' : '#4a2f1e')); b.scale.set(0.5 + (k % 3) * 0.2, 0.42 + (k % 2) * 0.15, 0.5); b.visible = false; scene.add(b); this.boulders.push(b); }
     for (let k = 0; k < 7; k++) { const d = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.8), new THREE.MeshBasicMaterial({ color: '#d8b48a', map: softTex(), transparent: true, opacity: 0, depthWrite: false })); d.visible = false; scene.add(d); this.dust.push(d); }
@@ -93,6 +125,10 @@ export class CaveArena {
     this.sides = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: sideTex(), transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
     this.fade = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
     this.sides.renderOrder = 1; this.fade.renderOrder = 2; this.hud.add(this.sides, this.fade);
+    this.title = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, opacity: 0 }));
+    this.title.renderOrder = 3; this.title.visible = false; this.hud.add(this.title);
+    this.marker = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: markerTex(), transparent: true, depthTest: false, depthWrite: false, opacity: 0 }));
+    this.marker.renderOrder = 4; this.marker.visible = false; this.hud.add(this.marker);
     scene.add(camera);
     this.buildPick();
     dom.addEventListener('pointermove', this.onMove); dom.addEventListener('pointerdown', this.onDown); dom.addEventListener('pointerleave', this.onLeave);
@@ -103,16 +139,15 @@ export class CaveArena {
     this.dom.removeEventListener('pointermove', this.onMove); this.dom.removeEventListener('pointerdown', this.onDown); this.dom.removeEventListener('pointerleave', this.onLeave); this.dom.style.cursor = '';
     this.camera.fov = this.fov0; this.camera.updateProjectionMatrix();
     this.hud.clear(); this.scene.clear(); this.scene.background = null; this.scene.fog = null;
-    this.composer?.dispose();
+    this.composer?.dispose(); this.trayEl.remove();
   }
   /* ---------------- 고르기 화살표 ---------------- */
   private buildPick(): void {
     const fwd = arrow3D('#ffd36a'), exit = arrow3D('#9fe3ff'); exit.rotation.y = Math.PI;
     fwd.userData.pick = 'stay'; exit.userData.pick = 'leave';
     const fwdLbl = textSprite('전진'), exitLbl = textSprite('나가기');
-    const capL = keyCap('←', 0.3), capR = keyCap('→', 0.3);
-    for (const o of [fwd, exit, fwdLbl, exitLbl, capL, capR]) { o.visible = false; this.scene.add(o); }
-    this.pick = { fwd, exit, fwdLbl, exitLbl, capL, capR };
+    for (const o of [fwd, exit, fwdLbl, exitLbl]) { o.visible = false; this.scene.add(o); }
+    this.pick = { fwd, exit, fwdLbl, exitLbl };
   }
   private pickAt(): 'stay' | 'leave' | null {
     const p = this.pick; if (!p.fwd.visible) return null;
@@ -124,10 +159,10 @@ export class CaveArena {
   private onMove = (e: PointerEvent) => { this.setNdc(e); this.hover = this.pickAt(); this.dom.style.cursor = this.hover ? 'pointer' : ''; };
   private onLeave = () => { this.hover = null; this.dom.style.cursor = ''; };
   private onDown = (e: PointerEvent) => { if (e.button > 0) return; this.setNdc(e); const h = this.pickAt(); if (h) cmd('csel', { s: h }); };
-  private drawPick(m: CaveMg, t: number): void {
+  private drawPick(m: CaveMg, t: number, hide = false): void {
     const st = useStore.getState(); const p = this.pick;
-    const mine = m.step === 'decide' && st.ctl != null && caveDecider(m) === st.ctl;
-    for (const o of [p.fwd, p.exit, p.fwdLbl, p.exitLbl, p.capL, p.capR]) o.visible = mine;
+    const mine = !hide && m.step === 'decide' && st.ctl != null && caveDecider(m) === st.ctl;
+    for (const o of [p.fwd, p.exit, p.fwdLbl, p.exitLbl]) o.visible = mine;
     if (!mine) { if (this.hover) { this.hover = null; this.dom.style.cursor = ''; } return; }
     const sel = st.ui.cave;
     const look = (g: THREE.Group, key: 'stay' | 'leave') => {
@@ -135,15 +170,14 @@ export class CaveArena {
       g.scale.setScalar((on ? 1.18 : sel ? 0.85 : 1) * (hv ? 1.08 : 1));
       g.traverse(c => { const mt = (c as THREE.Mesh).material as THREE.MeshToonMaterial; if (mt && 'emissiveIntensity' in mt && c.name !== 'ink') mt.emissiveIntensity = on ? 1.1 : sel ? 0.15 : 0.45 + Math.sin(t * 4) * 0.15; });
     };
-    // 전진: 마법사들 머리 위(천장이 내려오면 같이 조금 낮아진다), 오른쪽으로 살짝 밀었다 당겼다
-    const fy = 3.35 + this.ceilY * 0.5;
-    p.fwd.position.set(CX + 0.1 + (sel === 'stay' ? Math.sin(t * 5) * 0.08 : 0), fy, 1.3); look(p.fwd, 'stay');
-    p.fwdLbl.position.set(CX + 0.1, fy + 0.5, 1.4);
+    // 전진: 무리 오른쪽(앞길 쪽), 나가기와 같은 높이(사용자 2026-10-15). 고르면 오른쪽으로 살짝 밀었다 당겼다
+    const fx = CX + 2.7, fy = 2.4;
+    p.fwd.position.set(fx + (sel === 'stay' ? Math.sin(t * 5) * 0.08 : 0), fy, 0.9); look(p.fwd, 'stay');
+    p.fwdLbl.position.set(fx, fy + 0.55, 1.0);
     // 나가기: 출구(왼쪽) 쪽
     p.exit.position.set(-3.5 - (sel === 'leave' ? Math.sin(t * 5) * 0.08 : 0), 2.4, 0.9); look(p.exit, 'leave');
     setText(p.exitLbl, `나가기 +${m.turn}`); p.exitLbl.position.set(-3.5, 2.95, 1.0);
-    const keys = !noKeys(); p.capL.visible = p.capR.visible = keys;
-    p.capL.position.set(-4.55, 2.4, 1.2); p.capR.position.set(CX + 1.15, fy, 1.4);
+    // 화살표에는 단축키(←/→)를 붙이지 않는다(사용자 2026-10-15). 키보드로 고르기는 그대로
   }
 
   private mg(): CaveMg | null { const S = useStore.getState().S; return S?.phase === 'mg' && S.mg?.id === 'cave' ? S.mg : null; }
@@ -161,27 +195,32 @@ export class CaveArena {
   /** 직접 그린다(심도 효과를 거쳐서) */
   render(): void {
     const low = usePrefs.getState().quality === 'low';
-    if (!this.composer || low) { this.gl.render(this.scene, this.camera); this.drawHud(); return; }
+    if (!this.composer || low) { this.gl.render(this.scene, this.camera); this.drawTrayLayer(); this.drawHud(); return; }
     this.gl.getSize(this.size);
     const c = this.composer as unknown as { _width: number; _height: number };
     if (c._width !== this.size.x || c._height !== this.size.y) { this.composer.setPixelRatio(this.gl.getPixelRatio()); this.composer.setSize(this.size.x, this.size.y); }
     // 초점: 무리가 서는 깊이
     (this.bokeh!.uniforms as Record<string, { value: number }>).focus.value = this.camD;
     this.composer.render();
+    this.drawTrayLayer();
     this.drawHud();
   }
+  /** 칸으로 날아가는 1 주사위: 장면 효과(색 단계·심도) 밖에서, 천장에 가리지 않게 맨 앞에 */
+  private drawTrayLayer(): void { const ac = this.gl.autoClear; this.gl.autoClear = false; this.gl.clearDepth(); this.gl.render(this.trayScene, this.camera); this.gl.autoClear = ac; }
   private drawHud(): void { const ac = this.gl.autoClear; this.gl.autoClear = false; this.gl.render(this.hud, this.hudCam); this.gl.autoClear = ac; }
 
   /* ---------------- 동굴 짓기 ---------------- */
   private buildCave(): void {
-    const sc = this.scene; const r = rng(7);
+    let caveRoom: (st: RoomState, t: number, cam: THREE.Vector3, party: THREE.Vector3[]) => void = () => {};
+    const caveRoot = new THREE.Group(), caveFg = new THREE.Group(); this.scene.add(caveRoot); this.fg.add(caveFg);
+    const sc = caveRoot; const r = rng(7);
     const rock = (geo: THREE.BufferGeometry, c: string, x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0) => { const m = new THREE.Mesh(geo, rockMat(c)); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.set(r() * 0.4, ry || r() * 6, r() * 0.4); sc.add(m); return m; };
     const shades = ['#5b3b26', '#4c311f', '#6a4630', '#3f2819'];
     // 바닥: 거의 평평하게, 위에 작은 돌멩이
     const fg = new THREE.BoxGeometry(34, 1, 22, 34, 1, 22); const fp = fg.attributes.position;
     for (let i = 0; i < fp.count; i++) if (fp.getY(i) > 0) fp.setY(i, 0.5 + (r() - 0.5) * 0.08);
     fg.computeVertexNormals();
-    const floor = new THREE.Mesh(fg, rockMat('#4a2f1f')); floor.position.set(1, -0.5, -5); sc.add(floor);
+    const floor = new THREE.Mesh(fg, rockMat('#4a2f1f')); floor.position.set(1, -0.5, -5); floor.userData.noInk = true; sc.add(floor);
     for (let k = 0; k < 46; k++) { const s = 0.06 + r() * r() * 0.32; rock(rockGeo(k, 0, 0.35), shades[k % 4], -10 + r() * 22, s * 0.3, -12 + r() * 15, s * 1.4, s, s * 1.2); }
     // 뒤쪽 바위 벽과 중간 덩어리(멀수록 안개에 묻혀 밝아진다)
     for (let k = 0; k < 18; k++) { const s = 2 + r() * 2.5; rock(rockGeo(100 + k, 1, 0.4), shades[k % 4], -14 + k * 1.7 + r(), s * 0.6, -15 - r() * 3, s, s * 1.4, s); }
@@ -202,11 +241,11 @@ export class CaveArena {
     }
     // 앞(카메라 가까이, 초점이 흐려진다): 양옆 큰 바위와 늘어진 종유석
     // (망원 카메라라 장면 속에 두면 작아져서, 카메라 앞 일정 거리에 붙여 화면을 감싸게 한다: drawCamera)
-    const fgRock = (seed: number, x: number, y: number, z: number, sx: number, sy: number, sz: number) => { const m = new THREE.Mesh(rockGeo(seed, 1, 0.4), rockMat('#2c1b10')); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.set(r() * 0.4, r() * 6, r() * 0.4); m.userData.fg = true; this.fg.add(m); };
+    const fgRock = (seed: number, x: number, y: number, z: number, sx: number, sy: number, sz: number) => { const m = new THREE.Mesh(rockGeo(seed, 1, 0.4), rockMat('#2c1b10')); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.set(r() * 0.4, r() * 6, r() * 0.4); m.userData.fg = true; caveFg.add(m); };
     fgRock(700, -4.9, -0.9, 0, 1.6, 2.4, 1.2);
     fgRock(701, 5.1, -1.8, 0.2, 1.8, 1.4, 1.2);
     fgRock(702, 0.7, -2.7, 0.5, 2.4, 0.9, 1.0);
-    for (const [x, len, rad, z] of [[2.3, 2.6, 0.5, -0.3], [-1.9, 1.6, 0.35, 0.1], [0.3, 1.0, 0.28, -0.7]]) { const m = new THREE.Mesh(stalGeo(800 + x * 10, rad, len), rockMat('#2a190f')); m.position.set(x, 2.6, z); m.userData.fg = true; this.fg.add(m); }
+    for (const [x, len, rad, z] of [[2.3, 2.6, 0.5, -0.3], [-1.9, 1.6, 0.35, 0.1], [0.3, 1.0, 0.28, -0.7]]) { const m = new THREE.Mesh(stalGeo(800 + x * 10, rad, len), rockMat('#2a190f')); m.position.set(x, 2.6, z); m.userData.fg = true; caveFg.add(m); }
     // 부러진 나무 울타리
     const wood = rockMat('#3a2416');
     for (const x0 of [-5.2, 5.6]) for (let k = 0; k < 4; k++) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.9 + r() * 0.5, 0.09), wood); st.position.set(x0 + k * 0.32, 0.45, -1.4); st.rotation.z = (r() - 0.5) * 0.4; sc.add(st); }
@@ -215,19 +254,40 @@ export class CaveArena {
     const day = new THREE.Mesh(new THREE.PlaneGeometry(9, 7), new THREE.MeshBasicMaterial({ color: '#fff1d2', map: softTex(), transparent: true, depthWrite: false, fog: false })); day.position.set(-12, 2.2, -10); this.entrance.add(day);
     const sun = new THREE.PointLight('#ffe6b8', 60, 18, 1.3); sun.position.set(-9, 3, -6); this.entrance.add(sun);
     // 깊이 표지(나무 말뚝 + 판)
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.12), wood); post.position.set(CX - 2.6, 0.75, -0.6); sc.add(post);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 0.12), wood); post.position.set(CX - 2.6, 0.75, -0.6); this.scene.add(post);
     this.sign = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.08), [wood, wood, wood, wood, new THREE.MeshStandardMaterial({ map: signTex(0), roughness: 1 }), wood]);
-    this.sign.position.set(CX - 2.6, 1.55, -0.55); this.sign.rotation.z = -0.05; sc.add(this.sign);
-    // 앞을 막은 바위 + 박힌 크리스탈(스스로 빛나고 주변을 비춘다)
+    this.sign.position.set(CX - 2.6, 1.55, -0.55); this.sign.rotation.z = -0.05; this.scene.add(this.sign);
+    // 앞을 막은 바위벽(사용자 2026-10-15: 동굴은 막는 벽을 폭파해 나아간다). 크리스탈은 벽이 아니라 다음 방에서 모은다
     this.block = new THREE.Group(); this.block.position.set(ROCK_X + 0.6, 0, -0.2); sc.add(this.block);
-    const bm = new THREE.Mesh(rockGeo(900, 1, 0.3), rockMat('#4e331f')); bm.scale.set(1.5, CEIL / 2 + 0.6, 1.4); bm.position.y = CEIL / 2 - 0.1; this.block.add(bm);
+    // 크고 작은 얼룩 바위를 쌓은 더미(사용자 2026-10-15: 한 덩이는 너무 밋밋하다)
+    this.block.add(rockWall(900, ['#6a4630', '#5b3b26', '#7a5236', '#4c311f'], CEIL));
+    // 벽이 어둠에 묻히지 않게 앞에서 따뜻하게 비춘다
+    this.blockLight = new THREE.PointLight('#ffcf9a', 5, 5, 1.5); this.blockLight.position.set(-1.6, 1.8, 1.4); this.block.add(this.blockLight);
+    // 다음 방의 크리스탈 군집(사용자 2026-10-15): 벽에 박힌 것을 깨는 대신, 새 방에 들어와 바닥·벽에서 떼어 내 모은다
     const cc = ['#8ff3ff', '#d2b6ff', '#8ff7cf'];
-    for (let k = 0; k < 3; k++) { const c = crystal(cc[k], k + 1); c.position.set(-1.35 + k * 0.2, 0.55 + k * 0.95, 1.0 - k * 0.2); c.rotation.set(0.3, 0, 0.55 - k * 0.2); c.scale.setScalar(1.15 - k * 0.12); this.block.add(c); }
-    this.blockLight = new THREE.PointLight('#9fe8ff', 6, 5, 1.5); this.blockLight.position.set(-1.3, 1.6, 1.0); this.block.add(this.blockLight);
-    for (let k = 0; k < 8; k++) { const m = new THREE.Mesh(rockGeo(950 + k, 0, 0.35), rockMat('#4e331f')); m.scale.setScalar(0.25 + (k % 3) * 0.12); m.visible = false; sc.add(m); this.chunks.push({ m, v: new THREE.Vector3(), p0: new THREE.Vector3() }); }
-    for (let k = 0; k < 3; k++) { const g = crystal(cc[k], k + 11); g.scale.setScalar(0.6); g.visible = false; sc.add(g); this.gems.push(g); }
-    this.flash = new THREE.PointLight('#ffd9a0', 0, 10, 1.4); this.flash.position.set(ROCK_X, 1.8, 1.2); sc.add(this.flash);
-    this.burst = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), glow('#ffc070', 1)); (this.burst.material as THREE.MeshBasicMaterial).map = softTex(); this.burst.visible = false; sc.add(this.burst);
+    const clusters: { g: THREE.Group; p: THREE.Vector3; s: number }[] = [];
+    const cps: [number, number, number, number, number][] = [[CX + 2.0, 0, 0.8, 1.3, 0.1], [CX + 2.85, 0, 0.15, 1.05, -0.2], [CX + 1.2, 0, -0.9, 0.9, 0.25]];
+    cps.forEach(([x, y, z, sc_, rz], k) => { const g = crystal(cc[k], k + 1); g.position.set(x, y, z); g.rotation.set(0, k * 1.3, rz); g.scale.setScalar(sc_); g.visible = false; sc.add(g); clusters.push({ g, p: new THREE.Vector3(x, y, z), s: sc_ }); });
+    const cLight = new THREE.PointLight('#9fe8ff', 0, 5, 1.5); cLight.position.set(CX + 2.6, 1.2, 0.9); sc.add(cLight);
+    caveRoom = (st: RoomState, t: number, _cam: THREE.Vector3, party: THREE.Vector3[]) => {
+      clusters.forEach((c, k) => {
+        const g = c.g;
+        if (st === 'hidden' || st === 'done') { g.visible = false; return; }
+        g.visible = true;
+        if (st === 'idle') { g.position.copy(c.p); g.scale.setScalar(c.s); g.rotation.x = 0; return; }
+        // 떼어 내기: 빛나며 떨리다가(0~0.5) 떠올라 무리에게 날아간다
+        const shake = st < 0.5 ? Math.sin(t * 40 + k) * 0.03 * (st / 0.5) : 0;
+        const u = clamp01((st - 0.5 - k * 0.1) / 0.7);
+        if (u <= 0) { g.position.set(c.p.x + shake, c.p.y, c.p.z); g.scale.setScalar(c.s * (1 + 0.08 * Math.sin(t * 12))); return; }
+        flyTo(g, new THREE.Vector3(c.p.x, c.p.y + 0.3, c.p.z), (party[k % Math.max(1, party.length)] ?? c.p).clone().setY(1.3), u, c.s);
+        g.visible = u < 1;
+      });
+      cLight.intensity = st === 'idle' ? 5 : typeof st === 'number' ? 5 + 6 * Math.sin(clamp01(st / GATHER_T) * Math.PI) : 0;
+    };
+    for (let k = 0; k < 8; k++) { const m = new THREE.Mesh(rockGeo(950 + k, 0, 0.35), rockMat('#4e331f')); m.scale.setScalar(0.25 + (k % 3) * 0.12); m.visible = false; this.scene.add(m); this.chunks.push({ m, v: new THREE.Vector3(), p0: new THREE.Vector3() }); }
+    this.themes.cave = { root: caveRoot, fg: caveFg, block: this.block, blockLight: this.blockLight, gems: [], hazard: null, room: caveRoom, blast: true };
+    this.flash = new THREE.PointLight('#ffd9a0', 0, 10, 1.4); this.flash.position.set(ROCK_X, 1.8, 1.2); this.scene.add(this.flash);
+    this.burst = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), glow('#ffc070', 1)); (this.burst.material as THREE.MeshBasicMaterial).map = softTex(); this.burst.visible = false; this.scene.add(this.burst);
     // 앞 바위면: 무리 바로 위 천장 앞쪽에 걸린 넓은 바위(앞면이 평평해 균열이 새겨진다)
     const lipG = new THREE.BoxGeometry(9, 1.1, 1.2, 18, 3, 2); const lp = lipG.attributes.position;
     for (let i = 0; i < lp.count; i++) { const z = lp.getZ(i); lp.setXYZ(i, lp.getX(i) + (r() - 0.5) * 0.15, lp.getY(i) + (lp.getY(i) < 0 ? (r() - 0.5) * 0.35 : 0), z + (z > 0 ? (r() - 0.5) * 0.04 : (r() - 0.5) * 0.2)); }
@@ -267,7 +327,7 @@ export class CaveArena {
       // 쿵: 빠르게 떨어져 조금 지나쳤다가 제자리
       const f = u < 0.16 ? Math.pow(u / 0.16, 2) * 1.12 : u < 0.4 ? 1.12 - 0.12 * ease((u - 0.16) / 0.24) : 1;
       this.ceilY = this.ceilFrom + span * f;
-    } else this.ceilY = this.ceilFrom + span * ease(u / 1.0);
+    } else this.ceilY = this.ceilTo;
     this.ceil.position.y = this.ceilY;
     for (const d of this.ceilDust) {
       if (d.life <= 0) { d.m.visible = false; continue; }
@@ -278,10 +338,32 @@ export class CaveArena {
   private spillDust(): void {
     this.ceilDust.forEach((d, k) => { d.life = 1.0 + Math.random() * 0.5; d.m.position.set(CX - 4 + k * 0.62 + (Math.random() - 0.5) * 0.3, CEIL - 0.4 + this.ceilTo, 1.2 + Math.random() * 0.4); d.v.set((Math.random() - 0.5) * 0.3, -0.4 - Math.random() * 0.6, 0); });
   }
+  /** 잉크 테두리: 무리 근처(뒤로 깊이 6 안쪽)와 근경의 바위·벽·나무에만(먼 배경은 안개 원근이 깨지지 않게 테두리 없이) */
+  private inkStage(): void {
+    const v = new THREE.Vector3(); const list: THREE.Mesh[] = [];
+    const walk = (o: THREE.Object3D, near: boolean) => o.traverse(c => {
+      const m = c as THREE.Mesh; if (!m.isMesh || m.name === 'ink' || m.userData.noInk) return;
+      const mt = m.material as THREE.Material; if (Array.isArray(mt) || !mt?.userData?.rock) return;
+      if (near || m.getWorldPosition(v).z > -6.5) list.push(m);
+    });
+    for (const T of Object.values(this.themes)) { walk(T.root, false); walk(T.fg, true); }
+    walk(this.ceil, false);
+    for (const m of list) addInk(m, m.parent && this.isFg(m) ? 0.06 : 0.045);
+  }
+  private isFg(o: THREE.Object3D): boolean { let p: THREE.Object3D | null = o; while (p) { if (p === this.fg) return true; p = p.parent; } return false; }
+  /** 장소 바꾸기: 무대·근경·막힌 것·재료·하늘색·안개색·빛 */
+  private applyTheme(key: ThemeKey): void {
+    this.themeKey = key; const th = THEMES.find(x => x.key === key)!;
+    for (const k of Object.keys(this.themes) as ThemeKey[]) { const T = this.themes[k]; T.root.visible = T.fg.visible = k === key; T.hazard?.reset(); }
+    const T = this.themes[key]; this.block = T.block; this.blockLight = T.blockLight; this.gems = T.gems;
+    (this.scene.background as THREE.Color).set(th.bg); (this.scene.fog as THREE.Fog).color.set(th.bg);
+    this.hemi.color.set(th.sky); this.hemi.groundColor.set(th.ground);
+    this.sign.visible = true;
+  }
   private setDepth(n: number): void {
     if (this.signN === n) return; this.signN = n;
     const mats = this.sign.material as THREE.MeshStandardMaterial[]; mats[4].map = signTex(n); mats[4].needsUpdate = true;
-    this.entrance.visible = n === 0;
+    this.entrance.visible = n === 0 && this.themeKey === 'cave';
   }
 
   /* ---------------- 마법사 ---------------- */
@@ -298,59 +380,123 @@ export class CaveArena {
     const portal = portalDisc(col(j), 1.6); portal.rotation.x = -Math.PI / 2; portal.visible = false; this.scene.add(portal);
     const column = lightColumn(col(j), 0.7, 6); column.visible = false; this.scene.add(column);
     const pop = textSprite('+0'); pop.visible = false; this.scene.add(pop);
-    const z: CW = { w, spirit, light, dots, pos: new THREE.Vector3(CX, 0, 0), born: this.t, leaveAt: 0, gone: false, got: 0, scroll, portal, column, pop };
+    const badge = arrow3D('#ffd36a'); badge.scale.setScalar(0.34); badge.position.y = 0.18; badge.visible = false; w.above.add(badge);
+    const band = buildBandage(); w.head.add(band);
+    const z: CW = { w, spirit, light, dots, pos: new THREE.Vector3(CX, 0, 0), born: this.t, leaveAt: 0, gone: false, got: 0, scroll, portal, column, pop, badge, stayAt: -9, band, hurt: 0 };
     this.wiz.set(j, z); return z;
   }
 
   /* ---------------- 매 프레임 ---------------- */
   frame(dt: number): void {
     dt = Math.min(dt, 0.05); this.t += dt; const t = this.t;
-    INK_U.res.value.set(this.dom.width, this.dom.height); INK_U.px.value = 2.5 * Math.max(1, this.dom.width / Math.max(1, this.dom.clientWidth));
+    INK_U.res.value.set(this.dom.width, this.dom.height); INK_U.px.value = 3.2 * Math.max(1, this.dom.width / Math.max(1, this.dom.clientWidth));
     const m = this.mg(); if (!m) return;
     const L = m.last;
     const dur = L?.collapse ? CAVE_SHOW_FALL : CAVE_SHOW;
     const showS = m.step === 'show' && L ? (now() - (m.until - dur)) / 1000 : -1;
     this.sync(m, t);
+    const inTrans = this.drawTrans(t); const fadingOut = t >= this.trans.start && t < this.trans.black;
     const collapse = !!L?.collapse && m.step === 'show';
     const moving = m.step === 'show' && !!L && !L.collapse;
     this.setDepth(moving && showS < RT.swap ? Math.max(0, m.turn - 1) : m.turn);
     const lost = L ? L.faces.filter(v => v === 1).length - L.kept : 0;
     const crackN = m.step === 'show' && L ? (showS >= RT.hit ? L.ones : L.ones - lost) : m.ones;
-    this.setCrack(Math.max(0, Math.min(3, crackN)), t);
-    this.drawCeil(Math.max(0, Math.min(3, crackN)), t, dt);
+    this.drawTray(m, crackN, t, inTrans);
+    const stage = Math.max(0, Math.min(3, crackN)); const hz = this.themes[this.themeKey].hazard;
+    if (!fadingOut) {
+      if (!hz) { this.setCrack(stage, t); this.drawCeil(stage, t, dt); }
+      else { const was = (hz as unknown as { _s?: number })._s ?? 0; hz.set(stage, t); if (stage > was) { this.kick(0.12); } (hz as unknown as { _s?: number })._s = stage; }
+    }
+    if (hz) { hz.frame(t, dt); if (collapse) hz.collapse?.(showS); }
+    // 무너짐에 깔린 사람: 다음 판부터 붕대
+    if (collapse && showS >= RT.buried) { const key = `${m.pan}`; if (this.hurtKey !== key) { this.hurtKey = key; m.inside.forEach(j => this.hurtNext.add(j)); } }
     if (m.step === 'show' && L?.collapse && showS >= RT.hit && showS < RT.hit + dt * 1.5) { this.kick(0.16); this.dropPebbles(); }
+    // 다음 장면으로 넘어가는 순간(어두운 동안) 남은 사람끼리 자리를 다시 정한다
+    if (moving && showS >= RT.swap) { const key = `${m.pan}:${m.turn}`; if (this.slotKey !== key) { this.slotKey = key; this.layoutSlots(m.inside); } }
     this.drawWizards(m, t, dt, showS, collapse, moving);
-    this.drawPick(m, t);
-    this.drawDice(m, t, showS, moving);
-    this.drawBlast(showS, moving, dt);
+    this.drawPick(m, t, inTrans);
+    if (inTrans) this.dice.forEach(d => d.visible = false); else this.drawDice(m, t, showS, moving);
+    this.drawBlast(showS, moving, dt, m);
     this.drawCollapse(showS, collapse, dt);
     this.drawPebbles(dt);
     // 장면 전환: 어두워졌다가 밝아진다
     const fo = moving && showS >= RT.fadeOut && showS < RT.swap ? ease((showS - RT.fadeOut) / (RT.swap - RT.fadeOut)) : 0;
     const fi = moving && showS >= RT.swap && showS < RT.fadeIn + 0.45 ? 1 - ease((showS - RT.fadeIn) / 0.45) : 0;
-    (this.fade.material as THREE.MeshBasicMaterial).opacity = Math.max(fo, fi);
+    (this.fade.material as THREE.MeshBasicMaterial).opacity = Math.max(fo, fi, this.transOp);
     // 걸어 나갈 때 카메라도 오른쪽으로 흐르고, 새 장면에서는 왼쪽에서 따라 들어온다(실제 시차)
-    this.camX = moving && showS >= RT.out && showS < RT.swap ? ease((showS - RT.out) / 1.0) * 2.2 : moving && showS >= RT.swap && showS < RT.inEnd ? -2.2 * (1 - ease((showS - RT.fadeIn) / 1.0)) : 0;
+    if (!inTrans) this.camX = moving && showS >= RT.out && showS < RT.swap ? ease((showS - RT.out) / 1.0) * 2.2 : moving && showS >= RT.swap && showS < RT.inEnd ? -2.2 * (1 - ease((showS - RT.fadeIn) / 1.0)) : 0;
     this.drawCamera(t);
   }
 
-  /** 상태 변화: 새 판(모두 왼쪽 입구에서 걸어 들어온다), 나간 사람(귀환 스크롤) */
+  /** 상태 변화: 새 판(판 사이 장면 뒤 왼쪽에서 걸어 들어온다), 나간 사람(귀환 스크롤), 전진을 고른 사람 */
   private sync(m: CaveMg, t: number): void {
     const p = this.prev;
     for (const j of m.ord) if (!this.wiz.has(j)) { const z = this.makeWiz(j); z.gone = !m.inside.includes(j); }
-    if (!p) this.panAt = t - 9;
-    if (p) {
+    if (!p) {
+      // 처음: 첫 판 시작이면 "1판" 장면부터(이미 어두운 상태로)
+      if (m.pan === 1 && m.turn === 0 && m.step === 'decide' && m.di === 0) this.startTrans(t - 0.45, m.pan);
+      else this.panAt = t - 9;
+    } else {
       const left = p.step === 'decide' ? p.inside.filter(j => !m.inside.includes(j) || m.pan !== p.pan) : [];
       const leavers = m.pan !== p.pan ? left.slice(-1) : left;
       for (const j of leavers) { const z = this.wiz.get(j)!; if (!z.gone && !z.leaveAt) { z.leaveAt = t; z.got = m.pan === p.pan ? m.got[j] ?? 0 : m.score[j][p.pan - 1] ?? 0; } }
-      if (m.pan !== p.pan) {
-        const wait = leavers.length ? LEAVE_T : 0.25;
-        this.panAt = t + wait;
-        m.ord.forEach(j => { const z = this.wiz.get(j)!; z.born = t + wait; z.gone = false; if (!leavers.includes(j)) z.leaveAt = 0; });
+      // 전진을 고른 사람: 같은 판에서 차례가 지나갔는데 아직 안에 있다
+      if (m.pan === p.pan && p.step === 'decide') {
+        for (let q = p.di; q < p.inside.length; q++) {
+          const j = p.inside[q]; const now_ = m.inside.indexOf(j);
+          if (now_ >= 0 && (m.step !== 'decide' || now_ < m.di)) { const z = this.wiz.get(j); if (z && z.stayAt < t - 0.5) z.stayAt = t; }
+        }
       }
+      // 새 판: 마지막 사람이 귀환 중이면 그 뒤에 판 사이 장면
+      if (m.pan !== p.pan) this.startTrans(t + (leavers.length ? LEAVE_T : 0.2), m.pan);
     }
-    this.prev = { pan: m.pan, inside: m.inside.slice(), step: m.step };
+    this.prev = { pan: m.pan, inside: m.inside.slice(), step: m.step, di: m.di };
   }
+  private startTrans(start: number, pan: number): void {
+    const tr = this.trans; tr.start = start; tr.black = start + 0.45; tr.end = tr.black + 2.6; tr.pan = pan; tr.reset = false;
+    this.panAt = tr.end + 0.15;
+    // 모두 다음 판에 다시 나타난다(귀환 중인 사람은 귀환을 마친 뒤에도 사라짐으로 두지 않는다)
+    for (const z of this.wiz.values()) { z.born = this.panAt; z.gone = false; z.stayAt = -9; }
+  }
+  /** 어두운 동안 무대 정리: 천장·균열은 한 번에 원래대로, 파편·돌가루·주사위·카메라 흐름도 */
+  private layoutSlots(ord: number[]): void { this.slots.clear(); ord.forEach((j, q) => this.slots.set(j, q)); }
+  private resetStage(t: number): void {
+    { const m = this.mg(); if (m) this.layoutSlots(m.inside.length ? m.inside : m.ord); }
+    this.ceilY = this.ceilFrom = this.ceilTo = 0; this.ceilAt = t - 9; this.ceil.position.y = 0;
+    this.setCrack(0, t);
+    for (const d of this.ceilDust) { d.life = 0; d.m.visible = false; }
+    for (const r of this.pebbles) { r.on = false; r.m.visible = false; }
+    this.boulders.forEach(b => b.visible = false); this.dust.forEach(d => d.visible = false);
+    this.chunks.forEach(c => c.m.visible = false); this.gems.forEach(g => g.visible = false);
+    this.applyTheme(themeOf(this.trans.pan).key);
+    this.block.visible = true; this.camX = 0;
+    for (const j of this.hurtNext) { const z = this.wiz.get(j); if (z) { z.hurt++; z.band.visible = true; (z.band.getObjectByName('w2') as THREE.Object3D).visible = z.hurt >= 2; } }
+    this.hurtNext.clear();
+    for (const z of this.wiz.values()) { z.pos.set(-HALF - 3, 0, 0); z.scroll.visible = z.portal.visible = z.column.visible = z.pop.visible = false; }
+  }
+  private drawTrans(t: number): boolean {
+    const tr = this.trans; const on = t >= tr.start && t < tr.end + 0.45;
+    if (t >= tr.black && !tr.reset) { tr.reset = true; this.resetStage(t); }
+    const op = !on ? 0 : t < tr.black ? ease((t - tr.start) / 0.45) : t < tr.end ? 1 : 1 - ease((t - tr.end) / 0.45);
+    // 지도: 지난 장소에서 다음 장소로 길을 따라 무리 표시(모자)가 움직인다
+    const tm = this.title.material as THREE.MeshBasicMaterial;
+    const ta = t >= tr.black && t < tr.end + 0.3 ? Math.min(clamp01((t - tr.black) / 0.25), 1 - clamp01((t - tr.end) / 0.3)) : 0;
+    this.title.visible = this.marker.visible = ta > 0.01; tm.opacity = ta; (this.marker.material as THREE.MeshBasicMaterial).opacity = ta;
+    if (this.title.visible && this.titlePan !== tr.pan) { this.titlePan = tr.pan; tm.map?.dispose(); tm.map = mapTex(tr.pan); tm.needsUpdate = true; }
+    if (this.title.visible) {
+      const a = this.camera.aspect || 1.6; const h = Math.min(1.25, 1.8 * a / (1024 / 576)), w = h * (1024 / 576) / a;
+      this.title.scale.set(w, h, 1); this.title.position.y = -0.05;
+      const k1 = Math.max(1, Math.min(3, tr.pan)), [x0, y0] = MAP_NODES[k1 - 1], [x1, y1] = MAP_NODES[k1];
+      const u = ease(clamp01((t - tr.black - 0.35) / (tr.end - tr.black - 0.9)));
+      const cx = (x0 + x1) / 2, cy = Math.min(y0, y1) - 70;
+      const mx = (1 - u) * (1 - u) * x0 + 2 * (1 - u) * u * cx + u * u * x1, my = (1 - u) * (1 - u) * y0 + 2 * (1 - u) * u * cy + u * u * y1;
+      this.marker.position.set((mx / 1024 - 0.5) * w, (0.5 - my / 576) * h - 0.05 + 0.06 * h + Math.abs(Math.sin(u * Math.PI * 4)) * 0.015, 0);
+      this.marker.scale.set(0.11 * h / a * 1.0 * (1024 / 576) / 1.0 * 0.6, 0.11 * h, 1);
+    }
+    this.transOp = op;
+    return on && t < tr.end;
+  }
+  private transOp = 0;
 
   private drawWizards(m: CaveMg, t: number, dt: number, showS: number, collapse: boolean, moving: boolean): void {
     const dec = caveDecider(m); const n = m.inside.length; const inP = t - this.panAt;
@@ -358,27 +504,35 @@ export class CaveArena {
       const w = z.w; const k = m.inside.indexOf(j);
       if (z.leaveAt) {
         const l = t - z.leaveAt;
-        if (l >= LEAVE_T) { z.leaveAt = 0; z.gone = true; }
+        if (l >= LEAVE_T) { z.gone = !(z.born > z.leaveAt); z.leaveAt = 0; }
         else { this.drawLeave(z, l); continue; }
       }
       const vis = !z.gone && t >= z.born && (k >= 0 || m.step !== 'decide' || inP < 2);
       w.root.visible = vis; z.spirit.visible = vis; z.scroll.visible = false; z.pop.visible = false; z.portal.visible = z.column.visible = false;
       if (!vis) { z.light.intensity = 0; continue; }
-      const slot = CX + ((k >= 0 ? k : 0) - (n - 1) / 2) * 0.95;
+      if (!this.slots.size) this.layoutSlots(m.inside.length ? m.inside : m.ord);
+      const si = this.slots.get(j) ?? (k >= 0 ? k : 0);
+      const slot = CX + (si - (this.slots.size - 1) / 2) * 0.95;
       let x = slot, walking = false;
       if (moving && showS >= RT.out && showS < RT.swap) { const u = clamp01((showS - RT.out) / 1.0); x = slot + u * (HALF + 3 - slot); walking = u < 1; }
       else if (moving && showS >= RT.swap && showS < RT.inEnd) { const u = clamp01((showS - RT.fadeIn) / 0.95); x = -HALF - 3 + u * (slot + HALF + 3); walking = u < 1; }
       else if (inP >= 0 && inP < 1.2) { const u = clamp01(inP / 1.1); x = -HALF - 3 + ease(u) * (slot + HALF + 3); walking = u < 1; }
       else z.pos.x += (slot - z.pos.x) * Math.min(1, dt * 6);
       if (walking || inP < 1.2 || (moving && showS >= RT.out && showS < RT.inEnd)) z.pos.x = x;
-      z.pos.z = k % 2 ? -0.35 : 0.2;
+      z.pos.z = si % 2 ? -0.35 : 0.2;
       const thrower = m.inside.includes(m.ord[0]) ? m.ord[0] : m.inside[0];
-      const cast = (moving && showS >= RT.blast - 0.15 && showS < RT.out) || (m.step === 'show' && j === thrower && showS >= 0 && showS < RT.land);
+      const cast = (moving && showS >= RT.blast - 0.15 && showS < RT.out) || (m.step === 'show' && j === thrower && showS >= 0 && showS < RT.land) || (this.t - this.gT >= 0 && this.t - this.gT < 0.9);
       const down = collapse && k >= 0 && showS >= RT.buried;
       w.root.position.set(z.pos.x, walking ? Math.abs(Math.sin(t * 10 + j)) * 0.1 : 0, z.pos.z);
-      w.root.scale.set(1, down ? 0.2 : 1, 1); w.root.visible = !down || showS < RT.buried + 0.3;
+      const fogged = down && this.themeKey === 'fog';
+      w.root.scale.set(1, down && !fogged ? 0.2 : 1, 1); w.root.visible = !down || (!fogged && showS < RT.buried + 0.3);
       w.root.rotation.y = walking ? 1.1 : cast ? 0.9 : 0.35;
       w.body.rotation.set(cast ? -0.15 : 0, 0, walking ? Math.sin(t * 10 + j) * 0.06 : 0);
+      // 앞사람 선택이 보이게: 전진을 고른 사람은 머리 위에 작은 전진 화살표, 고른 순간 "전진!"
+      z.badge.visible = k >= 0 && ((m.step === 'decide' && k < m.di) || m.step === 'pre');
+      if (z.badge.visible) z.badge.position.x = Math.sin(t * 4 + j) * 0.04;
+      const sa = t - z.stayAt; z.pop.visible = sa >= 0 && sa < 1.3;
+      if (z.pop.visible) { setText(z.pop, '전진!'); z.pop.position.set(z.pos.x, 3.0 + sa * 0.35, z.pos.z + 0.4); (z.pop.material as THREE.SpriteMaterial).opacity = 1 - clamp01((sa - 0.9) / 0.4); }
       z.dots.visible = m.step === 'decide' && dec === j; if (z.dots.visible) z.dots.children.forEach((d, q) => { d.position.y = Math.max(0, Math.sin(t * 7 - q * 0.8)) * 0.15; });
       w.above.lookAt(this.camera.position.x, w.above.getWorldPosition(new THREE.Vector3()).y, this.camera.position.z);
       w.eyesShut.visible = collapse && showS > RT.shake; w.eyesOpen.visible = !w.eyesShut.visible;
@@ -413,7 +567,7 @@ export class CaveArena {
   /* ---------------- 주사위 ---------------- */
   private drawDice(m: CaveMg, t: number, showS: number, moving: boolean): void {
     const L = m.last;
-    this.dice.forEach(d => d.visible = false); this.diceGlow.forEach(g => g.visible = false); this.shields.forEach(s => s.visible = false);
+    this.dice.forEach(d => { d.visible = false; if (d.parent !== this.scene) this.scene.add(d); }); this.diceGlow.forEach(g => g.visible = false); this.shields.forEach(s => s.visible = false);
     // 굴릴 주사위가 떠 있는 자리: 무리 오른쪽 빈 곳(마법사에 가리지 않게)
     const hand = new THREE.Vector3(CX + 2.3, 1.5, 0.9);
     // 나온 눈이 카메라를 보게: 윗면(+y)을 앞(+z)으로
@@ -443,17 +597,48 @@ export class CaveArena {
       const g = this.diceGlow[k]; g.visible = showS < RT.up + 0.25; g.position.set(to.x, to.y, to.z - 0.3); g.lookAt(this.camera.position); g.scale.setScalar(1 + Math.sin(t * 10) * 0.08);
       if (kept) { const sh = this.shields[k]; sh.visible = showS < RT.blast; sh.position.copy(to); sh.scale.setScalar(backOut(clamp01((showS - RT.land) / 0.3))); return; }
       if (showS >= RT.up) {
-        const u = ease((showS - RT.up) / (RT.hit - RT.up));
-        d.position.set(to.x + (CX - to.x) * u * 0.5, to.y + (CEIL - 0.6 - to.y) * u, to.z + (-1.6 - to.z) * u);
-        d.rotation.set(u * 9, u * 6, 0); d.scale.setScalar(0.5 * (1 - u * 0.8)); d.visible = u < 0.99;
+        // 빠진 1: 위쪽 가운데 칸(빈 칸부터 차례로)으로 날아가 꽂힌다(사용자 2026-10-15)
+        const u = ease(clamp01((showS - RT.up) / (RT.hit - RT.up)));
+        const lost = L.faces.filter(v => v === 1).length - L.kept; const si = Math.max(0, Math.min(2, L.ones - lost + (oneK - 1 - L.kept))); const at = this.traySlot(si);
+        d.position.lerpVectors(to, at, u); d.position.y += Math.sin(u * Math.PI) * 0.8;
+        d.scale.setScalar(0.5 + (this.trayK * TRAY_DIE - 0.5) * u);
+        if (u < 0.8) d.rotation.set(u * 9, u * 6, 0); else d.quaternion.copy(this.camera.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
+        d.visible = showS < RT.hit;
+        // 날아가는 동안은 칸과 같은 층에(천장 바위에 가리지 않게)
+        if (u > 0.05 && d.parent !== this.trayScene) this.trayScene.add(d);
       }
     });
   }
 
   /* ---------------- 폭파: 바위가 깨지고 크리스탈을 캔다 ---------------- */
-  private drawBlast(showS: number, moving: boolean, dt: number): void {
+  /** 나아가는 마법 + 다음 방 채집(사용자 2026-10-15: 벽을 깨서 얻는 대신). 장소에 room이 없으면(안개 숲, 임시) 예전처럼 폭파 */
+  private drawBlast(showS: number, moving: boolean, dt: number, m?: CaveMg): void {
+    const T = this.themes[this.themeKey];
+    if (T.room && m) {
+      this.gems.forEach(g => g.visible = false);
+      // 동굴: 막은 벽을 폭파해 나아간다 / 다른 장소: 장소마다의 나아가는 마법
+      if (T.blast) this.drawWall(showS, moving, dt);
+      else { this.burst.visible = false; this.flash.intensity = 0; this.chunks.forEach(c => c.m.visible = false); }
+      T.advance?.(moving && showS >= RT.blast && showS < RT.swap ? showS - RT.blast : -1, this.t, this.camera.position);
+      // 지금 보이는 방: 장면이 바뀌기 전에는 지난 방(이미 채집), 바뀐 뒤에는 새 방
+      const here = moving && showS < RT.swap ? m.turn - 1 : m.turn; const key = `${m.pan}:${here}`;
+      if (moving && showS >= RT.gather && this.gKey !== key) { this.gKey = key; this.gT = this.t; }
+      let st: RoomState;
+      if (here <= 0) st = 'hidden';
+      else if (this.gKey === key && this.t - this.gT < GATHER_T) st = this.t - this.gT;
+      else if (this.gKey === key || !(moving && showS >= RT.swap)) st = 'done';
+      else st = 'idle';
+      const party = m.inside.map(j => this.wiz.get(j)?.pos.clone() ?? new THREE.Vector3(CX, 0, 0));
+      T.room(st, this.t, this.camera.position, party);
+      return;
+    }
+    const b = this.drawWall(showS, moving, dt);
+    this.drawGems(b, new THREE.Vector3(ROCK_X + 0.2, 1.4, 0.8), 0.1);
+  }
+  /** 막은 벽 폭파: 섬광·파편, 벽은 장면이 바뀌기 전까지 사라졌다가 새 방의 벽으로 돌아온다 */
+  private drawWall(showS: number, moving: boolean, dt: number): number {
     const open = moving && showS >= RT.blast + 0.1 && showS < RT.swap;
-    this.block.visible = !open; this.blockLight.intensity = 6;
+    this.block.visible = !open; this.blockLight.intensity = 5;
     const b = moving ? showS - RT.blast : -1;
     this.burst.visible = b >= 0 && b < 0.5;
     if (this.burst.visible) { this.burst.position.set(ROCK_X + 0.2, 1.8, 0.8); this.burst.lookAt(this.camera.position); this.burst.scale.setScalar(0.5 + ease(b / 0.25) * 1.2); (this.burst.material as THREE.MeshBasicMaterial).opacity = 1 - clamp01((b - 0.15) / 0.35); }
@@ -465,18 +650,23 @@ export class CaveArena {
       c.v.y -= 12 * dt; c.m.position.addScaledVector(c.v, dt); if (c.m.position.y < 0.15) { c.m.position.y = 0.15; c.v.y *= -0.3; c.v.x *= 0.6; }
       c.m.rotation.x += dt * 5; c.m.rotation.z += dt * 3;
     });
-    // 크리스탈: 튀어 올랐다가 무리에게 날아간다
+    return b;
+  }
+  /** 얻은 재료: 튀어 올랐다가 무리에게 날아간다 */
+  private drawGems(b: number, from: THREE.Vector3, at: number): void {
     this.gems.forEach((g, k) => {
-      const u = b >= 0.1 ? (b - 0.1) / 0.6 : -1; g.visible = u >= 0 && u < 1;
+      const u = b >= at ? (b - at) / 0.6 : -1; g.visible = u >= 0 && u < 1;
       if (!g.visible) return;
-      const fx = ROCK_X + 0.2 + k * 0.2, tx = CX + (k - 1) * 0.95;
-      g.position.set(fx + (tx - fx) * ease(u), 1.4 + k * 0.3 + Math.sin(u * Math.PI) * 1.4 - u * 0.4, 0.8); g.rotation.set(u * 6, u * 4, 0); g.scale.setScalar(0.6 * (1 - u * 0.5));
+      const fx = from.x + k * 0.2, tx = CX + (k - 1) * 0.95;
+      g.position.set(fx + (tx - fx) * ease(u), from.y + k * 0.3 + Math.sin(u * Math.PI) * 1.4 - u * 0.4, from.z); g.rotation.set(u * 6, u * 4, 0); g.scale.setScalar(0.6 * (1 - u * 0.5));
     });
   }
 
   /* ---------------- 무너짐·돌가루 ---------------- */
-  private drawCollapse(showS: number, collapse: boolean, dt: number): void {
-    if (collapse && showS >= RT.shake && showS < RT.shake + dt * 1.5) this.kick(0.25);
+  private drawCollapse(showS: number, collapse0: boolean, dt: number): void {
+    if (collapse0 && showS >= RT.shake && showS < RT.shake + dt * 1.5) this.kick(0.25);
+    // 바위가 떨어지는 건 동굴만(미궁은 가시가 찌르고, 안개 숲은 안개가 삼킨다)
+    const collapse = collapse0 && this.themeKey === 'cave';
     this.boulders.forEach((b, k) => {
       const at = RT.fall + (k % 3) * 0.08; b.visible = collapse && showS >= at;
       if (!b.visible) return;
@@ -513,6 +703,7 @@ export class CaveArena {
     this.camD = d; this.camY = cy + 0.25; this.lookY = cy;
     // 안개(빛을 받는 것들: 마법사·주사위·크리스탈)도 카메라 거리에 맞춘다
     const fog = this.scene.fog as THREE.Fog; fog.near = d - 1; fog.far = d + 30;
+    if (this.themeKey === 'fog') { const th = (this.themes.fog.hazard as unknown as { thick(): number }).thick(); fog.near = d - 1 - th * 1.6; fog.far = d + 22 - th * 6.5; }
 
     const s = t - this.shakeT; const sh = s < 0.5 ? this.shakeK * (1 - s / 0.5) : 0;
     const px = 0.3 + this.camX;
@@ -521,73 +712,40 @@ export class CaveArena {
     // 근경: 카메라 앞 FG_D 거리에, 원래 화각 40°에서 거리 4.3에 둔 것과 같은 크기로 보이게
     const FG_D = 4.5, sc = (FG_D * th) / (4.3 * Math.tan(THREE.MathUtils.degToRad(20)));
     this.fg.position.set(px, this.lookY + (this.camY - this.lookY) * (FG_D / d), d - FG_D); this.fg.scale.setScalar(sc);
+    // 1 주사위 칸: 석판과 "지금 할 일" 글자 바로 아래, 화면 가운데에 늘 같은 크기로(놀이 깊이 앞 z = TRAY_Z)
+    this.camera.updateMatrixWorld();
+    const P = Math.max(40, Math.round(54 * k)), cpx = slabH(k).h2 + 8 + Math.round(34 * k) + 8 + P / 2;
+    const v = new THREE.Vector3(0, 1 - 2 * cpx / H, 0.5).unproject(this.camera).sub(this.camera.position).normalize();
+    const D = (TRAY_Z - this.camera.position.z) / v.z;
+    this.tray.position.copy(this.camera.position).addScaledVector(v, D);
+    this.tray.quaternion.copy(this.camera.quaternion);
+    this.trayK = (P * (2 * D * th / H)) / TRAY_H; this.tray.scale.setScalar(this.trayK);
+    const es = this.trayEl.style; es.top = `${Math.round(cpx - P / 2)}px`; es.height = `${P}px`; es.width = `${Math.round(P * TRAY_W / TRAY_H)}px`; es.setProperty('--p', `${P}px`);
   }
-}
-
-/* ---------------- 바위·종유석·크리스탈 ---------------- */
-function rng(seed: number) { let s = Math.floor(seed * 9301 + 49297) % 233280; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
-const matC = new Map<string, THREE.MeshStandardMaterial>();
-/** 각진 면(평면 음영) 바위 재료 */
-function rockMat(c: string): THREE.MeshStandardMaterial { let m = matC.get(c); if (!m) { m = new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.95, metalness: 0 }); matC.set(c, m); } return m; }
-/** 각진 바위: 다면체 꼭짓점을 들쭉날쭉 밀고 당긴다 */
-function rockGeo(seed: number, detail = 1, rough = 0.35): THREE.BufferGeometry {
-  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, detail); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g);
-  const r = rng(seed + 1); const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) { const f = 1 + (r() - 0.5) * 2 * rough; p.setXYZ(i, p.getX(i) * f, p.getY(i) * f * (0.85 + r() * 0.3), p.getZ(i) * f); }
-  g.computeVertexNormals(); return g;
-}
-/** 종유석: 위가 넓고 아래로 들쭉날쭉 좁아지며 끝이 살짝 휜다(위 = 0, 아래 끝 = -len) */
-function stalGeo(seed: number, rad: number, len: number): THREE.BufferGeometry {
-  let g: THREE.BufferGeometry = new THREE.ConeGeometry(rad, len, 7, 5, false); g.rotateX(Math.PI); g.translate(0, -len / 2, 0);
-  g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g);
-  const r = rng(seed + 3); const p = g.attributes.position; const bend = (r() - 0.5) * rad * 1.6, bendZ = (r() - 0.5) * rad;
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i); const tt = clamp01(-y / len); const f = 1 + (r() - 0.5) * 0.7;
-    p.setXYZ(i, p.getX(i) * f + bend * tt * tt, y + (tt > 0 && tt < 1 ? (r() - 0.5) * len * 0.08 : 0), p.getZ(i) * f + bendZ * tt * tt);
+  /** 1 주사위 칸 돌판: 위쪽 석판과 같은 돌빛, 오목한 칸 3개 */
+  private buildTray(): void {
+    for (let k = 0; k < 3; k++) {
+      // 목적지 자리만(보이지 않음)
+      const d = new THREE.Group(); d.position.set((k - 1) * TRAY_GAP, 0, 0.32); this.tray.add(d); this.trayDie.push(d);
+      const sl = document.createElement('i'); sl.className = 'ct-slot'; sl.innerHTML = '<b class="ct-die"><span></span></b>'; this.trayEl.appendChild(sl); this.traySlots.push(sl);
+    }
+    this.trayEl.className = 'cave-tray'; this.trayEl.setAttribute('aria-label', '빠진 1 주사위');
+    (this.dom.parentElement ?? document.body).appendChild(this.trayEl);
   }
-  g.computeVertexNormals(); return g;
-}
-/** 크리스탈 클러스터(사용자 2026-10-14): 바위 밑동에서 육각기둥 결정 여러 개가 사방으로 뻗는다.
-    곧은 기둥으로 솟다가 끝만 둔각으로 뾰족(너무 뾰족한 건 싫다). 가운데가 가장 길고 바깥은 짧고 기운다. 스스로 빛난다 */
-const prismGeo = (() => {
-  const body = new THREE.CylinderGeometry(1, 1, 1, 6); body.translate(0, 0.5, 0);
-  // 끝만 낮게 뾰족한 둔각(반지름에 비해 높이를 낮게)
-  const tip = new THREE.ConeGeometry(1, 0.38, 6); tip.translate(0, 1.19, 0);
-  const g = mergeGeos([body, tip]); return g;
-})();
-function crystal(c: string, seed = 1): THREE.Group {
-  const r = rng(seed * 7 + c.length);
-  const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.1, flatShading: true, roughness: 0.25, metalness: 0.1 });
-  const dark = new THREE.MeshStandardMaterial({ color: new THREE.Color(c).multiplyScalar(0.55), emissive: c, emissiveIntensity: 0.5, flatShading: true, roughness: 0.4 });
-  const n = 8;
-  for (let k = 0; k < n; k++) {
-    const center = k === 0; const a = (k / (n - 1)) * Math.PI * 2 + r() * 0.6;
-    const tilt = center ? r() * 0.12 : 0.22 + r() * 0.45;
-    const len = center ? 0.5 : 0.22 + r() * 0.24, rad = center ? 0.14 : 0.075 + r() * 0.05;
-    const m = new THREE.Mesh(prismGeo, k % 3 === 2 ? dark : mat);
-    m.scale.set(rad, len, rad);
-    // 밑동에서 기울여 바깥으로
-    m.rotation.set(Math.sin(a) * tilt, r() * 6, -Math.cos(a) * tilt, 'YXZ');
-    m.position.set(Math.cos(a) * (center ? 0 : 0.09), 0, Math.sin(a) * (center ? 0 : 0.09));
-    g.add(m);
+  /** 칸 채우기: 굴림에서 빠진 1이 날아와 꽂힌 만큼(천장 단계와 같은 수). 판이 바뀌어도 어두워지기 전까지는 지난 판 그대로 */
+  private drawTray(m: CaveMg, n: number, t: number, hide: boolean): void {
+    this.trayEl.style.visibility = hide ? 'hidden' : '';
+    if (m.pan !== this.trayPan) { if (this.trans.pan !== m.pan || t >= this.trans.black) this.trayPan = m.pan; else n = this.trayN; }
+    n = Math.max(0, Math.min(3, n));
+    for (let k = 0; k < 3; k++) {
+      if (k < n && k >= this.trayN) this.trayAt[k] = t;
+      const sl = this.traySlots[k]; sl.classList.toggle('on', k < n);
+      const u = clamp01((t - this.trayAt[k]) / 0.35); sl.style.setProperty('--pop', (1 + 0.3 * Math.sin(u * Math.PI)).toFixed(3));
+    }
+    this.trayN = n;
   }
-  // 밑동 바위
-  const base = new THREE.Mesh(rockGeo(seed + 77, 0, 0.3), rockMat('#3f2819')); base.scale.set(0.28, 0.1, 0.24); g.add(base);
-  return g;
-}
-/** 기하 몇 개를 하나로(위치만 쓰는 평면 음영용) */
-function mergeGeos(gs: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const pos: number[] = [];
-  for (const g of gs) { const ng = g.index ? g.toNonIndexed() : g; const p = ng.attributes.position; for (let i = 0; i < p.count; i++) pos.push(p.getX(i), p.getY(i), p.getZ(i)); }
-  const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.computeVertexNormals(); return out;
-}
-
-/** 고르기 화살표: 두툼한 납작 화살표(+x 방향), 잉크 테두리 · 스스로 빛남 */
-function arrow3D(color: string): THREE.Group {
-  const sh = new THREE.Shape(); sh.moveTo(-0.62, -0.15); sh.lineTo(0.12, -0.15); sh.lineTo(0.12, -0.38); sh.lineTo(0.66, 0); sh.lineTo(0.12, 0.38); sh.lineTo(0.12, 0.15); sh.lineTo(-0.62, 0.15); sh.closePath();
-  const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.14, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03, bevelSegments: 2 }); geo.translate(0, 0, -0.07);
-  const g = new THREE.Group(); g.add(ink(geo, toon(color, { fresh: true, emissive: color, ei: 0.5 }), 0.04)); return g;
+  /** 칸 k의 주사위 자리(세계 좌표) */
+  private traySlot(k: number): THREE.Vector3 { return this.trayDie[k].getWorldPosition(new THREE.Vector3()); }
 }
 
 /* ---------------- 귀환 스크롤 · 글자 · 균열 · 표지 ---------------- */

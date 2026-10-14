@@ -1,6 +1,6 @@
 /* 미니게임 4 (2026-10-14 디지털 전용: 주사위 눈 피하기). 순수 함수: 상태를 받아 고친다 */
 import { d6, now, rnd, shuffle } from './cards';
-import { endMinigame, fx, log, N, rankBy, useItem } from './core';
+import { endMinigame, fx, log, N, rankBy, scoreOf, useItem } from './core';
 import type { Card, DodgeMg, GameState } from './types';
 
 const mgOf = <T>(S: GameState) => S.mg as unknown as T;
@@ -130,7 +130,7 @@ function dodgeAfterShow(S: GameState): void {
   const m = mgOf<DodgeMg>(S);
   if (m.turn < m.turns) { dodgeTurn(S); return; }
   // 마지막 공격자였으면 끝(결과를 보여 주는 동안 화면이 마지막 공격을 그대로 보이게 ai는 그대로 둔다)
-  if (m.ai + 1 >= m.ord.length) { endMinigame(S, rankBy(m.pts)); return; }
+  if (m.ai + 1 >= m.ord.length) { endMinigame(S, rankBy(m.pts), scoreOf(m.pts, '점')); return; }
   m.ai++; dodgeNewAttacker(S);
 }
 

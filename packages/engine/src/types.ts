@@ -3,6 +3,8 @@
 export type Suit = 'S' | 'H' | 'D' | 'C';
 /** 'S1'~'C13', 두 번째 덱은 'S1b'처럼 끝에 b */
 export type Card = string;
+/** 결과판에 보일 최종 점수: 자리 → 값(v)·단위(u)·앞말(pre, 예: "벌점") */
+export type MgScore = Record<number, { v: string; u?: string; pre?: string }>;
 export type MgId = 'hold' | 'bomb' | 'auction' | 'balloon' | 'rps' | 'vault' | 'count' | 'race'
   | 'nunchi' | 'updown' | 'curling' | 'line' | 'speed' | 'fold' | 'chain' | 'mid'
   | 'gesture' | 'stack' | 'change' | 'cave' | 'ten' | 'balance'
@@ -367,7 +369,8 @@ export interface GameState {
   /** 미니게임만 하기: 시드 무작위 상태 */
   rng?: { s: number } | null;
   /** 미니게임이 끝났다: 마지막 결과를 보여 주는 동안(at까지, 방장 시계) 미니게임 화면에 머문 뒤 순위·보상으로 넘어간다 */
-  mgEnd?: { groups: number[][]; at: number } | null;
+  /** score: 결과판에 함께 보여 줄 최종 점수(자리 → 값·단위). 탈락 순서로만 가리는 미니게임은 없음 */
+  mgEnd?: { groups: number[][]; at: number; score?: MgScore } | null;
   rewardDisp?: Card[] | null;
   lastRank?: number[][];
   fx?: Fx[];

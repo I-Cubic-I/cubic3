@@ -1,5 +1,5 @@
 /* 규칙 화면(모니터가 페이지 전체가 된다), ♣ 컷신, 연출 오버레이 */
-import { type Card, type Fx, type GameState, type Hand, MG, type MgId, R, RL, SYM, cname, isItem, U } from '@cubic3/engine';
+import { type Card, type Fx, type GameState, type Hand, MG, type MgId, type MgScore, R, RL, SYM, cname, isItem, U } from '@cubic3/engine';
 import { SEATCOL, SUITCOL, mine, seatName } from '../game';
 import { cmd } from '../flow';
 import { useStore } from '../store';
@@ -244,7 +244,7 @@ function TieDie({ vals, delay }: { vals: number[]; delay: number }) {
   </span>;
 }
 
-export function ResultsView({ S, r }: { S: GameState; r: { mg: MgId | null; groups: number[][]; rolls: Record<number, number[]>; order: number[] } }) {
+export function ResultsView({ S, r }: { S: GameState; r: { mg: MgId | null; groups: number[][]; rolls: Record<number, number[]>; order: number[]; score?: MgScore } }) {
   const me = useStore(s => s.me);
   const close = () => useStore.getState().set({ results: null });
   const tied = Object.keys(r.rolls).length > 0;
@@ -262,6 +262,7 @@ export function ResultsView({ S, r }: { S: GameState; r: { mg: MgId | null; grou
             return <div key={i} className={`rk-row${k === 0 ? ' first' : ''}`} style={{ animationDelay: `${.25 + (n++) * .28}s` }}>
               <b className="disp">{k + 1}위</b>
               <span className="who"><span className={`p${S.seats[i]?.uid === me ? ' me' : ''}`}><i style={{ background: SEATCOL[i % 5] }} />{seatName(S, i)}</span>{shared && <span className="tie">공동</span>}</span>
+              {r.score?.[i] && <span className="rk-pts disp">{r.score[i].pre && <small className="pre">{r.score[i].pre}</small>}{r.score[i].v}{r.score[i].u && <small>{r.score[i].u}</small>}</span>}
               {r.rolls[i] && <TieDie vals={r.rolls[i]} delay={400 + n * 280} />}
             </div>;
           })}

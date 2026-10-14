@@ -1,6 +1,6 @@
 /* 화면 상태 (zustand). 테이블 상태 S는 방에서 받아 그대로 둔다. */
 import { create } from 'zustand';
-import { type Action, type Card, type Fx, type GameState, MAX_SEATS, type MgId, type Suit } from '@cubic3/engine';
+import { type Action, type Card, type Fx, type GameState, MAX_SEATS, type MgId, type MgScore, type Suit } from '@cubic3/engine';
 import type { Room } from './net/room';
 import { mine, mySeats, whoActs } from './game';
 
@@ -63,7 +63,7 @@ interface Store {
   /** ♣ 컷신 */
   cutin: Fx | null;
   /** 미니게임이 끝나고 보여 주는 순위 결과 */
-  results: { mg: MgId | null; groups: number[][]; rolls: Record<number, number[]>; order: number[] } | null;
+  results: { mg: MgId | null; groups: number[][]; rolls: Record<number, number[]>; order: number[]; score?: MgScore } | null;
   fps: { ok: boolean; locked: boolean };
   /** 방에 막 들어왔다: 첫 상태를 받으면 빈 의자에 자동으로 앉는다 */
   autoSit: boolean;

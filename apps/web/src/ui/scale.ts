@@ -13,6 +13,9 @@ export function bindUiScale(): void {
   f(); window.addEventListener('resize', f);
 }
 /** 아레나 위쪽 석판 두께: 띠(h1)·가운데 칸(h2). 작은 화면에서도 띠가 너무 얇아지지 않게 */
+/** 위쪽 석판 가운데 버튼 칸 폭: 화면 가로에 비례(넓은 화면에서 옹졸하지 않게, 아주 좁으면 화면의 32%까지) */
+export function slabCw(W = window.innerWidth): number { return Math.round(Math.max(Math.min(150, W * 0.32), Math.min(360, W * 0.17))); }
 export function slabH(k = uiScale()): { h1: number; h2: number } {
-  const h1 = Math.max(46, Math.round(56 * k)); return { h1, h2: Math.max(h1 + 26, Math.round(94 * k)) };
+  // 가운데 칸(버튼 자리)의 두께도 칸 폭에 비례해 버튼이 화면 크기에 따라 커지고 작아진다(사용자 2026-10-14)
+  const h1 = Math.max(46, Math.round(56 * k)); return { h1, h2: h1 + Math.max(16, Math.round(slabCw() * 0.13)) };
 }

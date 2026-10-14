@@ -1,7 +1,7 @@
 /* 미니게임 3 (2026-10-13 디지털판 추가: 몸짓 잇기·주사위 쌓기·뭐가 바뀌었지·동굴 탐험·합이 10·밸런스 게임). 순수 함수: 상태를 받아 고친다 */
 import { R, cname, d6, now, rnd, shuffle } from './cards';
-import { buildBundle, endMinigame, fx, hasItem, log, N, outGroups, rankBy, useItem } from './core';
-import type { BalanceMg, Card, CaveMg, ChangeMg, ForeMg, ForkMg, GameState, GestureMg, LiarMg, StackMg, Suit, TenMg } from './types';
+import { buildBundle, endMinigame, fx, hasItem, log, N, outGroups, rankBy, scoreOf, useItem } from './core';
+import type { BalanceMg, Card, CaveMg, ChangeMg, ForeMg, ForkMg, GameState, GestureMg, LiarMg, MgScore, StackMg, Suit, TenMg } from './types';
 import { SYM, U } from './cards';
 
 const mgOf = <T>(S: GameState) => S.mg as unknown as T;
@@ -74,7 +74,9 @@ export function stackEnd(S: GameState): void {
   // 다 쌓은 사람은 빠른 순서, 못 쌓은 사람은 그 아래에서 높이 순서
   const fin = m.ord.filter(j => j in m.ms); const ms: Record<number, number> = {}; fin.forEach(j => ms[j] = m.ms[j]);
   const rest: Record<number, number> = {}; m.ord.filter(j => !(j in m.ms)).forEach(j => rest[j] = m.h[j]);
-  endMinigame(S, [...(fin.length ? rankBy(ms, false) : []), ...(Object.keys(rest).length ? rankBy(rest) : [])]);
+  // 결과판: 다 쌓은 사람은 걸린 시간, 못 쌓은 사람은 높이
+  const sc: MgScore = {}; fin.forEach(j => sc[j] = { v: (ms[j] / 1000).toFixed(2), u: '초' }); Object.keys(rest).forEach(k => sc[+k] = { v: String(rest[+k]), u: '층' });
+  endMinigame(S, [...(fin.length ? rankBy(ms, false) : []), ...(Object.keys(rest).length ? rankBy(rest) : [])], sc);
 }
 
 /* ================= 뭐가 바뀌었지 =================
@@ -126,13 +128,13 @@ export function changeResolve(S: GameState): void {
   m.last = { changer: m.changer, moved: m.moved.slice(), guesses: { ...m.guesses }, gain };
   log(S, `뭐가 바뀌었지 ${m.pan}판: ` + Object.keys(gain).map(k => `${nm(+k)} +${gain[+k]}`).join(', '));
   fx(S, { t: 'change', ...m.last, pieces: m.pieces.slice(), before: m.before.slice() });
-  if (m.pan >= m.ord.length) { endMinigame(S, rankBy(m.pts)); return; }
+  if (m.pan >= m.ord.length) { endMinigame(S, rankBy(m.pts), scoreOf(m.pts, '점')); return; }
   changePan(S);
 }
 
 /* ================= 동굴 탐험 ================= */
 /** 굴림 공개 시간: 버티면 폭파·전진·장면 전환까지, 무너지면 붕괴까지(아레나 연출, 사용자 2026-10-14 · 시간은 제안) */
-export const CAVE_PRE = 3000, CAVE_SHOW = 5000, CAVE_SHOW_FALL = 3500, CAVE_PANS = 3;
+export const CAVE_PRE = 1500, CAVE_SHOW = 5000, CAVE_SHOW_FALL = 3500, CAVE_PANS = 3;
 export function caveStart(S: GameState): void {
   const ord = seatOrd(S); const score: Record<number, number[]> = {}; ord.forEach(i => score[i] = []);
   S.mg = { id: 'cave', ord, pan: 0, step: 'decide', until: 0, inside: [], di: 0, pool: 0, ones: 0, turn: 0, protect: 0, got: {}, score, last: null };
@@ -149,12 +151,12 @@ export function caveGo(S: GameState, i: number, stay: boolean): false | undefine
   else { m.got[i] = m.turn; m.inside.splice(m.di, 1); log(S, `동굴 탐험: ${nm(i)} 나가기 (${m.turn}턴).`); }
   if (m.di < m.inside.length) return;
   if (!m.inside.length) { caveEndPan(S); return; }
-  // 굴리기 전 아이템(1 보호)을 낼 틈. 남은 사람 중 아이템 가진 사람이 없으면 바로 굴린다
-  if (m.inside.some(j => hasItem(S, j))) { m.step = 'pre'; m.until = now() + CAVE_PRE; } else caveRoll(S);
+  // 모두 고르면 1.5초 뒤 굴린다(사용자 2026-10-15: 대기는 두고 타이머만 보여 주지 않는다, 3초 → 1.5초). 아이템은 이 대기 중이 아니라 각자 자기 선택 차례에 낸다
+  m.step = 'pre'; m.until = now() + CAVE_PRE;
 }
-/** 아이템(1 보호): 굴리기 전에. 이번 굴림의 1 중 1개를 빼지 않는다(1장당 1개) */
+/** 아이템(1 보호): 자기 선택 차례에, 남기·나가기를 정하기 전에(사용자 2026-10-15). 이번 굴림의 1 중 1개를 빼지 않는다(1장당 1개) */
 export function caveGuard(S: GameState, i: number, item: Card): false | undefined {
-  const m = mgOf<CaveMg>(S); if (m.step !== 'pre' || !m.inside.includes(i)) return false;
+  const m = mgOf<CaveMg>(S); if (caveDecider(m) !== i) return false;
   if (!useItem(S, i, item)) return false;
   m.protect++; log(S, `동굴 탐험: ${nm(i)} 아이템 → 1 보호.`); fx(S, { t: 'banner', text: '1 보호!', seats: [i], tone: 'good' });
 }
@@ -179,7 +181,7 @@ export function caveAfterShow(S: GameState): void {
 function caveEndPan(S: GameState): void {
   const m = mgOf<CaveMg>(S); m.ord.forEach(j => m.score[j].push(m.got[j] ?? 0));
   log(S, `동굴 탐험 ${m.pan}판: ` + m.ord.map(j => `${nm(j)} ${m.got[j] ?? 0}점`).join(', '));
-  if (m.pan >= CAVE_PANS) { const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.score[j].reduce((a, v) => a + v, 0)); endMinigame(S, rankBy(sc)); return; }
+  if (m.pan >= CAVE_PANS) { const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.score[j].reduce((a, v) => a + v, 0)); endMinigame(S, rankBy(sc), scoreOf(sc, '점')); return; }
   cavePan(S);
 }
 
@@ -250,7 +252,7 @@ export function tenTake(S: GameState): void {
 function tenEnd(S: GameState): void {
   const m = mgOf<TenMg>(S); m.slots.forEach(s => m.spent.push(...s)); m.slots = [[], [], []];
   const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.hands[j].length);
-  log(S, '합이 10 끝: ' + m.ord.map(j => `${nm(j)} ${sc[j]}장`).join(', ')); endMinigame(S, rankBy(sc));
+  log(S, '합이 10 끝: ' + m.ord.map(j => `${nm(j)} ${sc[j]}장`).join(', ')); endMinigame(S, rankBy(sc), scoreOf(sc, '장'));
 }
 
 /* ================= 밸런스 게임 ================= */
@@ -281,7 +283,7 @@ export function balancePick(S: GameState, i: number, k: number): false | undefin
   log(S, `밸런스 게임: ${m.opts.map((x, q) => `${x} ${cnt[q]}`).join(' / ')} → ${win == null ? '동점, 점수 없음' : m.opts[win] + ' +' + gain}`);
   fx(S, { t: 'balance', ...m.last, seats: win == null ? [] : m.ord.filter(j => m.picks[j] === win) });
   m.ci++; m.three = false;
-  if (m.ci >= m.ord.length) { endMinigame(S, rankBy(m.pts)); return; }
+  if (m.ci >= m.ord.length) { endMinigame(S, rankBy(m.pts), scoreOf(m.pts, '점')); return; }
   m.step = 'say'; m.opts = []; m.picks = {};
 }
 
@@ -383,7 +385,7 @@ function foreResolve(S: GameState): void {
 function foreEnd(S: GameState): void {
   const m = mgOf<ForeMg>(S); S.deck.push(...m.pile, ...Object.values(m.fore)); m.pile = []; m.fore = {}; shuffle(S.deck);
   const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.hands[j].length);
-  endMinigame(S, rankBy(sc));
+  endMinigame(S, rankBy(sc), scoreOf(sc, '장'));
 }
 
 /* ================= 갈림길 ================= */
@@ -428,7 +430,7 @@ export function forkReveal(S: GameState): void {
 function forkEnd(S: GameState): void {
   const m = mgOf<ForkMg>(S); m.spent.push(...m.row); m.row = [];
   const sc: Record<number, number> = {}; m.ord.forEach(j => sc[j] = m.won[j].reduce((a, c) => a + R(c), 0));
-  endMinigame(S, rankBy(sc));
+  endMinigame(S, rankBy(sc), scoreOf(sc, '점'));
 }
 
 /** 방장 시계로 넘기는 단계들 (core.ts advanceTimers에서 부른다) */

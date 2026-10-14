@@ -1,6 +1,6 @@
 /* 흐름: 상태·연출 이벤트 → 3D 연출과 화면. 버튼·테이블 조작을 행동으로 바꾼다. */
 import {
-  type Action, type Card, type Fx, type GameState, type Hand, type MgId, type MidCrit, R, SNAME, type Suit, U, canMakeToken, chainFingers, clubChoices, cname, costFor, isItem,
+  type Action, type Card, type Fx, type GameState, type Hand, type MgId, type MgScore, type MidCrit, R, SNAME, type Suit, U, canMakeToken, chainFingers, clubChoices, cname, costFor, isItem,
 } from '@cubic3/engine';
 import { mine, mySeats, seatName, whoActs } from './game';
 import { useStore, viewSeat } from './store';
@@ -93,7 +93,7 @@ export function onState(s: GameState): void {
   for (const f of nw) {
     // 미니게임이 끝나면 순위 결과 화면(잠깐 뜨는 알림 대신)
     // 앞서 나온 연출(마지막 판 결과)이 다 끝난 뒤에 띄운다
-    if (f.t === 'rank') { const r = { mg: lastMgId, groups: f.groups as number[][], rolls: (f.rolls || {}) as Record<number, number[]>, order: (f.order || []) as number[] }; const show = () => { if (fxBusy) setTimeout(show, 200); else st().set({ results: r }); }; show(); continue; }
+    if (f.t === 'rank') { const r = { mg: lastMgId, groups: f.groups as number[][], rolls: (f.rolls || {}) as Record<number, number[]>, order: (f.order || []) as number[], score: f.score as MgScore | undefined }; const show = () => { if (fxBusy) setTimeout(show, 200); else st().set({ results: r }); }; show(); continue; }
     if (f.club || f.t === 'pick') { if (clubBusy) clubQ.push(f); else if (f.t === 'pick') runPick(f); else runClub(f); continue; }
     // 즉시 시작 미니게임(눈치 게임)이 뽑혔으면 디스크 고르기 연출 없이 바로 미니게임으로
     if (f.t === 'dice' && f.mg && ph === 'mg') { queueFx({ ...f, t: 'banner', text: `${f.v}번 · 바로 시작!`, tone: 'bad' }); continue; }
