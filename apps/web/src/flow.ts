@@ -344,8 +344,12 @@ export function cmd(a: string, d: D = {}): void {
     }
     case 'chgguess': { const g = (ui.cg || []).slice(); store.patchUi({ cg: [] }); act({ type: 'chgGuess', seat: i, pieces: g }); break; }
     case 'cgo': act({ type: 'caveGo', seat: i, stay: !!+d.s! }); break;
-    case 'cstay': act({ type: 'caveGo', seat: i, stay: true }); break;
-    case 'cleave': act({ type: 'caveGo', seat: i, stay: false }); break;
+    // 동굴 탐험(사용자 2026-10-14): 화살표(전진·나가기)를 고른 뒤 [확정]
+    case 'csel': store.patchUi({ cave: d.s === 'leave' ? 'leave' : 'stay' }); break;
+    case 'cconfirm': {
+      const c = ui.cave; if (!c) { toast('전진·나가기 화살표를 먼저 고르세요'); break; }
+      store.patchUi({ cave: undefined }); act({ type: 'caveGo', seat: i, stay: c === 'stay' }); break;
+    }
     case 'cguard': act({ type: 'caveGuard', seat: i, item: sel[0] }); break;
     case 'tplace': act({ type: 'tenPlace', seat: i, slot: +d.k! }); break;
     case 'tgrab': act({ type: 'tenGrab', seat: i, n: +d.n!, ms: +d.ms! }); break;

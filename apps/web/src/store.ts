@@ -21,6 +21,8 @@ export interface UiMode {
   /** 뭐가 바뀌었지: 옮길 말 / 고른 말들 */
   chg?: number;
   cg?: number[];
+  /** 동굴 탐험: 고른 화살표(전진 = 남기 / 나가기) */
+  cave?: 'stay' | 'leave';
   /** 거짓말쟁이: 고른 문양·장수 / 이마 위의 카드: 물어볼 사람·숫자 */
   lsu?: string;
   ln?: number;

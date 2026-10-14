@@ -8,13 +8,14 @@ import type { MgBoard } from './Slab';
 
 const secs = (t: number) => Math.max(0, Math.ceil((t - now()) / 1000));
 
-export function caveBoard(S: GameState, i: number | null, _ui: UiMode, _sel: Card[]): MgBoard {
+export function caveBoard(S: GameState, i: number | null, ui: UiMode, _sel: Card[]): MgBoard {
   const m = S.mg as CaveMg; const nm = (k: number) => seatName(S, k); const dec = caveDecider(m);
   const L = m.last; let line = ''; let timer: number | null = null; const buttons: MgBoard['buttons'] = [];
   if (m.step === 'decide') {
+    // 고를 차례: 동굴 안의 화살표(전진 / 나가기)를 고르고 위에는 [확정]만(사용자 2026-10-14)
     if (dec != null && dec === i) {
-      line = '남을까요, 나갈까요?';
-      buttons.push({ id: 'cstay', label: '남기', key: '1' }, { id: 'cleave', label: `나가기 · ${m.turn}점`, key: '2' });
+      line = ui.cave === 'stay' ? '전진' : ui.cave === 'leave' ? `나가기 · ${m.turn}점` : '화살표를 고르세요';
+      buttons.push({ id: 'cconfirm', label: '확정', key: '' });
     } else line = dec != null ? `${nm(dec)} 고르는 중` : '';
   } else if (m.step === 'pre') { line = '곧 굴립니다'; timer = secs(m.until); }
   else if (L) line = L.collapse ? '무너졌다!' : L.faces.includes(1) ? `1이 ${L.faces.filter(v => v === 1).length - L.kept}개 · 균열 ${L.ones}/3` : `${L.turn}턴 버팀`;
@@ -32,14 +33,16 @@ export function caveBoard(S: GameState, i: number | null, _ui: UiMode, _sel: Car
   };
 }
 
-/** 키보드: 1 남기 · 2 나가기(내가 고를 차례일 때) */
+/** 키보드: ← 나가기 · → 전진 고르기, Space(Enter) 확정(내가 고를 차례일 때) */
 export function CaveKeys({ S, i }: { S: GameState; i: number | null; ui: UiMode }) {
   const m = S.mg as CaveMg; const mine = m.step === 'decide' && i != null && caveDecider(m) === i;
   useEffect(() => {
     if (!mine) return;
     const k = (e: KeyboardEvent) => {
       if (e.repeat || (e.target as HTMLElement)?.tagName === 'INPUT') return;
-      if (e.key === '1') cmd('cstay'); else if (e.key === '2') cmd('cleave');
+      if (e.key === 'ArrowLeft') { e.preventDefault(); cmd('csel', { s: 'leave' }); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); cmd('csel', { s: 'stay' }); }
+      else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); cmd('cconfirm'); }
     };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   }, [mine]);
