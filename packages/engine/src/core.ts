@@ -10,6 +10,7 @@ import {
 import {
   advanceMg2, chainStart, curlingStart, duelStart, foldStart, lineStart, midStart, speedStart, updownStart,
 } from './minigames2';
+import { advanceMg4, dodgeStart } from './minigames4';
 import type { Card, Fx, GameState, MgId, Suit } from './types';
 
 export function log(S: GameState, msg: string): void {
@@ -326,6 +327,7 @@ export function startMinigame(S: GameState): void {
   if (id === 'liar') liarStart(S);
   if (id === 'fore') foreStart(S);
   if (id === 'fork') forkStart(S);
+  if (id === 'dodge') dodgeStart(S);
   log(S, `미니게임 시작: ${MG[id].name}`); fx(S, { t: 'title', mg: id });
 }
 /** scores: {seat:value} → 순위 그룹 [[seat..],..] */
@@ -400,5 +402,5 @@ export function advanceTimers(S: GameState): boolean {
   if (S.phase === 'defense' && S.pending && t >= S.pending.deadline) { resolveAttack(S); return true; }
   // 눈치 경매(디지털판): 아이템 낼 시간이 지나면 입찰로
   if (S.phase === 'mg' && S.mg?.id === 'auction' && S.mg.step === 'pre' && S.mg.until && t >= S.mg.until) { S.mg.step = 'bid'; return true; }
-  return advanceMg2(S, t) || advanceMg3(S, t);
+  return advanceMg2(S, t) || advanceMg3(S, t) || advanceMg4(S, t);
 }

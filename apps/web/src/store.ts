@@ -26,6 +26,10 @@ export interface UiMode {
   ln?: number;
   fto?: number;
   fv?: number;
+  /** 주사위 눈 피하기(공격자): 고른 주사위·방향(회전)·자리 */
+  dk?: number;
+  dor?: number;
+  dpl?: number;
   showHand?: boolean;
   rulesAgain?: boolean;
   log?: boolean;

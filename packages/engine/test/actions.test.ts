@@ -1,7 +1,7 @@
 /* applyAction 시험: 판정이 허용한 행동만 실행해 무작위 대국을 끝까지 돌리고, 카드가 사라지거나 생기지 않는지 본다. */
 import { describe, expect, it } from 'vitest';
 import {
-  type Action, type Card, type CountMg, type GameState, type HoldMg, type MgId, MG, R, U, advanceTimers, endTurn, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
+  type Action, type Card, type CountMg, type DodgeMg, type GameState, type HoldMg, type MgId, DODGE_SHAPES, MG, R, U, advanceTimers, endTurn, applyAction, canAct, countOpenAt, countStart, isItem, startMinigame, newLobby, setClock, setRng,
 } from '../src/index';
 
 function mulberry32(seed: number) {
@@ -101,7 +101,13 @@ function candidates(S: GameState, seat: number): Action[] {
   if (m?.id === 'liar') { const n = (m.bid?.n || 0) + 1 + Math.floor(rng() * 2); for (const su of ['S', 'H', 'D', 'C'] as const) c.push({ type: 'liarBid', seat, suit: su, n }); c.push({ type: 'liarCall', seat }); }
   c.push({ type: 'foreAct', seat, go: rng() < .6 });
   if (m?.id === 'fork') for (let k = 0; k < m.row.length; k++) c.push({ type: 'forkPick', seat, k });
-  for (const it of its) {
+  // 2026-10-14 디지털 전용
+  if (m?.id === 'dodge') {
+    for (let x = 0; x < 9; x++) c.push({ type: 'dodgeMove', seat, cell: x });
+    c.push({ type: 'dodgeLock', seat }, { type: 'dodgeGo', seat });
+    m.dice.forEach((d, k) => { const all = DODGE_SHAPES[d].flat(); c.push({ type: 'dodgeShot', seat, k, cells: all[Math.floor(rng() * all.length)] }, { type: 'dodgeShot', seat, k, cells: [0, 1, 2, 3, 4, 5, 6, 7] }); });
+    for (const it of its) { c.push({ type: 'dodgeBlock', seat, item: it, cell: Math.floor(rng() * 9) }, { type: 'dodgePeek', seat, item: it }); }
+  }  for (const it of its) {
     c.push({ type: 'liarAdd', seat, item: it }, { type: 'forkRev', seat, item: it });
     for (let t = 0; t < S.seats.length; t++) c.push({ type: 'foreAsk', seat, item: it, to: t, v: 1 + Math.floor(rng() * 13) });
     c.push({ type: 'gestSkip', seat, item: it }, { type: 'stackWide', seat, item: it }, { type: 'chgMore', seat, item: it }, { type: 'caveGuard', seat, item: it }, { type: 'tenAll', seat, item: it }, { type: 'balThree', seat, item: it });
@@ -264,8 +270,8 @@ describe('applyAction', () => {
     expect(S.seats[i].tokens).toEqual(['H']);
   });
 
-  it('새 미니게임 17개: 인원마다 판정이 허용한 행동만으로 끝까지 가고 카드 수가 보존된다', () => {
-    const ids: MgId[] = ['nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance', 'liar', 'fore', 'fork'];
+  it('새 미니게임 18개: 인원마다 판정이 허용한 행동만으로 끝까지 가고 카드 수가 보존된다', () => {
+    const ids: MgId[] = ['nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance', 'liar', 'fore', 'fork', 'dodge'];
     for (const id of ids) for (let n = MG[id].min; n <= MG[id].max; n++) for (let g = 0; g < 6; g++) {
       const r = playMg(id, n, 9000 + g * 31 + n);
       if (!r.done) throw new Error(`${id} ${n}인: 끝나지 않음 (seed ${9000 + g * 31 + n}) ${JSON.stringify(r.S.mg).slice(0, 900)} end=${JSON.stringify(r.S.mgEnd)}`);
@@ -369,6 +375,56 @@ describe('applyAction', () => {
     expect(canAct(S, uid, { type: 'token', seat: i, cards: ['H2', 'H3', 'H4', 'H5'].filter(c => S.seats[i].hand.includes(c)) })).not.toBeNull();
   });
 
+  it('주사위 눈 피하기: 눈마다 놓을 수 있는 자리 수', () => {
+    const cnt = (d: number) => new Set(DODGE_SHAPES[d].flat().map(p => p.slice().sort((a, b) => a - b).join())).size;
+    expect([1, 2, 3, 4, 5, 6].map(cnt)).toEqual([9, 8, 8, 4, 1, 2]);
+  });
+
+  it('주사위 눈 피하기: 맞은 수만큼 공격자 점수, 살아남은 수비자 1점, 쓴 주사위만 다시 굴린다, 못 고른 수비자는 제자리', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(41));
+    const S = newLobby(); for (let k = 0; k < 4; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.first = 0; S.seats.forEach(p => { p.hand = p.hand.filter(c => !isItem(c)); });
+    S.board = Array(6).fill('dodge'); S.die = 1; S.phase = 'clubs'; S.turn = null; startMinigame(S);
+    const m = S.mg as DodgeMg; expect(m.turns).toBe(3); expect(m.step).toBe('pick');
+    const atk = m.ord[m.ai]; const [a, b, c] = m.ord.filter(j => j !== atk);
+    expect(Object.values(m.pos).sort()).toEqual([1, 3, 5]);
+    m.pos = { [a]: 1, [b]: 3, [c]: 5 }; m.dice = [3, 6, 1];
+    expect(applyAction(S, 'u' + a, { type: 'dodgeMove', seat: a, cell: 7 }).ok).toBe(false);   // 두 칸은 못 간다
+    expect(applyAction(S, 'u' + a, { type: 'dodgeMove', seat: a, cell: 4 }).ok).toBe(true);
+    expect(applyAction(S, 'u' + a, { type: 'dodgeLock', seat: a }).ok).toBe(true);
+    expect(applyAction(S, 'u' + b, { type: 'dodgeLock', seat: b }).ok).toBe(true);           // 제자리 3
+    expect(applyAction(S, 'u' + atk, { type: 'dodgeShot', seat: atk, k: 0, cells: [0, 1] }).ok).toBe(false); // 3은 한 줄
+    expect(applyAction(S, 'u' + atk, { type: 'dodgeShot', seat: atk, k: 0, cells: [3, 4, 5] }).ok).toBe(true);
+    expect(m.step).toBe('pick');                       // c가 아직
+    T += 36_000; advanceTimers(S);                      // 수비자 마감: c는 제자리 5
+    expect(m.last!.hit.sort()).toEqual([a, b, c].sort());
+    expect(m.pts[atk]).toBe(3); expect(m.pts[a] + m.pts[b] + m.pts[c]).toBe(0);
+    expect(m.dice[1]).toBe(6); expect(m.dice[2]).toBe(1);
+    T += 3000; advanceTimers(S); expect(m.turn).toBe(2);
+  });
+
+  it('주사위 눈 피하기: 봉쇄는 빈 칸만, 막힌 칸으로는 못 가고, 공격자가 바뀌면 풀린다. 2인은 5턴', () => {
+    let T = 1_000_000; setClock(() => T); setRng(mulberry32(42));
+    const S = newLobby(); for (let k = 0; k < 2; k++) applyAction(S, 'u' + k, { type: 'sit' }); applyAction(S, 'u0', { type: 'start' });
+    S.first = 0; S.board = Array(6).fill('dodge'); S.die = 1; S.phase = 'clubs'; S.turn = null;
+    S.seats[0].hand.push('S11b', 'S12b'); startMinigame(S);
+    const m = S.mg as DodgeMg; expect(m.turns).toBe(5); expect(m.step).toBe('block'); expect(m.pos[1]).toBe(4);
+    expect(applyAction(S, 'u0', { type: 'dodgeBlock', seat: 0, item: 'S11b', cell: 4 }).ok).toBe(false); // 사람이 있는 칸
+    expect(applyAction(S, 'u0', { type: 'dodgeBlock', seat: 0, item: 'S11b', cell: 1 }).ok).toBe(true);
+    expect(applyAction(S, 'u0', { type: 'dodgeGo', seat: 0 }).ok).toBe(true);
+    expect(applyAction(S, 'u1', { type: 'dodgeMove', seat: 1, cell: 1 }).ok).toBe(false);
+    expect(applyAction(S, 'u1', { type: 'dodgeMove', seat: 1, cell: 3 }).ok).toBe(true);
+    // 엿보기는 공격자가 확정한 뒤에만
+    S.seats[1].hand.push('H11b');
+    expect(applyAction(S, 'u1', { type: 'dodgePeek', seat: 1, item: 'H11b' }).ok).toBe(false);
+    T += 31_000; advanceTimers(S);                      // 공격자 시간 초과 → 무작위로 떨어진다
+    expect(m.shot?.auto).toBe(true);
+    expect(applyAction(S, 'u1', { type: 'dodgePeek', seat: 1, item: 'H11b' }).ok).toBe(true);
+    applyAction(S, 'u1', { type: 'dodgeLock', seat: 1 });
+    expect(m.step).toBe('show');
+    for (let k = 0; k < 40 && m.ai === 0; k++) { T += 40_000; advanceTimers(S); }
+    expect(m.ai).toBe(1); expect(m.blocked).toEqual([]); expect(m.pos[0]).toBe(4);
+  });
   it('판정이 허용한 행동만으로 2~5인 대국이 오류 없이 끝나고 카드 수가 보존된다', () => {
     let ended = 0;
     for (let g = 0; g < 80; g++) if (play(2 + (g % 4), 500 + g).ended) ended++;

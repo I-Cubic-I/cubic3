@@ -637,3 +637,44 @@ body.dragging .plate{box-shadow:0 0 0 2px rgba(255,128,128,.4)}
 .gpuwarn span{flex:1;min-width:240px}
 .gpuwarn b{flex:none;color:#ffd36b}
 .gpuwarn .btn{flex:none}
+
+/* 주사위 눈 피하기 (2026-10-14) */
+.dodgewrap{display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:wrap;margin:10px 0}
+.ddice{display:flex;flex-direction:column;gap:10px}
+.dfbtn{padding:0;border:0;background:none;cursor:pointer}
+.dface{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:52px;height:52px;padding:7px;border-radius:12px;background:var(--ivory);border:2px solid transparent;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.dface.sm{width:32px;height:32px;padding:4px;gap:2px;border-radius:8px;vertical-align:middle}
+.dface.on{border-color:var(--brass);box-shadow:0 0 0 4px rgba(232,184,74,.35),0 4px 12px rgba(0,0,0,.4)}
+.dface i{border-radius:50%}
+.dface i.p{background:#1b1b1f}
+.dgrid{display:grid;grid-template-columns:repeat(3,72px);grid-template-rows:repeat(3,72px);gap:6px;padding:8px;border-radius:14px;background:rgba(0,0,0,.25);border:1px solid var(--line)}
+.dcell{position:relative;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;border-radius:10px;background:var(--glass);border:1px solid var(--line);transition:background .15s,border-color .15s}
+.dcell.reach{border-color:rgba(232,184,74,.55);cursor:pointer}
+.dcell.mine{background:rgba(232,184,74,.18);border-color:var(--brass)}
+.dcell.shape{background:rgba(232,90,60,.6);border-color:#ffb09a;box-shadow:inset 0 0 0 2px rgba(255,176,154,.5)}
+.dcell.boom{background:rgba(224,60,40,.6);border-color:#ff5a3c;animation:dboom .5s ease-out}
+.dcell.blk{background:repeating-linear-gradient(45deg,rgba(255,255,255,.06) 0 8px,rgba(0,0,0,.25) 8px 16px);cursor:not-allowed}
+.dcell.can{border-color:#ff8a6a;cursor:pointer}
+.dcell .lock{position:absolute;top:4px;right:6px;font-size:13px;opacity:.85}
+.pawn{width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.75);box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.pawn.ghost{background:transparent!important;border-style:dashed;border-width:2px;opacity:.85}
+.pawn.hit{animation:dhit .6s ease-out;outline:3px solid #ff5a3c}
+.dpeek{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--brass)}
+.dmini{display:grid;grid-template-columns:repeat(3,18px);gap:3px}
+.dmini i{width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.12)}
+.dmini i.on{background:#ff5a3c}
+@keyframes dboom{0%{transform:scale(1.12)}100%{transform:scale(1)}}
+@keyframes dhit{0%{transform:scale(1.4)}100%{transform:scale(1)}}
+@media (max-width:520px){.dgrid{grid-template-columns:repeat(3,60px);grid-template-rows:repeat(3,60px)}.ddice{flex-direction:row}}
+/* 주사위 눈 피하기: 가로 휴대폰처럼 낮은 화면에서는 판을 줄여 위쪽 안내·버튼이 잘리지 않게 */
+@media (max-height:520px){
+  .mg:has(.dgrid){bottom:6px;padding:8px 12px;max-height:calc(100vh - 12px);overflow:auto}
+  .mg:has(.dgrid) .head{margin-bottom:4px}
+  .mg:has(.dgrid) .stage{gap:6px}
+  .mg:has(.dgrid) .line{font-size:13px;line-height:1.4}
+  .dodgewrap{margin:0;gap:12px}
+  .dgrid{grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:4px;padding:5px}
+  .ddice{gap:6px}
+  .dface{width:36px;height:36px;padding:5px;gap:3px}
+  .pawn{width:16px;height:16px}
+}

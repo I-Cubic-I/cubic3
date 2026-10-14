@@ -6,7 +6,8 @@ export type Card = string;
 export type MgId = 'hold' | 'bomb' | 'auction' | 'balloon' | 'rps' | 'vault' | 'count' | 'race'
   | 'nunchi' | 'updown' | 'curling' | 'line' | 'speed' | 'fold' | 'chain' | 'mid'
   | 'gesture' | 'stack' | 'change' | 'cave' | 'ten' | 'balance'
-  | 'liar' | 'fore' | 'fork';
+  | 'liar' | 'fore' | 'fork'
+  | 'dodge';
 export type Phase = 'lobby' | 'main' | 'defense' | 'roll' | 'clubs' | 'mg' | 'reward' | 'ended';
 export type Hand = 'R' | 'P' | 'S';
 
@@ -279,9 +280,42 @@ export interface ForkMg {
   step: 'pick' | 'wait'; until: number;
   last: { row: Card[]; picks: Record<number, number>; rev: Record<number, boolean>; got: Record<number, number> } | null;
 }
+/* ---- 2026-10-14 디지털 전용 ---- */
+/** 주사위 눈 피하기: 3×3 판(칸 0~8 = 행×3+열). 공격자가 공개된 주사위 3개 중 하나를 골라 그 눈의 모양을 판 위에 놓고,
+    수비자들은 상하좌우 한 칸(또는 제자리)으로 움직인다. 모양이 덮은 칸에 있으면 맞는다 */
+export interface DodgeMg {
+  id: 'dodge';
+  /** 공격 순서. 지금 공격자 = ord[ai] */
+  ord: number[]; ai: number;
+  /** 이번 공격자의 몇 번째 턴(1부터) / 공격자 1명당 턴 수 */
+  turn: number; turns: number;
+  /** 공개된 주사위 3개 */
+  dice: number[];
+  /** 수비자 위치 */
+  pos: Record<number, number>;
+  /** 봉쇄된 칸(공격자 아이템). 그 공격자의 차례가 끝날 때까지 */
+  blocked: number[];
+  step: 'block' | 'pick' | 'show';
+  /** block: 봉쇄 시간 끝 / pick: 공격자 마감 / show: 결과를 보여 주는 시간 끝 (방장 시계) */
+  until: number;
+  /** 수비자 마감(공격자보다 5초 늦다) */
+  dUntil: number;
+  /** 공격자가 확정한 공격(수비자 화면에는 숨긴다). k = 고른 주사위 */
+  shot: { k: number; die: number; cells: number[]; auto?: boolean } | null;
+  /** 수비자가 고르고 있는 칸(수비자끼리 공유, 공격자 화면에는 숨긴다) */
+  moves: Record<number, number>;
+  /** 확정한 수비자 */
+  done: Record<number, boolean>;
+  /** 엿보기를 쓴 수비자(공격자가 고른 눈이 그 사람에게만 보인다) */
+  peek: Record<number, boolean>;
+  pts: Record<number, number>;
+  last: { atk: number; die: number; cells: number[]; from: Record<number, number>; to: Record<number, number>; hit: number[]; auto: boolean } | null;
+}
+
 export type MgState = HoldMg | BombMg | AuctionMg | BalloonMg | OvnMg | CountMg | RaceMg
   | DuelMg | UpDownMg | CurlingMg | LineMg | SpeedMg | FoldMg | ChainMg | MidMg
-  | GestureMg | StackMg | ChangeMg | CaveMg | TenMg | BalanceMg | LiarMg | ForeMg | ForkMg;
+  | GestureMg | StackMg | ChangeMg | CaveMg | TenMg | BalanceMg | LiarMg | ForeMg | ForkMg
+  | DodgeMg;
 
 export interface GameState {
   v: number;

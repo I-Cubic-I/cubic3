@@ -6,6 +6,7 @@ import { mine, mySeats, seatName, whoActs } from './game';
 import { useStore, viewSeat } from './store';
 import type { Pick, World } from './scene/World';
 import { forgetHosting } from './net/room';
+import { dodgeNudge, dodgePlaceAt, dodgeRotate, preview } from './ui/MgPanel4';
 
 let world: World | null = null;
 export const getWorld = () => world;
@@ -29,7 +30,7 @@ function nextFx(): void {
   setTimeout(() => { st().set({ fxShow: { f, out: true } }); setTimeout(nextFx, 260); }, dur);
 }
 function fxDuration(f: Fx): number {
-  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200, item: 2100, change: 2600, cave: 1600, balance: 2400, liar: 3000, fore: 2800, fork: 2600, duel: 2600, updown: 2600, curl: 2200, fold: 2200, chainAim: 1500, mid: 2600, line: 1700 } as Record<string, number>)[f.t] || 1300;
+  return ({ dice: 1300, title: 1600, pop: f.small ? 1100 : 1400, rps: 2200, vault: 2300, count: 2000, bids: 1800, token: 1300, attack: 1300, rank: 1900, win: 3200, item: 2100, change: 2600, cave: 1600, balance: 2400, liar: 3000, fore: 2800, fork: 2600, duel: 2600, updown: 2600, curl: 2200, fold: 2200, chainAim: 1500, mid: 2600, line: 1700, dodge: 2000 } as Record<string, number>)[f.t] || 1300;
 }
 function shakes(f: Fx): boolean {
   if (f.t === 'dice') return !!f.bust;
@@ -355,6 +356,27 @@ export function cmd(a: string, d: D = {}): void {
     case 'fask': act({ type: 'foreAsk', seat: i, item: sel[0], to: +d.to!, v: +d.v! }); break;
     case 'fpick': act({ type: 'forkPick', seat: i, k: +d.k! }); break;
     case 'frev': act({ type: 'forkRev', seat: i, item: sel[0] }); break;
+    // 2026-10-14 주사위 눈 피하기
+    case 'dk': store.patchUi({ dk: +d.k!, dor: undefined, dpl: undefined }); break;
+    case 'drot': case 'dplace': case 'dnudge': {
+      if (s?.mg?.id !== 'dodge') break; const m = s.mg;
+      const p = a === 'drot' ? dodgeRotate(m, ui) : a === 'dplace' ? dodgePlaceAt(m, ui, +d.c!) : dodgeNudge(m, ui, +d.r!, +d.c!);
+      if (p) store.patchUi(p); break;
+    }
+    case 'dshot': {
+      if (s?.mg?.id !== 'dodge') break; const p = preview(s.mg, ui);
+      if (!p) { toast('먼저 주사위를 고르세요'); break; }
+      act({ type: 'dodgeShot', seat: i, k: p.k, cells: p.cells }); break;
+    }
+    case 'dmove': act({ type: 'dodgeMove', seat: i, cell: +d.c! }); break;
+    case 'dlock': act({ type: 'dodgeLock', seat: i }); break;
+    case 'dgo': act({ type: 'dodgeGo', seat: i }); break;
+    case 'dblock': {
+      const it = sel.find(isItem); if (!it) { toast('아이템 카드를 먼저 고르세요'); break; }
+      // 쓴 카드는 손패에서 빠지므로 골라 둔 것도 지운다(다음 칸을 막으려면 다른 아이템을 다시 고른다)
+      void store.act({ type: 'dodgeBlock', seat: i, item: it, cell: +d.c! }).then(ok => { if (ok) store.clearSel(); }); break;
+    }
+    case 'dpeek': act({ type: 'dodgePeek', seat: i, item: sel[0] }); break;
   }
 }
 

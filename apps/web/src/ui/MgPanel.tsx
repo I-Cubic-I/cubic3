@@ -10,6 +10,7 @@ import { MCard } from './bits';
 import { digitalRules } from './mgtext';
 import { MgBody2, mgItemUse2 } from './MgPanel2';
 import { MgBody3, mgItemUse3 } from './MgPanel3';
+import { Dodge, mgItemUse4 } from './MgPanel4';
 
 const HAND_EMOJI: Record<Hand, string> = { S: '✌️', R: '✊', P: '✋' };
 
@@ -38,7 +39,7 @@ export function mgItemUse(S: GameState, i: number | null): ItemUse {
     }
     case 'race': return m.step !== 'bet' && (i in m.bet) ? pick('고른 뒤 갈아탈 문양을 누르세요') : no('경주가 시작되면 써요');
   }
-  return mgItemUse2(S, i, no, now_, pick) ?? mgItemUse3(S, i, no, now_, pick) ?? no('이 미니게임에는 아이템이 없어요');
+  return mgItemUse2(S, i, no, now_, pick) ?? mgItemUse3(S, i, no, now_, pick) ?? mgItemUse4(S, i, no, now_, pick) ?? no('이 미니게임에는 아이템이 없어요');
 }
 /** 아이템 카드를 눌렀을 때 */
 export function pressItemCard(S: GameState, i: number | null, c: Card): void {
@@ -161,6 +162,7 @@ export function MgPanel({ S, i, sel, ui }: { S: GameState; i: number | null; sel
       {me_}
     </>;
   }
+  if (m.id === 'dodge') body = <Dodge S={S} i={i} ui={ui} sel={sel} />;
   if (!body) body = <><MgBody2 S={S} i={i} sel={sel} ui={ui} /><MgBody3 S={S} i={i} sel={sel} ui={ui} /></>;
   if (m.id === 'count') {
     const t = now(); const k = Math.floor((t - m.t0) / CFLIP); const open = t >= countOpenAt(m);

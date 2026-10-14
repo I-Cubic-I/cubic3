@@ -9,6 +9,7 @@ import { mgLook } from '../scene/textures';
 import { digitalRules } from './mgtext';
 import { CurlPractice } from './CurlPad';
 import { PIECE_COL } from './MgPanel3';
+import { DieFace } from './MgPanel4';
 
 /** 미니게임 카드 앞면 도구 아이콘 → 이름 */
 const TOOL: Record<string, string> = { '🂠': '카드', '🎲': '주사위', '✊': '손', '🪙': '동전', '1·2·3': '판 뒷면', '🗣': '말하기', '✋': '손가락', '🙌': '몸짓', '♟': '말·판' };
@@ -178,6 +179,12 @@ export function FxView({ S, f, out }: { S: GameState; f: Fx; out: boolean }) {
     const stop = f.stop as Record<number, Card>;
     inner = <><div className="b">멈춰!</div><div className="s">{nm(f.seat as number)} {cname(f.c as Card)} · 더 작은 카드: {Object.keys(stop).map(k => `${nm(+k)} ${cname(stop[+k])}`).join(', ')}</div></>;
     cls += ' bad';
+  } else if (f.t === 'dodge') {
+    const hit = f.hit as number[]; const cells = f.cells as number[];
+    if (hit.length) cls += ' bad';
+    inner = <><div className="k">{nm(f.atk as number)}의 공격{f.auto ? ' · 시간 초과' : ''}</div>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><DieFace v={f.die as number} /><span className="dmini">{Array.from({ length: 9 }, (_, c) => <i key={c} className={cells.includes(c) ? 'on' : ''} />)}</span></div>
+      <div className="s">{hit.length ? names(S, hit) + ' 맞음!' : '모두 피했다'}</div></>;
   } else if (f.t === 'rank') inner = <><div className="k">미니게임 결과</div>{(f.groups as number[][]).map((g, k) => <div key={k} className="rk"><b>{k + 1}위</b>{names(S, g)}</div>)}</>;
   else if (f.t === 'win') { cls += ' win'; inner = <><div className="k">우승</div><div className="b">{names(S, f.seats!)}</div></>; }
   else inner = <><div className="b">{String(f.text || '')}</div>{who}</>;

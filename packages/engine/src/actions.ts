@@ -18,6 +18,7 @@ import {
   gestSkip, gestTurn, gesture, stackReport, stackWide, tenAll, tenGrab, tenPlace, tenTurn,
   foreAct, foreAsk, foreTurn, forkPick, forkRev, liarAdd, liarBid, liarCall, liarTurn,
 } from './minigames3';
+import { dodgeAtk, dodgeBlock, dodgeCanBlock, dodgeCanGo, dodgeGo, dodgeLock, dodgeMove, dodgePeek, dodgeShot, dodgeValid } from './minigames4';
 import type { Card, CurlShot, GameState, Hand, MidCrit, Suit } from './types';
 
 export const MAX_SEATS = 5;
@@ -112,7 +113,13 @@ export type Action =
   | { type: 'foreAct'; seat: number; go: boolean }
   | { type: 'foreAsk'; seat: number; item: Card; to: number; v: number }
   | { type: 'forkPick'; seat: number; k: number }
-  | { type: 'forkRev'; seat: number; item: Card };
+  | { type: 'forkRev'; seat: number; item: Card }
+  | { type: 'dodgeBlock'; seat: number; item: Card; cell: number }
+  | { type: 'dodgeGo'; seat: number }
+  | { type: 'dodgeMove'; seat: number; cell: number }
+  | { type: 'dodgeLock'; seat: number }
+  | { type: 'dodgeShot'; seat: number; k: number; cells: number[] }
+  | { type: 'dodgePeek'; seat: number; item: Card };
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -302,7 +309,13 @@ function check(S: GameState, uid: string, a: Action): string | null {
     case 'forkPick': return mg.id === 'fork' && mg.step === 'pick' && (a.seat in mg.won) && !(a.seat in mg.picks) && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.row.length ? null : '지금은 고를 수 없어요.';
     case 'forkRev': return mg.id === 'fork' && (mg.step === 'pick' || mg.step === 'wait') && (a.seat in mg.won) && !mg.rev[a.seat] ? null : '공개 전에 써요.';
     case 'balPick': return mg.id === 'balance' && mg.step === 'pick' && (a.seat in mg.pts) && !(a.seat in mg.picks) && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.opts.length ? null : '지금은 고를 수 없어요.';
-  }
+    // 2026-10-14 디지털 전용
+    case 'dodgeBlock': return mg.id === 'dodge' && mg.step === 'block' && dodgeAtk(mg) === a.seat ? (dodgeCanBlock(mg, a.cell) ? null : '아무도 없는 칸만 막을 수 있어요.') : '공격자가 고르기 전에 써요.';
+    case 'dodgeGo': return mg.id === 'dodge' && mg.step === 'block' && dodgeAtk(mg) === a.seat ? null : '지금은 할 수 없어요.';
+    case 'dodgeMove': return mg.id === 'dodge' && mg.step === 'pick' && dodgeAtk(mg) !== a.seat && (a.seat in mg.pos) && !mg.done[a.seat] ? (dodgeCanGo(mg, a.seat, a.cell) ? null : '상하좌우 한 칸 또는 제자리만, 막힌 칸은 못 가요.') : '지금은 움직일 수 없어요.';
+    case 'dodgeLock': return mg.id === 'dodge' && mg.step === 'pick' && dodgeAtk(mg) !== a.seat && (a.seat in mg.pos) && !mg.done[a.seat] ? null : '지금은 확정할 수 없어요.';
+    case 'dodgeShot': return mg.id === 'dodge' && mg.step === 'pick' && dodgeAtk(mg) === a.seat && !mg.shot && Number.isInteger(a.k) && a.k >= 0 && a.k < mg.dice.length ? (dodgeValid(mg.dice[a.k], a.cells) ? null : '그 눈으로는 놓을 수 없는 모양이에요.') : '지금은 떨어뜨릴 수 없어요.';
+    case 'dodgePeek': return mg.id === 'dodge' && mg.step === 'pick' && !!mg.shot && dodgeAtk(mg) !== a.seat && (a.seat in mg.pos) && !mg.done[a.seat] && !mg.peek[a.seat] ? null : '공격자가 준비를 마친 뒤, 내가 확정하기 전에 써요.';  }
   return null;
 }
 
@@ -437,5 +450,10 @@ function run(S: GameState, uid: string, a: Action): false | void {
     case 'foreAsk': return foreAsk(S, a.seat, a.item, a.to, a.v);
     case 'forkPick': return forkPick(S, a.seat, a.k);
     case 'forkRev': return forkRev(S, a.seat, a.item);
-  }
+    case 'dodgeBlock': return dodgeBlock(S, a.seat, a.item, a.cell);
+    case 'dodgeGo': return dodgeGo(S, a.seat);
+    case 'dodgeMove': return dodgeMove(S, a.seat, a.cell);
+    case 'dodgeLock': return dodgeLock(S, a.seat);
+    case 'dodgeShot': return dodgeShot(S, a.seat, a.k, a.cells);
+    case 'dodgePeek': return dodgePeek(S, a.seat, a.item);  }
 }

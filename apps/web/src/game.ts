@@ -1,5 +1,5 @@
 /* 상태를 읽는 도우미 (누구 차례인지, 내 자리, 이름) */
-import { type GameState, caveDecider, countOpenAt, curlTurn, foreTurn, gestTurn, liarTurn, now, tenTurn, udCaller, udShouter } from '@cubic3/engine';
+import { type GameState, caveDecider, countOpenAt, curlTurn, dodgeAtk, dodgeDefs, foreTurn, gestTurn, liarTurn, now, tenTurn, udCaller, udShouter } from '@cubic3/engine';
 
 export const SEATCOL = ['#2f5fc8', '#d3302f', '#e0b100', '#2e9450', '#8a5cc8'];
 export const SUITCOL: Record<string, string> = { S: '#2f5fc8', H: '#d3302f', D: '#e0b100', C: '#2e9450' };
@@ -62,6 +62,7 @@ export function whoActs(S: GameState | null, me: string): number | null {
     if (m.id === 'liar') return m.step === 'bid' ? liarTurn(m) : null;
     if (m.id === 'fore') return foreTurn(m);
     if (m.id === 'fork') return m.step === 'pick' ? pickOne(m.ord.filter(k => !(k in m.picks))) : null;
+    if (m.id === 'dodge') return m.step === 'block' ? dodgeAtk(m) : m.step === 'pick' ? pickOne([...(m.shot ? [] : [dodgeAtk(m)]), ...dodgeDefs(m).filter(k => !m.done[k])]) : null;
   }
   return null;
 }
