@@ -31,5 +31,5 @@ export interface ArenaDef {
 export const ARENAS: Partial<Record<MgId, ArenaDef>> = {
   dodge: { board: dodgeBoard, Keys: DodgeKeys, make: (scene, camera, dom, gl) => new DodgeArena(scene, camera, dom, gl) },
   cave: { board: caveBoard, Keys: CaveKeys, make: (scene, camera, dom, gl) => new CaveArena(scene, camera, dom, gl) },
-  rps: { board: rpsBoard, make: (scene, camera, dom) => new RpsArena(scene, camera, dom) },
+  rps: { board: rpsBoard, make: (scene, camera, dom, gl) => new RpsArena(scene, camera, dom, gl) },
 };

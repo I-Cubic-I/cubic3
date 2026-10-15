@@ -6,3 +6,6 @@ tools/test/.cache/
 node_modules/
 dist/
 !game/dist/
+
+# 새 마법사 3D 모델(Meshy): 공개 저장소에 올리지 않고 로컬에만 둔다(2026-10-15)
+apps/web/public/models/

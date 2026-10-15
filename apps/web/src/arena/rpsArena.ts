@@ -11,6 +11,9 @@ import { type Wizard, buildWizard, magicTex, softTex } from './props';
 import { INK, INK_U, backOut, canvasTex, clamp01, ease, gradientMap, ink, toon } from './toon';
 import { ECOL, buildAsh, buildFireball, buildFlames, buildShield, buildVines, buildWave, scorch, unscorch } from './rpsFx';
 import { rng } from './caveParts';
+import { NEW_WIZ, buildMeshyWizard } from './meshyWizard';
+import { CreasePass } from './crease';
+
 import { slabH, uiScale } from '../ui/scale';
 
 /** 화각(넓게: 원근을 키운다) · 카메라 높이 · 도전자 사이 간격 · 산 자리 */
@@ -42,7 +45,9 @@ export class RpsArena {
   /** 개발용: 도전자 수를 바꿔 배치 미리 보기(가짜 자리 번호) */
   fake = 0;
 
-  constructor(private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private dom: HTMLCanvasElement) {
+  private crease: CreasePass | null = null;
+  constructor(private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private dom: HTMLCanvasElement, private gl: THREE.WebGLRenderer) {
+    if (NEW_WIZ) this.crease = new CreasePass(gl);
     // 먹구름 낀 어두운 하늘: 멀수록 보랏빛 회색으로 흐려진다
     scene.background = new THREE.Color('#3b3647');
     scene.fog = new THREE.Fog('#3b3647', 25, 140);
@@ -60,7 +65,10 @@ export class RpsArena {
     dom.addEventListener('pointermove', this.onMove); dom.addEventListener('pointerdown', this.onDown); dom.addEventListener('pointerleave', this.onLeave);
     if (import.meta.env.DEV) (window as unknown as { __rps: RpsArena }).__rps = this;
   }
+  /** 새 마법사 미리보기일 때만 주름 선 효과를 거쳐 그린다 */
+  render(): void { if (this.crease) this.crease.render(this.scene, this.camera); else this.gl.render(this.scene, this.camera); }
   dispose(): void {
+    this.crease?.dispose();
     this.dom.removeEventListener('pointermove', this.onMove); this.dom.removeEventListener('pointerdown', this.onDown); this.dom.removeEventListener('pointerleave', this.onLeave); this.dom.style.cursor = '';
     this.camera.remove(this.orbRing); this.scene.clear(); this.scene.background = null; this.scene.fog = null; this.wiz.clear(); }
 
@@ -272,7 +280,7 @@ export class RpsArena {
   private layout(lead: number, ch: number[], me: number | null): void {
     const S = useStore.getState().S!;
     for (const j of [lead, ...ch]) if (!this.wiz.has(j)) {
-      const w = buildWizard(SEATCOL[j % 5]); this.scene.add(w.root);
+      const w = NEW_WIZ ? buildMeshyWizard(SEATCOL[j % 5]) : buildWizard(SEATCOL[j % 5]); this.scene.add(w.root);
       const tag = tagSprite(seatName(S, j) || `자리 ${j + 1}`, '#f4e6cc'); this.scene.add(tag);
       // 팔(어깨에 붙은 소매 묶음)
       const arms = w.body.children.filter(o => Math.abs(Math.abs(o.position.x) - 0.3) < 1e-3 && Math.abs(o.position.y - 0.92) < 1e-3).sort((a, b) => a.position.x - b.position.x);

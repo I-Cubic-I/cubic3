@@ -91,6 +91,44 @@ export function clipObj(o: THREE.Object3D, planes: THREE.Plane[] | null): void {
   });
 }
 /** 이미 만든 메시에 잉크 테두리를 붙인다(무대 바위처럼 나중에 고르는 경우) */
+/** 뼈대로 움직이는 메시(SkinnedMesh)용 잉크 껍데기: 같은 뼈대를 따라 휘도록 껍데기도 뼈대에 묶는다 */
+let inkSkin: THREE.ShaderMaterial | null = null;
+function inkSkinMat(): THREE.ShaderMaterial {
+  if (inkSkin) return inkSkin;
+  const base = inkMat(0.03);
+  inkSkin = new THREE.ShaderMaterial({
+    uniforms: base.uniforms, side: THREE.BackSide,
+    vertexShader: `uniform float w; uniform vec2 res; uniform float px;
+      #include <common>
+      #include <skinning_pars_vertex>
+      float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+      void main(){
+        #include <beginnormal_vertex>
+        #include <skinbase_vertex>
+        #include <skinnormal_vertex>
+        #include <begin_vertex>
+        #include <skinning_vertex>
+        float j = 0.65 + 0.7 * h(floor(position * 5.0));
+        vec4 c = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+        vec2 n = (projectionMatrix * vec4(normalize(normalMatrix * objectNormal), 0.0)).xy;
+        float l = length(n);
+        if (l > 1e-4) c.xy += n / l * (px * w * j * 2.0 / res) * c.w;
+        c.z += 0.0004 * c.w;
+        gl_Position = c;
+      }`,
+    fragmentShader: base.fragmentShader,
+  });
+  return inkSkin;
+}
+export function addInkSkinned(m: THREE.SkinnedMesh, w = 0.03): void {
+  const g = m.geometry; const c = new THREE.BufferGeometry();
+  for (const k of ['position', 'skinIndex', 'skinWeight']) c.setAttribute(k, g.getAttribute(k).clone());
+  if (g.index) c.setIndex(g.index.clone());
+  const hgeo = mergeVertices(c, 1e-4); hgeo.computeVertexNormals();
+  const mat = inkSkinMat(); (mat.uniforms.w as { value: number }).value = w / 0.04;
+  const hull = new THREE.SkinnedMesh(hgeo, mat); hull.name = 'ink'; hull.frustumCulled = false;
+  m.add(hull); hull.bind(m.skeleton, m.bindMatrix);
+}
 export function addInk(m: THREE.Mesh, w = 0.05): void { const o = new THREE.Mesh(hullGeo(m.geometry), inkOf(w)); o.name = 'ink'; m.add(o); }
 /** 테두리 굵기를 나중에 바꾸거나 숨기기 */
 export function setInk(o: THREE.Object3D, on: boolean): void { o.traverse(c => { if (c.name === 'ink') c.visible = on; }); }

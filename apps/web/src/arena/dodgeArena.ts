@@ -6,6 +6,8 @@ import { SEATCOL } from '../game';
 import { cmd, fxQueued } from '../flow';
 import { useStore } from '../store';
 import { preview } from '../ui/MgPanel4';
+import { NEW_WIZ, buildMeshyWizard } from './meshyWizard';
+import { CreasePass } from './crease';
 import { type OldHand, type Wizard, buildArrow, buildBulb, buildStay, buildCloud, buildDie, buildHand, buildHead, buildWizard, curlHand, glowDisc, keyCap, lightColumn, magicCircle, magicTex, portalDisc, setDie, softTex } from './props';
 import { type Pillar, T, TOP, buildTower, cellPos } from './tower';
 import { INK, INK_U, backOut, canvasTex, clamp01, clipObj, ease, glow, ink, toon, wobbleLine } from './toon';
@@ -97,7 +99,11 @@ export class DodgeArena {
   /** 키보드 단축키 키캡: 주사위 1·2·3, 방향판 R(이동 방향·확정에는 표시하지 않는다, 사용자 2026-10-14) */
   private caps = { dice: [] as THREE.Sprite[], rot: keyCap('R') };
 
+  /** 새 마법사 미리보기일 때만: 안쪽 주름 선 */
+  private crease: CreasePass | null = null;
+  render(): void { if (this.crease) this.crease.render(this.scene, this.camera); else this.gl.render(this.scene, this.camera); }
   constructor(private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private dom: HTMLCanvasElement, private gl: THREE.WebGLRenderer) {
+    if (NEW_WIZ) this.crease = new CreasePass(gl);
     scene.add(this.tower.root);
     // 주사위가 마법진 평면에서 잘려 솟아나는 연출에 쓰는 자르기 평면
     gl.localClippingEnabled = true;
@@ -482,7 +488,7 @@ export class DodgeArena {
   }
 
   private makeWiz(j: number): Wiz {
-    const w = buildWizard(col(j)); this.scene.add(w.root);
+    const w = NEW_WIZ ? buildMeshyWizard(col(j)) : buildWizard(col(j)); this.scene.add(w.root);
     const portal = portalDisc(col(j), 1.8); portal.rotation.x = -Math.PI / 2; portal.visible = false; this.scene.add(portal);
     const column = lightColumn(col(j), 0.75, 6); column.visible = false; this.scene.add(column);
     const bulb = buildBulb(); bulb.visible = false; w.above.add(bulb);

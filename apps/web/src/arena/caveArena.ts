@@ -17,6 +17,8 @@ import { SEATCOL } from '../game';
 import { useStore } from '../store';
 import { cmd } from '../flow';
 import { usePrefs } from '../prefs';
+import { NEW_WIZ, buildMeshyWizard } from './meshyWizard';
+import { CreasePass, CreaseRenderPass } from './crease';
 import { type Wizard, buildDie, buildDots, buildWizard, lightColumn, portalDisc, setDie, softTex } from './props';
 import { INK, INK_U, addInk, backOut, canvasTex, clamp01, ease, glow, ink, toon } from './toon';
 import { slabH, uiScale } from '../ui/scale';
@@ -92,6 +94,7 @@ export class CaveArena {
   private trayScene = new THREE.Scene(); private tray = new THREE.Group(); private trayDie: THREE.Group[] = []; private trayN = 0; private trayPan = -1; private trayAt = [-9, -9, -9]; private trayK = 1;
   /** 칸 돌판은 위쪽 석판과 같은 화면 UI(사용자 2026-10-15: 헤더와 같은 그림). 3D 칸 자리는 날아가는 주사위의 목적지로만 쓴다 */
   private trayEl = document.createElement('div'); private traySlots: HTMLElement[] = [];
+  private crease: CreasePass | null = null;
   private composer: EffectComposer | null = null; private bokeh: BokehPass | null = null; private size = new THREE.Vector2();
 
   constructor(private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private dom: HTMLCanvasElement, private gl: THREE.WebGLRenderer) {
@@ -185,7 +188,8 @@ export class CaveArena {
   /* ---------------- 카메라 심도(가까운 바위가 흐려진다). 낮은 품질에서는 끈다 ---------------- */
   private setupComposer(): void {
     const c = new EffectComposer(this.gl);
-    c.addPass(new RenderPass(this.scene, this.camera));
+    // 새 마법사 미리보기: 맨 앞 그리기에 안쪽 주름 선을 더한다(심도·색 단계 효과는 그 위에 그대로)
+    if (NEW_WIZ) { this.crease = new CreasePass(this.gl); c.addPass(new CreaseRenderPass(this.crease, this.scene, this.camera)); } else c.addPass(new RenderPass(this.scene, this.camera));
     this.bokeh = new BokehPass(this.scene, this.camera, { focus: 22, aperture: 0.0008, maxblur: 0.012 });
     // 심도 효과의 깊이 그리기에서는 빛무리·글자 같은 투명 평면을 뺀다: 깊이 재질로 덮어 그리면 사각형 전체가 깊이에 찍혀
     // 그 사각형만 흐림이 달라져 굴절처럼 보인다(사용자 2026-10-15: 빛 정령 주변 사각형)
@@ -203,7 +207,7 @@ export class CaveArena {
   /** 직접 그린다(심도 효과를 거쳐서) */
   render(): void {
     const low = usePrefs.getState().quality === 'low';
-    if (!this.composer || low) { this.gl.render(this.scene, this.camera); this.drawTrayLayer(); this.drawHud(); return; }
+    if (!this.composer || low) { if (this.crease) this.crease.render(this.scene, this.camera); else this.gl.render(this.scene, this.camera); this.drawTrayLayer(); this.drawHud(); return; }
     this.gl.getSize(this.size);
     const c = this.composer as unknown as { _width: number; _height: number };
     if (c._width !== this.size.x || c._height !== this.size.y) { this.composer.setPixelRatio(this.gl.getPixelRatio()); this.composer.setSize(this.size.x, this.size.y); }
@@ -376,7 +380,7 @@ export class CaveArena {
 
   /* ---------------- 마법사 ---------------- */
   private makeWiz(j: number): CW {
-    const w = buildWizard(col(j)); this.scene.add(w.root);
+    const w = NEW_WIZ ? buildMeshyWizard(col(j)) : buildWizard(col(j)); this.scene.add(w.root);
     // 빛 정령: 빛나는 작은 구 + 빛무리 + 점광원(랜턴처럼 주변 바위를 비춘다)
     const spirit = new THREE.Group(); this.scene.add(spirit);
     spirit.add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12), new THREE.MeshBasicMaterial({ color: '#fffbe8', toneMapped: false, fog: false })));
