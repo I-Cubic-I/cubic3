@@ -272,6 +272,18 @@ describe('applyAction', () => {
     expect(S.seats[i].tokens).toEqual(['H']);
   });
 
+  it('줍고 나서 손패를 모두 토큰에 쓰면 버리기 없이 턴을 끝낼 수 있다', () => {
+    setRng(mulberry32(7));
+    const S = newLobby();
+    applyAction(S, 'a', { type: 'sit' }); applyAction(S, 'b', { type: 'sit' }); applyAction(S, 'a', { type: 'start' });
+    const i = S.turn!.seat; const uid = S.seats[i].uid;
+    S.seats[i].hand = ['H2', 'H3', 'H4'];
+    S.turn = { ...S.turn!, picked: true, mustDiscard: true };
+    expect(applyAction(S, uid, { type: 'token', seat: i, cards: ['H2', 'H3', 'H4'] }).ok).toBe(true);
+    expect(S.turn!.mustDiscard).toBe(false); // 화면이 버리기 대기에 묶이지 않는다
+    expect(applyAction(S, uid, { type: 'endTurn', seat: i }).ok).toBe(true);
+  });
+
   it('새 미니게임 18개: 인원마다 판정이 허용한 행동만으로 끝까지 가고 카드 수가 보존된다', () => {
     const ids: MgId[] = ['nunchi', 'updown', 'curling', 'line', 'speed', 'fold', 'chain', 'mid', 'gesture', 'stack', 'change', 'cave', 'ten', 'balance', 'liar', 'fore', 'fork', 'dodge'];
     for (const id of ids) for (let n = MG[id].min; n <= MG[id].max; n++) for (let g = 0; g < 6; g++) {

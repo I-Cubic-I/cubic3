@@ -143,6 +143,8 @@ export function applyAction(S: GameState, uid: string, a: Action): Result {
   const out = run(S, uid, a);
   if (out === false) return fail('지금은 할 수 없어요.');
   afterItemAction(S, front0, fx0);
+  // 주운 뒤 버리기 전에 손패가 비면(토큰·아이템에 다 씀 · 빼앗김) 버리기를 건너뛴다 (사용자 2026-10-12): 버리기 대기에 묶이지 않게 바로 푼다
+  if (S.phase === 'main' && S.turn?.mustDiscard && !S.seats[S.turn.seat].hand.length) S.turn.mustDiscard = false;
   S.v = (S.v || 0) + 1;
   return { ok: true };
 }
